@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：番茄钟（专注计时 + 积分 + 养树）
  * ========================================================== */
@@ -105,7 +107,7 @@
       var R = 84, C = 2 * Math.PI * R;
       var svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', '0 0 200 200');
-      svg.setAttribute('class', 'timer-ring');
+      svg.setAttribute('class', 'cp-timer-ring');
 
       function circle(cls, extra) {
         var c = document.createElementNS(NS, 'circle');
@@ -397,8 +399,8 @@
   function paintTimer() {
     var root = V.$('#view-pomodoro');
     if (!root) return;
-    var timeEl = V.$('.timer-time', root);
-    var progEl = V.$('.tr-prog', root);
+    var timeEl = V.$('.cp-timer-time', root);
+    var progEl = V.$('.cp-tr-prog', root);
     if (timeEl) timeEl.textContent = fmt(T.left);
 
     var total = T.total || T.duration * 60;
@@ -543,7 +545,7 @@
    * 动画
    * ========================================================== */
   function flyPoints(text) {
-    var layer = V.$('#view-pomodoro .fly-layer');
+    var layer = V.$('#view-pomodoro .cp-fly-layer');
     if (!layer) return;
     var n = el('div', { class: 'fly-points', text: text });
     layer.appendChild(n);
@@ -552,13 +554,15 @@
 
   function bumpScore() {
     setTimeout(function () {
-      var n = V.$('#view-pomodoro .sum-card.is-big .sum-num');
+      var n = V.$('#view-pomodoro .cp-sum-card.cp-is-big .cp-sum-num');
       if (!n) return;
-      n.classList.remove('bump');
+      n.classList.remove('cp-bump');
       void n.offsetWidth;
-      n.classList.add('bump');
+      n.classList.add('cp-bump');
     }, 60);
   }
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

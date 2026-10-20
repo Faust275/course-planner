@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * App 主控：路由、导航、渲染调度
  * ========================================================== */
@@ -102,7 +104,7 @@
     ['#nav-', '#tab-'].forEach(function (sel) {
       var node = UI.$(sel + id);
       if (!node) return;
-      var old = UI.$('.badge, .dot', node);
+      var old = UI.$('.cp-badge, .cp-dot', node);
       if (old) old.remove();
       if (count > 0) {
         node.appendChild(UI.el('span', {
@@ -121,9 +123,9 @@
     App.currentId = id;
     App.current = v;
 
-    UI.$$('.view').forEach(function (n) { n.classList.remove('active'); });
+    UI.$$('.cp-view').forEach(function (n) { n.classList.remove('cp-active'); });
     if (!v.root) v.mount(UI.$('#views'));
-    v.root.classList.add('active');
+    v.root.classList.add('cp-active');
 
     if (v.onEnter) v.onEnter();
     else if (v.render) v.render();
@@ -143,13 +145,13 @@
 
   /* ---------- 抽屉 ---------- */
   function openDrawer() {
-    UI.$('#sidebar').classList.add('open');
-    UI.$('#scrim').classList.add('show');
+    UI.$('#sidebar').classList.add('cp-open');
+    UI.$('#scrim').classList.add('cp-show');
     UI.$('#scrim').onclick = closeDrawer;
   }
   function closeDrawer() {
-    UI.$('#sidebar').classList.remove('open');
-    UI.$('#scrim').classList.remove('show');
+    UI.$('#sidebar').classList.remove('cp-open');
+    UI.$('#scrim').classList.remove('cp-show');
     UI.$('#scrim').onclick = function () { UI.topClose && UI.topClose(); };
   }
 
@@ -166,15 +168,25 @@
 
     box.innerHTML =
       '<b>' + UI.escapeHTML(s.name) + '</b>' +
-      '<div class="term-row"><span>学期起止</span><span>' + DateUtil.mdShort(start) + ' – ' + DateUtil.mdShort(end) + '</span></div>' +
-      '<div class="term-row"><span>当前周次</span><span>' + (inTerm ? '第 ' + cw + ' 周' : '假期中') + '</span></div>' +
-      '<div class="term-row"><span>课程 / 待办</span><span>' + total + ' / ' + pendingTasks + '</span></div>';
+      '<div class="cp-term-row"><span>学期起止</span><span>' + DateUtil.mdShort(start) + ' – ' + DateUtil.mdShort(end) + '</span></div>' +
+      '<div class="cp-term-row"><span>当前周次</span><span>' + (inTerm ? '第 ' + cw + ' 周' : '假期中') + '</span></div>' +
+      '<div class="cp-term-row"><span>课程 / 待办</span><span>' + total + ' / ' + pendingTasks + '</span></div>';
     UI.$('#brandSub').textContent = DateUtil.weekdayCN(DateUtil.today()) + ' · ' + DateUtil.toStr(DateUtil.today()).slice(5);
   }
 
   /* ---------- 启动 ---------- */
-  function boot() {
-    Store.init();
+  async function boot() {
+    await Store.init();
+
+    // 离线 PWA：仅 http(s) 部署后生效；file:// 直接双击打开时自动跳过
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
+        (location.protocol === 'http:' || location.protocol === 'https:')) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+
+    window.Pet.init();
     if (global.Theme) { Theme.apply(); Theme.applyBackground(); }
     sortViews();
     buildNav();
@@ -198,7 +210,7 @@
         class: 'storage-warn',
         text: '当前预览环境禁用了本地存储，本次修改可能不会保存。建议在浏览器中直接打开本文件，或使用发布后的在线链接。'
       });
-      var mainEl = UI.$('.main');
+      var mainEl = UI.$('.cp-main');
       mainEl.insertBefore(warn, UI.$('#views'));
     }
 
@@ -214,21 +226,24 @@
   }
 
   function markActive(id) {
-    UI.$$('.nav-item').forEach(function (n) { n.classList.remove('active'); });
-    UI.$$('.tabbar-item').forEach(function (n) { n.classList.remove('active'); });
+    UI.$$('.cp-nav-item').forEach(function (n) { n.classList.remove('cp-active'); });
+    UI.$$('.cp-tabbar-item').forEach(function (n) { n.classList.remove('cp-active'); });
     var a1 = UI.$('#nav-' + id);
-    if (a1) a1.classList.add('active');
+    if (a1) a1.classList.add('cp-active');
     var a2 = UI.$('#tab-' + id);
-    if (a2) a2.classList.add('active');
+    if (a2) a2.classList.add('cp-active');
     else {
       var more = UI.$('#tab-more');
-      if (more) more.classList.add('active');
+      if (more) more.classList.add('cp-active');
     }
   }
 
   App.go = go;
   App.badge = badge;
   App.buildNav = function () { buildNav(); markActive(App.currentId); };
+  /* ===================== 龙泡泡桌宠（开发者/自用） ===================== */
+  
+
   App.renderTermCard = renderTermCard;
   global.App = App;
 
@@ -236,3 +251,5 @@
     document.addEventListener('DOMContentLoaded', boot);
   } else boot();
 })(window);
+
+

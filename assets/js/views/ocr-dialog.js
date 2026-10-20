@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 导入课表：图片 → 识别 → 校正 → 写入课程
  * ========================================================== */
@@ -157,7 +159,7 @@
     S.progress = text;
     if (pct != null) S.pct = Math.max(0, Math.min(100, pct));
     if (S._bar) S._bar.style.width = S.pct + '%';
-    var t = V.$('.ocr-busy b', bodyEl);
+    var t = V.$('.cp-ocr-busy b', bodyEl);
     if (t) t.textContent = text;
   }
 
@@ -336,7 +338,7 @@
    * 网格 → 课程明细
    * ========================================================== */
   function syncCells() {
-    V.$$('.ocr-cell', bodyEl).forEach(function (ta) {
+    V.$$('.cp-ocr-cell', bodyEl).forEach(function (ta) {
       var r = parseInt(ta.dataset.r, 10);
       var c = parseInt(ta.dataset.c, 10);
       if (S.grid.cells[r]) S.grid.cells[r][c] = ta.value;
@@ -517,7 +519,7 @@
 
   function countFilled() {
     var n = 0;
-    V.$$('.ocr-cell', bodyEl).forEach(function (t) { if (t.value.trim()) n++; });
+    V.$$('.cp-ocr-cell', bodyEl).forEach(function (t) { if (t.value.trim()) n++; });
     return n;
   }
 
@@ -537,3 +539,5 @@
 
   global.OcrDialog = { open: open };
 })(window);
+
+

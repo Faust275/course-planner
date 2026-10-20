@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 抽卡机制（明日方舟标准寻访）
  * - 合成玉单抽 600 / 十连 6000
@@ -107,6 +109,21 @@
         class: 'op-img', src: op.img, alt: op.n,
         loading: 'lazy', decoding: 'async'
       });
+      // 最佳努力的离线头像缓存：首载成功后把图片存进持久化层，
+      // 下次离线优先用本地副本；跨域不允许缓存时静默忽略，行为不变。
+      var avKey = 'avatar:' + op.n;
+      if (Store.persist) {
+        Store.persist.load(avKey).then(function (d) { if (d) img.src = d; }).catch(function () {});
+        img.addEventListener('load', function () {
+          try {
+            fetch(op.img, { mode: 'cors' }).then(function (r) { return r.blob(); }).then(function (b) {
+              var fr = new FileReader();
+              fr.onload = function () { Store.persist.save(avKey, fr.result); };
+              fr.readAsDataURL(b);
+            }).catch(function () {});
+          } catch (e) {}
+        });
+      }
       img.addEventListener('error', function () {
         img.style.display = 'none';
         box.appendChild(el('span', { class: 'op-fallback', text: op.n.slice(0, 2) }));
@@ -133,6 +150,7 @@
     if (meta.reserve) tags.push(el('span', { class: 'op-tag op-tag-reserve', title: '预备干员', text: '预备' }));
     if (maxpot) tags.push(el('span', { class: 'op-tag op-tag-maxpot', title: '已满潜能（满潜）', text: '满潜' }));
     if (tags.length) box.appendChild(el('div', { class: 'op-tags' }, tags));
+    if (opts.isNew) box.appendChild(el('span', { class: 'op-new', text: 'NEW' }));
     return box;
   }
 
@@ -156,30 +174,65 @@
 
       var s = Store.gachaStats();
       rateEl.innerHTML =
-        '<div class="gcr-line">六星 <b>' + s.rate6 + '%</b>' +
+        '<div class="cp-gcr-line">六星 <b>' + s.rate6 + '%</b>' +
         (s.pity >= POMO.PITY_START ? '<em>保底中</em>' : '') +
         '　·　距上次六星 <b>' + s.pity + '</b> 抽</div>' +
-        '<div class="gcr-line gcr-dim">五星 8% · 四星 50% · 三星 40%　每自然天首个十连保底五星</div>';
+        '<div class="cp-gcr-line cp-gcr-dim">五星 8% · 四星 50% · 三星 40%　每自然天首个十连保底五星</div>';
     }
 
-    function showResult(list) {
+    function showResult(list, newSet) {
       resultBox.innerHTML = '';
       if (!list || !list.length) return;
+      newSet = newSet || {};
       var grid = el('div', { class: 'gc-grid' });
       list.forEach(function (o, i) {
-        var c = opCard(o);
-        c.style.animationDelay = (i * 70) + 'ms';
-        grid.appendChild(c);
+        var flip = el('div', { class: 'op-flip' });
+        var card = opCard(o, { isNew: !!newSet[o.n] });
+        var back = el('div', { class: 'op-back' });
+        flip.appendChild(back);
+        flip.appendChild(card);
+        if (o.r >= 6) flip.appendChild(el('div', { class: 'op-beam' }));
+        grid.appendChild(flip);
+        setTimeout(function () { flip.classList.add('cp-flipped'); }, 250 + i * 95);
       });
       resultBox.appendChild(grid);
 
       var best = 0;
       list.forEach(function (o) { if (o.r > best) best = o.r; });
-      if (best >= 6) V.toast('六星干员！');
-      else if (best === 5) V.toast('五星干员');
+      var settle = 250 + (list.length - 1) * 95 + 620;
+      setTimeout(function () {
+        if (best >= 6) V.toast('六星干员！');
+        else if (best === 5) V.toast('五星干员');
+      }, settle);
     }
 
     function canPull(cost) { return pm.jade >= cost; }
+
+    var pulling = false;
+    function lockFoot(on) {
+      var btns = footBox.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].disabled = on;
+        btns[i].style.opacity = on ? '.55' : '';
+      }
+    }
+    function playIntro(times, done) {
+      resultBox.innerHTML = '';
+      var nBack = times === 10 ? 5 : 1;
+      var cards = el('div', { class: 'gc-intro-cards' });
+      for (var k = 0; k < nBack; k++) cards.appendChild(el('span', { class: 'gc-ib' }));
+      cards.appendChild(el('div', { class: 'gc-scan' }));
+      var intro = el('div', { class: 'gc-intro' }, [
+        cards,
+        el('div', { class: 'gc-intro-text', text: '寻访中…' })
+      ]);
+      resultBox.appendChild(intro);
+      var dur = times === 10 ? 1150 : 850;
+      setTimeout(function () {
+        intro.classList.add('cp-out');
+        setTimeout(done, 220);
+      }, dur);
+    }
 
     function pull(times) {
       var cost = times === 10 ? POMO.TEN_COST : POMO.PULL_COST;
@@ -188,13 +241,24 @@
           (Math.round((cost - pm.jade) / POMO.JADE_PER_POINT * 10) / 10) + ' 积分）', 'err');
         return;
       }
-      var list = Store.gachaPull(times);
-      showResult(list);
-      drawHead();
-      drawFoot();
-      if (list && list.converted) {
-        V.toast('满潜能重复干员，已转化 ' + list.converted + ' 积分');
-      }
+      if (pulling) return;
+      pulling = true;
+      lockFoot(true);
+      playIntro(times, function () {
+        var before = {};
+        Store.pomodoro.gacha.ops.forEach(function (o) { before[o.n] = 1; });
+        var list = Store.gachaPull(times);
+        var newSet = {};
+        list.forEach(function (o) { if (!before[o.n]) newSet[o.n] = true; });
+        showResult(list, newSet);
+        drawHead();
+        drawFoot();
+        pulling = false;
+        lockFoot(false);
+        if (list && list.converted) {
+          V.toast('满潜能重复干员，已转化 ' + list.converted + ' 积分');
+        }
+      });
     }
 
     var footBox = el('div', { class: 'modal-foot' });
@@ -286,7 +350,7 @@
 
     var rows = [6, 5, 4, 3].map(function (r) {
       var g = s.byR[r] || [0, 0];
-      return '<span class="macro" style="background:' + starColor(r) + '22;color:' + starColor(r) + '">' +
+      return '<span class="cp-macro" style="background:' + starColor(r) + '22;color:' + starColor(r) + '">' +
         r + '★ ' + g[0] + '/' + g[1] + '</span>';
     }).join('');
 
@@ -384,3 +448,5 @@
     stars: stars
   };
 })(window);
+
+

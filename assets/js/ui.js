@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * UI 基础层：DOM 助手 / 弹窗 / Toast / 确认框
  * ========================================================== */
@@ -11,7 +13,7 @@
       Object.keys(attrs).forEach(function (k) {
         var v = attrs[k];
         if (v == null || v === false) return;
-        if (k === 'class') node.className = v;
+        if (k === 'class') node.className = String(v).split(/\s+/).filter(Boolean).map(function(c){return /^(cp-|gp-|pet-)/.test(c)?c:'cp-'+c;}).join(' ');
         else if (k === 'html') node.innerHTML = v;
         else if (k === 'text') node.textContent = v;
         else if (k === 'style' && typeof v === 'object') {
@@ -84,7 +86,7 @@
     var node = el('div', { class: 'toast ' + type }, [svg(icons[type] || icons.ok, 16), el('span', { text: msg })]);
     root.appendChild(node);
     setTimeout(function () {
-      node.classList.add('out');
+      node.classList.add('cp-out');
       setTimeout(function () { node.remove(); }, 220);
     }, 1900);
   }
@@ -93,7 +95,7 @@
   var openCount = 0;
 
   function syncScrim() {
-    document.getElementById('scrim').classList.toggle('show', openCount > 0);
+    document.getElementById('scrim').classList.toggle('cp-show', openCount > 0);
   }
 
   /**
@@ -107,7 +109,7 @@
 
     var api = {
       close: function () {
-        box.classList.remove('show');
+        box.classList.remove('cp-show');
         wrap.style.background = 'transparent';
         setTimeout(function () {
           wrap.remove();
@@ -118,7 +120,7 @@
       },
       root: box,
       setFooter: function (node) {
-        var old = $('.modal-foot', box);
+        var old = $('.cp-modal-foot', box);
         if (old) old.remove();
         box.appendChild(node);
       }
@@ -157,7 +159,7 @@
     document.getElementById('scrim').onclick = topClose;
 
     requestAnimationFrame(function () {
-      box.classList.add('show');
+      box.classList.add('cp-show');
       if (opts.autofocus) {
         var f = $('[data-autofocus]', box) || $('input, textarea, select', box);
         if (f) setTimeout(function () { f.focus(); }, 120);
@@ -176,10 +178,10 @@
   }
 
   function topClose() {
-    var wraps = $$('.modal-wrap', document.getElementById('modalRoot'));
+    var wraps = $$('.cp-modal-wrap', document.getElementById('modalRoot'));
     if (!wraps.length) return;
     var last = wraps[wraps.length - 1];
-    var btn = $('.modal-head .icon-btn', last);
+    var btn = $('.cp-modal-head .cp-icon-btn', last);
     if (btn) btn.click();
   }
 
@@ -207,7 +209,7 @@
       });
       var okBtn = foot.lastChild;
       if (opts.danger) {
-        okBtn.className = 'btn btn-danger';
+        okBtn.className = 'cp-btn cp-btn-danger';
         okBtn.style.cssText = 'background:var(--red);color:#fff;border-color:var(--red)';
       }
     });
@@ -242,8 +244,8 @@
         class: o.value === value ? 'active' : '',
         text: o.label,
         onclick: function () {
-          $$('button', wrap).forEach(function (x) { x.classList.remove('active'); });
-          b.classList.add('active');
+          $$('button', wrap).forEach(function (x) { x.classList.remove('cp-active'); });
+          b.classList.add('cp-active');
           onChange(o.value);
         }
       });
@@ -260,8 +262,8 @@
         style: { background: c },
         type: 'button',
         onclick: function () {
-          $$('.color-swatch', wrap).forEach(function (x) { x.classList.remove('active'); });
-          b.classList.add('active');
+          $$('.cp-color-swatch', wrap).forEach(function (x) { x.classList.remove('cp-active'); });
+          b.classList.add('cp-active');
           onChange(c);
         }
       });
@@ -534,8 +536,8 @@
       var toggle = el('button', {
         class: 'ti-toggle', type: 'button',
         onclick: function () {
-          var open = sugBox.classList.toggle('open');
-          toggle.classList.toggle('active', open);
+          var open = sugBox.classList.toggle('cp-open');
+          toggle.classList.toggle('cp-active', open);
         }
       }, [svg(ICONS.tag, 12), '用过的标签']);
       acts.appendChild(toggle);
@@ -568,7 +570,7 @@
         noIcon: !value,
         plain: !value
       });
-      if (cls) node.classList.add(cls);
+      if (cls) node.classList.add(/^(cp-|gp-|pet-)/.test(cls)?cls:'cp-'+cls);
       if (count) node.appendChild(el('i', { text: count }));
       node.addEventListener('click', function () { onChange(current === value ? '' : value); });
       return node;
@@ -846,8 +848,8 @@
             type: 'button', title: iconName(k), dataset: { k: k },
             onclick: function () {
               pick = k;
-              $$('.ip-item', scroll).forEach(function (b) {
-                b.classList.toggle('active', b.dataset.k === k);
+              $$('.cp-ip-item', scroll).forEach(function (b) {
+                b.classList.toggle('cp-active', b.dataset.k === k);
               });
               onPick(k);
             }
@@ -862,8 +864,8 @@
 
     wrap.setCurrent = function (k) {
       pick = k || '';
-      $$('.ip-item', scroll).forEach(function (b) {
-        b.classList.toggle('active', b.dataset.k === pick);
+      $$('.cp-ip-item', scroll).forEach(function (b) {
+        b.classList.toggle('cp-active', b.dataset.k === pick);
       });
     };
     return wrap;
@@ -876,7 +878,7 @@
    */
   function iconPicker(current, onPick) {
     var m = modal({ title: '选择图标', width: '440px', body: [] });
-    var body = $('.modal-body', m.root);
+    var body = $('.cp-modal-body', m.root);
     body.appendChild(iconGrid(current, function (k) { onPick(k); }));
     m.setFooter(el('div', { class: 'modal-foot' }, [
       el('button', {
@@ -894,7 +896,7 @@
    */
   function tagPresetPicker(onPick) {
     var m = modal({ title: '常用标签', width: '440px', body: [] });
-    var body = $('.modal-body', m.root);
+    var body = $('.cp-modal-body', m.root);
     var groups = Store.tagGroups ? Store.tagGroups() : [];
     var cur = groups[0] || '';
 
@@ -946,8 +948,8 @@
     var swWrap = el('div', { class: 'cf-swatches' });
 
     function mark(c) {
-      $$('.cf-swatch', swWrap).forEach(function (x) {
-        x.classList.toggle('active', x.dataset.c === c);
+      $$('.cp-cf-swatch', swWrap).forEach(function (x) {
+        x.classList.toggle('cp-active', x.dataset.c === c);
       });
       free.value = /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#4f46e5';
       freeHex.textContent = (c || '').toUpperCase();
@@ -1012,8 +1014,8 @@
     var iconPanel = el('div', { class: 'te-icon-panel' });
     var grid = null;
     iconBtn.onclick = function () {
-      var open = iconPanel.classList.toggle('open');
-      iconBtn.classList.toggle('open', open);
+      var open = iconPanel.classList.toggle('cp-open');
+      iconBtn.classList.toggle('cp-open', open);
       if (!open) return;
       /* 首次展开时创建网格，之后保留以便继续挑选 */
       if (!grid) {
@@ -1055,7 +1057,7 @@
           el('label', { text: '颜色' }),
           colorField(curColor, function (c) {
             curColor = c;
-            var box = $('.te-icon-box', iconBtn);
+            var box = $('.cp-te-icon-box', iconBtn);
             if (box) box.style.setProperty('--tc', c);
             drawPreview();
           })
@@ -1099,3 +1101,5 @@
   global.UI.iconName = iconName;
   global.UI.ICON_GROUPS = ICON_GROUPS;
 })(window);
+
+

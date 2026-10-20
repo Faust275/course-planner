@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：作业 / 待办
  * 同时提供全局 TaskRow（任务行）与 TaskDialog（编辑弹窗）
@@ -115,7 +117,7 @@
 
       function stopMic() {
         listening = false;
-        micBtn.classList.remove('listening');
+        micBtn.classList.remove('cp-listening');
         clearMic();
       }
 
@@ -145,7 +147,7 @@
             return;
           }
           listening = true;
-          micBtn.classList.add('listening');
+          micBtn.classList.add('cp-listening');
           liveEl.textContent = '正在听…（说完停顿一下）';
 
           // 兜底：8 秒无任何反馈就认为不可用
@@ -189,6 +191,19 @@
         { value: 'high', label: '重要' }
       ], data.priority, function (v) { data.priority = v; });
 
+      var impOn = t ? !!t.important : false;
+      var fImp = el('button', {
+        class: 'chip', type: 'button',
+        style: impOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: impOn ? '★ 已标记重要' : '标记为重要',
+        onclick: function () {
+          impOn = !impOn;
+          this.style.background = impOn ? 'var(--primary)' : '';
+          this.style.color = impOn ? '#fff' : '';
+          this.textContent = impOn ? '★ 已标记重要' : '标记为重要';
+        }
+      });
+
       var fNote = V.textarea({ placeholder: '可选，补充说明', value: t ? t.note : '' });
       var fTags = V.tagInput(t ? (t.tags || []).join(',') : '');
 
@@ -205,6 +220,7 @@
         ]),
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
+        V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote)
       ];
@@ -236,6 +252,7 @@
                 dueTime: fTime.value,
                 status: data.status,
                 priority: data.priority,
+                important: impOn,
                 note: fNote.value,
                 tags: fTags.getValue()
               };
@@ -423,7 +440,7 @@
       });
 
       if (state.q) {
-        var si = V.$('.task-search input', root);
+        var si = V.$('.cp-task-search input', root);
         if (si) setTimeout(function () {
           si.focus();
           try { si.setSelectionRange(si.value.length, si.value.length); } catch (e) {}
@@ -446,6 +463,7 @@
     });
     [overdue, today, week, later, nodate, done].forEach(function (arr) {
       arr.sort(function (a, b) {
+        if (!!a.important !== !!b.important) return a.important ? -1 : 1;
         if (!a.dueDate) return 1;
         if (!b.dueDate) return -1;
         return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
@@ -466,3 +484,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

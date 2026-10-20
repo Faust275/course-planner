@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：日程（未来 7 天安排 + 一次性日程）
  * ========================================================== */
@@ -83,13 +85,16 @@
         // 一次性日程
         Store.eventsOf(dateStr).forEach(function (e) {
           items.push({
-            kind: 'event', sort: e.start, eventId: e.id, done: e.done,
+            kind: 'event', sort: e.start, eventId: e.id, done: e.done, important: !!e.important,
             title: e.title, sub: [e.location, e.note].filter(Boolean).join(' · '),
             start: e.start, end: e.end, color: '#ec4899'
           });
         });
 
-        items.sort(function (a, b) { return a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0; });
+        items.sort(function (a, b) {
+          if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+          return a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0;
+        });
         rows.push({ date: date, dateStr: dateStr, index: i, items: items });
       }
 
@@ -193,6 +198,19 @@
       var fLoc = V.input({ placeholder: '可选', value: e ? e.location : '' });
       var fNote = V.textarea({ placeholder: '可选', value: e ? e.note : '' });
 
+      var impOn = e ? !!e.important : false;
+      var fImp = el('button', {
+        class: 'chip', type: 'button',
+        style: impOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: impOn ? '★ 已标记重要' : '标记为重要',
+        onclick: function () {
+          impOn = !impOn;
+          this.style.background = impOn ? 'var(--primary)' : '';
+          this.style.color = impOn ? '#fff' : '';
+          this.textContent = impOn ? '★ 已标记重要' : '标记为重要';
+        }
+      });
+
       // 快捷选择：今天 / 明天 / 后天
       var quick = el('div', { style: { display: 'flex', gap: '6px', marginTop: '7px' } },
         [{ l: '今天', d: 0 }, { l: '明天', d: 1 }, { l: '后天', d: 2 }, { l: '一周后', d: 7 }].map(function (q) {
@@ -211,6 +229,7 @@
           V.field('结束时间', fEnd)
         ]),
         V.field('地点', fLoc),
+        V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('备注', fNote)
       ];
 
@@ -235,7 +254,8 @@
               var d = {
                 title: fTitle.value, date: fDate.value,
                 start: fStart.value, end: fEnd.value,
-                location: fLoc.value, note: fNote.value
+                location: fLoc.value, note: fNote.value,
+                important: impOn
               };
               if (!d.title.trim()) { UI.toast('请填写日程标题', 'err'); fTitle.focus(); return; }
               if (!d.date) { UI.toast('请选择日期', 'err'); return; }
@@ -297,3 +317,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

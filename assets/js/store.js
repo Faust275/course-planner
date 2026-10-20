@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * Store —— 数据层
  * 全部数据持久化到 localStorage
@@ -6,6 +8,68 @@
   'use strict';
 
   var KEY = 'course-planner:v1';
+
+  /* ---------- 持久化抽象：优先 IndexedDB，file:// 或隐私模式回退 localStorage ---------- */
+  var Persist = (function () {
+    var DB_NAME = 'cp-store', STORE = 'kv', dbPromise = null;
+    function idbOK() {
+      try {
+        return typeof indexedDB !== 'undefined' && indexedDB !== null &&
+          (location.protocol === 'http:' || location.protocol === 'https:');
+      } catch (e) { return false; }
+    }
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise(function (resolve, reject) {
+        var req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function () {
+          var db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+      return dbPromise;
+    }
+    function load(key) {
+      if (!idbOK()) {
+        try { return Promise.resolve(localStorage.getItem(key)); } catch (e) { return Promise.resolve(null); }
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(STORE, 'readonly');
+            var r = tx.objectStore(STORE).get(key);
+            r.onsuccess = function () { resolve(r.result != null ? r.result : localStorage.getItem(key)); };
+            r.onerror = function () { resolve(localStorage.getItem(key)); };
+          } catch (e) { resolve(localStorage.getItem(key)); }
+        });
+      }).catch(function () { try { return localStorage.getItem(key); } catch (e) { return null; } });
+    }
+    function save(key, str) {
+      if (!idbOK()) {
+        return new Promise(function (resolve, reject) {
+          try { localStorage.setItem(key, str); resolve(); } catch (e) { reject(e); }
+        });
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          try {
+            var tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).put(str, key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { reject(tx.error); };
+            tx.onabort = function () { reject(tx.error); };
+          } catch (e) { reject(e); }
+        });
+      }).catch(function (e) {
+        /* IDB 不可用（隐私/配额），回退 localStorage */
+        try { localStorage.setItem(key, str); resolve(); }
+        catch (e2) { return Promise.reject(e2); }
+      });
+    }
+    return { load: load, save: save, idbOK: idbOK };
+  })();
 
   /* ---------- 预设 ---------- */
   var COLORS = [
@@ -26,6 +90,20 @@
     });
   }
 
+  /** 规范化一个上课时段 */
+  function normSlot(s) {
+    s = s || {};
+    var custom = s.timeMode === 'custom';
+    return {
+      day: s.day || 1,
+      timeMode: custom ? 'custom' : 'period',
+      periodId: custom ? '' : (s.periodId || ''),
+      startTime: custom ? (s.startTime || '') : '',
+      endTime: custom ? (s.endTime || '') : '',
+      location: (s.location || '').trim()
+    };
+  }
+
   function defaultState() {
     var today = new Date();
     // 默认学期：本周一往前推 8 周作为学期开始，共 20 周
@@ -33,6 +111,7 @@
     var sid = uid('sem');
     return {
       version: 2,
+      model: 2,          // 数据模型版本：2 = 课程支持多时段 slots[]
       semesters: [{
         id: sid,
         name: '2026–2027 学年 秋季学期',
@@ -74,7 +153,21 @@
         },
         asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' },
         ocr: { prefer: 'auto', provider: '', apiKey: '', endpoint: '', model: '' },
-        background: { dataUrl: '', mask: 0.5 }
+        background: { dataUrl: '', mask: 0.5 },
+        pet: {
+          enabled: false,        // 开发者/自用开关：默认关闭
+          src: '',               // 本地精灵图 base64（不随源码分发）
+          frameW: 0, frameH: 0,  // 单帧像素尺寸
+          rowWalk: 0,            // 行走帧所在行（sprite sheet 行索引）
+          frames: 0,             // 行走帧数
+          fps: 8,                // 行走帧率
+          scale: 1,              // 显示缩放
+          speed: 70,             // 游走速度 px/s
+          gravity: 1400,         // 掉落重力
+          bottomMargin: 10,      // 距屏幕底部距离
+          rowReact: -1,          // 点击反应帧行（-1=无）
+          reactFrames: 0
+        }
       },
       pomodoro: {
         points: 0,          // 森林积分（种树 / 浇水）
@@ -614,6 +707,7 @@
 
   /** 截止时间比较：无日期排最后，同日按时间 */
   function compareDue(a, b) {
+    if (!!a.important !== !!b.important) return a.important ? -1 : 1;
     var da = a.dueDate || '9999-12-31';
     var db = b.dueDate || '9999-12-31';
     if (da !== db) return da < db ? -1 : 1;
@@ -742,7 +836,7 @@
     get meals() { return state.meals; },
     get sleeps() { return state.sleeps; },
 
-    init: function () {
+    init: async function () {
       // 检测 localStorage 是否可用（iframe / 隐私模式可能被禁用）
       try {
         localStorage.setItem('__cp_probe__', '1');
@@ -753,7 +847,7 @@
       }
 
       var raw = null;
-      try { raw = localStorage.getItem(KEY); } catch (e) { raw = null; }
+      try { raw = await Persist.load(KEY); } catch (e) { raw = null; }
       if (raw) {
         try {
           state = JSON.parse(raw);
@@ -792,6 +886,7 @@
       if (!state.settings.customColor) state.settings.customColor = '#4f46e5';
       if (!state.settings.background) state.settings.background = { dataUrl: '', mask: 0.5 };
       if (state.settings.background.mask == null) state.settings.background.mask = 0.5;
+      if (!state.settings.pet) state.settings.pet = ds.settings.pet;
       if (!state.pomodoro) state.pomodoro = ds.pomodoro;
       if (!state.pomodoro.trees) state.pomodoro.trees = [];
       if (!state.pomodoro.timer) state.pomodoro.timer = ds.pomodoro.timer;
@@ -845,6 +940,71 @@
       var curSem = state.currentSemesterId;
       state.courses.forEach(function (c) { if (!c.semesterId) c.semesterId = curSem; });
 
+      // —— 数据模型 v2：把旧版「同名多条课程」合并为「一门课 + 多时段 slots」——
+      if (!state.model || state.model < 2) {
+        // 1) 每条旧记录先补一个 slots（取其顶层 day/periodId/时间/地点）
+        state.courses.forEach(function (c) {
+          if (!c.slots || !c.slots.length) {
+            var cm = c.timeMode === 'custom';
+            c.slots = [{
+              day: c.day || 1,
+              timeMode: cm ? 'custom' : 'period',
+              periodId: cm ? '' : (c.periodId || ''),
+              startTime: cm ? (c.startTime || '') : '',
+              endTime: cm ? (c.endTime || '') : '',
+              location: c.location || ''
+            }];
+          }
+        });
+        // 2) 按「学期 + 课程名 + 老师」分组
+        var _groups = {}, _order = [];
+        state.courses.forEach(function (c) {
+          var key = [c.semesterId || '', c.name || '', c.teacher || ''].join('\u0001');
+          if (!_groups[key]) { _groups[key] = []; _order.push(key); }
+          _groups[key].push(c);
+        });
+        // 3) 每组合并为一门主课，收集去重后的 slots
+        var _idMap = {}, _merged = [];
+        _order.forEach(function (key) {
+          var list = _groups[key], main = list[0];
+          var seen = {}, slots = [];
+          list.forEach(function (c) {
+            (c.slots || []).forEach(function (s) {
+              var sk = (s.day || 1) + '|' + (s.timeMode === 'custom'
+                ? (s.startTime + '-' + s.endTime)
+                : (s.periodId || ''));
+              if (seen[sk]) return;
+              seen[sk] = 1;
+              slots.push({
+                day: s.day || 1,
+                timeMode: s.timeMode === 'custom' ? 'custom' : 'period',
+                periodId: s.timeMode === 'custom' ? '' : (s.periodId || ''),
+                startTime: s.timeMode === 'custom' ? (s.startTime || '') : '',
+                endTime: s.timeMode === 'custom' ? (s.endTime || '') : '',
+                location: s.location || c.location || ''
+              });
+            });
+            if (c !== main) _idMap[c.id] = main.id;
+          });
+          main.slots = slots;
+          // 4) 顶层字段镜像 slots[0]，保证旧代码/旧同步码仍可读
+          var s0 = slots[0] || {};
+          main.day = s0.day || 1;
+          main.timeMode = s0.timeMode || 'period';
+          main.periodId = s0.periodId || '';
+          main.startTime = s0.startTime || '';
+          main.endTime = s0.endTime || '';
+          main.location = s0.location || main.location || '';
+          _merged.push(main);
+        });
+        state.courses = _merged;
+        // 5) 被合并掉的旧 id → 主课 id，回写任务关联
+        Object.keys(_idMap).forEach(function (oldId) {
+          state.tasks.forEach(function (t) { if (t.courseId === oldId) t.courseId = _idMap[oldId]; });
+        });
+        state.model = 2;
+      }
+
       // 成绩按学期归档
       if (!state.grades || typeof state.grades !== 'object') state.grades = {};
       if (!state.settings.gpa || typeof state.settings.gpa !== 'object') {
@@ -878,20 +1038,21 @@
     },
 
     save: function () {
-      try {
-        localStorage.setItem(KEY, JSON.stringify(state));
-        this.quotaWarned = false;
-      } catch (e) {
+      var self = this;
+      var str;
+      try { str = JSON.stringify(state); } catch (e) { console.warn('序列化失败', e); return; }
+      Persist.save(KEY, str).catch(function (e) {
         console.warn('保存失败', e);
-        if (!this.quotaWarned) {
-          this.quotaWarned = true;
+        if (!self.quotaWarned) {
+          self.quotaWarned = true;
           if (global.UI && UI.toast) {
             UI.toast('本地存储空间不足，建议换一张更小的背景图', 'err');
           }
         }
-      }
+      });
     },
 
+    persist: Persist,
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () {
       this.save();
@@ -1072,18 +1233,22 @@
 
     /* ===== 课程 CRUD ===== */
     addCourse: function (data) {
-      var custom = data.timeMode === 'custom';
+      var slots = (data.slots && data.slots.length)
+        ? data.slots.map(normSlot)
+        : [normSlot(data)];
+      var s0 = slots[0] || normSlot({});
       var c = {
         id: uid('c'),
         name: (data.name || '').trim() || '未命名课程',
         teacher: (data.teacher || '').trim(),
-        location: (data.location || '').trim(),
+        location: (data.location || '').trim() || s0.location || '',
         color: data.color || COLORS[state.courses.length % COLORS.length],
-        day: data.day || 1,
-        timeMode: custom ? 'custom' : 'period',
-        periodId: custom ? '' : (data.periodId || ''),
-        startTime: custom ? (data.startTime || '') : '',
-        endTime: custom ? (data.endTime || '') : '',
+        slots: slots,
+        day: s0.day,
+        timeMode: s0.timeMode,
+        periodId: s0.periodId,
+        startTime: s0.startTime,
+        endTime: s0.endTime,
         semesterId: data.semesterId || state.currentSemesterId,
         credit: Number(data.credit) > 0 ? Number(data.credit) : 0,
         exam: (data.exam && data.exam.date)
@@ -1104,10 +1269,34 @@
     updateCourse: function (id, data) {
       var c = this.getCourse(id);
       if (!c) return null;
+      var hasSlots = Array.isArray(data.slots);
       Object.keys(data).forEach(function (k) {
+        if (k === 'slots') return;
         if (typeof data[k] === 'string') c[k] = data[k].trim();
         else c[k] = data[k];
       });
+      if (hasSlots) {
+        c.slots = data.slots.map(normSlot);
+      } else if (c.slots && c.slots.length &&
+                 (data.day != null || data.periodId != null || data.startTime != null)) {
+        // 兼容只传单时段字段的旧调用：更新第一个时段
+        var s0 = c.slots[0];
+        if (data.day != null) s0.day = data.day || 1;
+        if (data.timeMode != null) s0.timeMode = data.timeMode === 'custom' ? 'custom' : 'period';
+        if (data.periodId != null) s0.periodId = s0.timeMode === 'custom' ? '' : (data.periodId || '');
+        if (data.startTime != null) s0.startTime = s0.timeMode === 'custom' ? (data.startTime || '') : '';
+        if (data.endTime != null) s0.endTime = s0.timeMode === 'custom' ? (data.endTime || '') : '';
+        if (data.location != null) s0.location = (data.location || '').trim();
+      }
+      if (c.slots && c.slots.length) {
+        var m0 = c.slots[0];
+        c.day = m0.day;
+        c.timeMode = m0.timeMode;
+        c.periodId = m0.periodId;
+        c.startTime = m0.startTime;
+        c.endTime = m0.endTime;
+        if (data.location == null && m0.location) c.location = m0.location;
+      }
       this.emit();
       return c;
     },
@@ -1492,6 +1681,39 @@
       return null;
     },
 
+    /** 课程的时段列表（兼容旧版单时段数据） */
+    courseSlots: function (c) {
+      if (!c) return [];
+      if (c.slots && c.slots.length) return c.slots;
+      var cm = c.timeMode === 'custom';
+      return [{
+        day: c.day || 1,
+        timeMode: cm ? 'custom' : 'period',
+        periodId: cm ? '' : (c.periodId || ''),
+        startTime: cm ? (c.startTime || '') : '',
+        endTime: cm ? (c.endTime || '') : '',
+        location: c.location || ''
+      }];
+    },
+
+    /** 把一门课按 slots 展开为「伪记录」：courseId 指向父课程，其余字段取各时段 */
+    expandCourse: function (c) {
+      if (!c) return [];
+      return this.courseSlots(c).map(function (s) {
+        var p = {};
+        Object.keys(c).forEach(function (k) { p[k] = c[k]; });
+        p.courseId = c.id;
+        p._slot = s;
+        p.day = s.day || 1;
+        p.timeMode = s.timeMode === 'custom' ? 'custom' : 'period';
+        p.periodId = s.timeMode === 'custom' ? '' : (s.periodId || '');
+        p.startTime = s.timeMode === 'custom' ? (s.startTime || '') : '';
+        p.endTime = s.timeMode === 'custom' ? (s.endTime || '') : '';
+        p.location = s.location || c.location || '';
+        return p;
+      });
+    },
+
     getPeriod: function (id) {
       for (var i = 0; i < state.periods.length; i++) {
         if (state.periods[i].id === id) return state.periods[i];
@@ -1506,15 +1728,18 @@
       return -1;
     },
 
-    /** 某周的课表数据：返回 [dow][periodId] = [course] */
+    /** 某周的课表数据：返回 'day|periodId' = [伪记录]（一门课的多时段会展开） */
     weekMatrix: function (weekNo) {
       var map = {};
       var sid = state.currentSemesterId;
       state.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        var key = c.day + '|' + c.periodId;
-        (map[key] = map[key] || []).push(c);
+        Store.expandCourse(c).forEach(function (p) {
+          if ((p.timeMode || 'period') === 'custom') return; // 自定义时间由 customAt 处理
+          var key = p.day + '|' + p.periodId;
+          (map[key] = map[key] || []).push(p);
+        });
       });
       return map;
     },
@@ -1530,6 +1755,7 @@
         dueTime: data.dueTime || '',
         status: data.status || 'todo',
         priority: data.priority || 'normal',
+        important: !!data.important,
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         createdAt: new Date().toISOString(),
@@ -1613,10 +1839,13 @@
     coursesOnDay: function (day, weekNo) {
       weekNo = weekNo == null ? this.currentWeek() : weekNo;
       var sid = state.currentSemesterId;
-      return state.courses.filter(function (c) {
-        if (c.semesterId && c.semesterId !== sid) return false;
-        return c.day === day && Store.courseInWeek(c, weekNo);
-      }).sort(function (a, b) {
+      var out = [];
+      state.courses.forEach(function (c) {
+        if (c.semesterId && c.semesterId !== sid) return;
+        if (!Store.courseInWeek(c, weekNo)) return;
+        Store.expandCourse(c).forEach(function (p) { if (p.day === day) out.push(p); });
+      });
+      return out.sort(function (a, b) {
         var ta = Store.courseTime(a), tb = Store.courseTime(b);
         return (ta ? ta.start : '99:99') < (tb ? tb.start : '99:99') ? -1 : 1;
       });
@@ -1633,6 +1862,7 @@
         location: (data.location || '').trim(),
         note: (data.note || '').trim(),
         done: !!data.done,
+        important: !!data.important,
         createdAt: new Date().toISOString()
       };
       state.events.push(e);
@@ -2455,6 +2685,7 @@
         color: data.color || '#4f46e5',
         records: [],
         done: false,
+        important: !!data.important,
         doneAt: '',
         createdAt: new Date().toISOString()
       };
@@ -3161,7 +3392,8 @@
       }
       var ds = defaultState();
       state = {
-        version: 1,
+        version: 2,
+        model: obj.model || 2,
         semesters: (obj.semesters && obj.semesters.length) ? obj.semesters : [
           Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
         ],
@@ -3180,7 +3412,8 @@
         events: obj.events || [],
         activities: obj.activities || [],
         meals: obj.meals || [],
-        sleeps: obj.sleeps || []
+        sleeps: obj.sleeps || [],
+        usage: obj.usage || {}
       };
       this.ensure();
       this.emit();
@@ -3218,3 +3451,5 @@
   global.treeStage = treeStage;
   global.Store = Store;
 })(window);
+
+

@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：课程表（核心排课）
  * ========================================================== */
@@ -203,6 +205,67 @@
       /* ---- 表格 ---- */
       var matrix = Store.weekMatrix(weekNo);
       var todayStr = DateUtil.toStr(DateUtil.today());
+      var sid = Store.semester.id;
+
+      // 汇总每格课程（一门课的多时段在此展开为多条伪记录）
+      var grid = {};   // 'day|rowIdx' -> [伪记录]
+      Store.courses.forEach(function (c) {
+        if (c.semesterId && c.semesterId !== sid) return;
+        if (!Store.courseInWeek(c, weekNo)) return;
+        Store.expandCourse(c).forEach(function (p) {
+          var first = -1, last = -1;
+          if (p.timeMode === 'custom') {
+            if (!p.startTime) return;
+            var ce = p.endTime || p.startTime;
+            Store.periods.forEach(function (pp, i) {
+              if (TimeUtil.toMin(pp.start) < TimeUtil.toMin(ce) &&
+                  TimeUtil.toMin(p.startTime) < TimeUtil.toMin(pp.end)) {
+                if (first < 0) first = i;
+                last = i;
+              }
+            });
+          } else {
+            var pi = Store.periodIndex(p.periodId);
+            if (pi >= 0) { first = last = pi; }
+          }
+          if (first < 0) return;
+          for (var r = first; r <= last; r++) {
+            var key = p.day + '|' + r;
+            (grid[key] = grid[key] || []).push(p);
+          }
+        });
+      });
+
+      // 渲染指令：无冲突时合并连续同门课；有冲突时同格纵向堆叠
+      var renderAt = {};
+      for (var dayX = 1; dayX <= 7; dayX++) {
+        var rowList = {};
+        Store.periods.forEach(function (pp, ri) { if (grid[dayX + '|' + ri]) rowList[ri] = grid[dayX + '|' + ri]; });
+        var hasOverlap = Object.keys(rowList).some(function (r) { return rowList[r].length > 1; });
+        if (hasOverlap) {
+          Object.keys(rowList).forEach(function (r) { renderAt[dayX + '|' + r] = { type: 'stack', items: rowList[r] }; });
+          continue;
+        }
+        var r0 = 0;
+        while (r0 < Store.periods.length) {
+          var items = rowList[r0];
+          if (!items || !items.length) { r0++; continue; }
+          var it = items[0];
+          var endR = r0;
+          while (endR + 1 < Store.periods.length) {
+            var nx = rowList[endR + 1];
+            if (!nx || nx.length !== 1) break;
+            var nxIt = nx[0];
+            var same = (nxIt._slot && it._slot && nxIt._slot === it._slot) ||
+                       (nxIt.courseId === it.courseId && nxIt.timeMode !== 'custom' && it.timeMode !== 'custom');
+            if (!same) break;
+            endR++;
+          }
+          renderAt[dayX + '|' + r0] = { type: 'block', span: endR - r0 + 1, item: it };
+          for (var rr = r0 + 1; rr <= endR; rr++) renderAt[dayX + '|' + rr] = { type: 'covered' };
+          r0 = endR + 1;
+        }
+      }
 
       var thead = el('thead', { class: 'tt-head' });
       var trh = el('tr');
@@ -219,89 +282,85 @@
       }
       thead.appendChild(trh);
 
-      /* 自定义时间的课程：先算出它落在哪几行，用跨行格子显示 */
-      var customAt = {};    // 'day|行号' -> { course, span } 或 'covered'
-      Store.courses.forEach(function (c) {
-        if (c.timeMode !== 'custom' || !c.startTime) return;
-        if (!Store.courseInWeek(c, weekNo)) return;
-        var first = -1, last = -1;
-        Store.periods.forEach(function (p, i) {
-          var e = c.endTime || c.startTime;
-          if (TimeUtil.toMin(p.start) < TimeUtil.toMin(e) &&
-              TimeUtil.toMin(c.startTime) < TimeUtil.toMin(p.end)) {
-            if (first < 0) first = i;
-            last = i;
-          }
-        });
-        if (first < 0) return;
-        var clash = false;
-        for (var r = first; r <= last; r++) {
-          if (customAt[c.day + '|' + r]) clash = true;
-        }
-        if (clash) return;                       // 同一天同一时段已有自定义课程
-        customAt[c.day + '|' + first] = { course: c, span: last - first + 1 };
-        for (var r2 = first + 1; r2 <= last; r2++) customAt[c.day + '|' + r2] = 'covered';
-      });
+      function periodGroup(pp) {
+        var m = TimeUtil.toMin(pp.start);
+        if (m < 720) return '上午';
+        if (m < 1080) return '下午';
+        return '晚上';
+      }
 
+      var prevGroup = null;
       var tbody = el('tbody', { class: 'tt-body' });
       Store.periods.forEach(function (p, ri) {
-        var tr = el('tr');
-        tr.appendChild(el('td', { class: 'col-time' }, [
+        var grp = periodGroup(p);
+        var newGroup = grp !== prevGroup;
+        prevGroup = grp;
+        var tr = el('tr', { class: (newGroup && ri > 0) ? 'grp-sep' : '' });
+        var timeCell = el('td', { class: 'col-time' }, [
           el('b', { text: p.name }),
           el('span', { text: p.start }),
           document.createElement('br'),
           el('span', { text: p.end })
-        ]));
+        ]);
+        if (newGroup) timeCell.insertBefore(el('span', { class: 'grp-tag', text: grp }), timeCell.firstChild);
+        tr.appendChild(timeCell);
 
-        for (var d = 1; d <= 7; d++) {
-          var blk = customAt[d + '|' + ri];
-          if (blk === 'covered') continue;       // 被上面的跨行格子占住了
+        for (var dc = 1; dc <= 7; dc++) {
+          var inst = renderAt[dc + '|' + ri];
+          if (inst && inst.type === 'covered') continue;
 
-          if (blk) {
-            (function (b) {
-              var ctd = el('td', {
-                class: 'cell has-custom',
-                rowspan: b.span,
-                onclick: function () { CourseDialog.detail(b.course.id); }
-              });
-              ctd.appendChild(el('div', { class: 'tcell' }, [self.block(b.course)]));
-              tr.appendChild(ctd);
-            })(blk);
+          if (inst && inst.type === 'block') {
+            var cellB = el('td', {
+              class: 'cell' + (dc >= 6 ? ' we-off' : '') + (inst.span > 1 ? ' has-custom' : '') +
+                     (pickMode ? ' pickable' : ''),
+              rowspan: inst.span > 1 ? inst.span : null,
+              dataset: { day: dc, period: p.id },
+              onclick: function (e) {
+                if (e.target.closest('.course-block')) return;
+                if (pickMode) { togglePick(+this.dataset.day, this.dataset.period); return; }
+                CourseDialog.open(null, { day: +this.dataset.day, periodId: this.dataset.period });
+              }
+            });
+            cellB.appendChild(el('div', { class: 'tcell' }, [self.block(inst.item)]));
+            tr.appendChild(cellB);
             continue;
           }
 
-          var key = d + '|' + p.id;
-          var list = matrix[key] || [];
-          var weekend = d >= 6;
-          var isPicked = !!picked[pickKey(d, p.id)];
+          if (inst && inst.type === 'stack') {
+            var cellS = el('td', {
+              class: 'cell stack-cell' + (dc >= 6 ? ' we-off' : ''),
+              dataset: { day: dc, period: p.id },
+              onclick: function (e) {
+                if (e.target.closest('.course-block')) return;
+                if (pickMode) { togglePick(+this.dataset.day, this.dataset.period); return; }
+                CourseDialog.open(null, { day: +this.dataset.day, periodId: this.dataset.period });
+              }
+            });
+            var holdS = el('div', { class: 'tcell stack' });
+            inst.items.forEach(function (p2) { holdS.appendChild(self.block(p2)); });
+            cellS.appendChild(holdS);
+            tr.appendChild(cellS);
+            continue;
+          }
+
+          var weekend = dc >= 6;
+          var isPicked = !!picked[pickKey(dc, p.id)];
           var cell = el('td', {
             class: 'cell' + (weekend ? ' we-off' : '') +
                    (pickMode ? ' pickable' : '') + (isPicked ? ' picked' : ''),
-            dataset: { day: d, period: p.id },
+            dataset: { day: dc, period: p.id },
             onclick: function (e) {
               if (pickMode) {
                 if (!e.target.closest('.course-block')) togglePick(+this.dataset.day, this.dataset.period);
                 return;
               }
               if (e.target.closest('.course-block')) return;
-              CourseDialog.open(null, {
-                day: +this.dataset.day,
-                periodId: this.dataset.period
-              });
+              CourseDialog.open(null, { day: +this.dataset.day, periodId: this.dataset.period });
             }
           });
-          if (pickMode) {
-            cell.appendChild(el('span', { class: 'cell-pick' }, [V.svg(V.icons.check, 15)]));
-          }
-
+          if (pickMode) cell.appendChild(el('span', { class: 'cell-pick' }, [V.svg(V.icons.check, 15)]));
           var holder = el('div', { class: 'tcell' });
-          if (list.length) {
-            list.forEach(function (c) {
-              holder.appendChild(self.block(c));
-            });
-          } else {
-            holder.appendChild(el('div', { class: 'cell-add' }, [V.svg(V.icons.plus, 16)]));
-          }
+          holder.appendChild(el('div', { class: 'cell-add' }, [V.svg(V.icons.plus, 16)]));
           cell.appendChild(holder);
           tr.appendChild(cell);
         }
@@ -326,15 +385,24 @@
         return;
       }
 
-      root.appendChild(el('div', { class: 'grid-scroll' }, [table]));
+      var gridScrollEl = el('div', { class: 'grid-scroll' }, [table]);
+      root.appendChild(gridScrollEl);
       if (pickMode) root.appendChild(pickBar());
 
+      // 窄屏：把课表横向滚动到今天所在列
+      setTimeout(function () {
+        if (weekNo !== Store.currentWeek()) return;
+        if (!gridScrollEl.isConnected) return;
+        if (gridScrollEl.scrollWidth <= gridScrollEl.clientWidth + 4) return;
+        var todayDow = DateUtil.isoDow(DateUtil.today());
+        var ths = gridScrollEl.querySelectorAll('.cp-tt-head th');
+        if (ths.length > todayDow) {
+          gridScrollEl.scrollLeft = Math.max(0, ths[todayDow].offsetLeft - ths[0].offsetWidth);
+        }
+      }, 0);
+
       /* ---- 图例 ---- */
-      var seen = {};
-      var uniq = Store.courses.filter(function (c) {
-        if (seen[c.name]) return false;
-        seen[c.name] = 1; return true;
-      }).sort(function (a, b) {
+      var uniq = Store.courses.slice().sort(function (a, b) {
         var ta = Store.courseTime(a), tb = Store.courseTime(b);
         var sa = ta ? ta.start : '99:99', sb = tb ? tb.start : '99:99';
         return a.day - b.day || (sa < sb ? -1 : sa > sb ? 1 : 0);
@@ -356,35 +424,37 @@
       root.appendChild(legend);
     },
 
-    block: function (c) {
-      var t = Store.courseTime(c);
+    block: function (p) {
+      var t = Store.courseTime(p);
+      var loc = p.location || '';
       var meta = [];
-      if (c.location) meta.push(c.location);
+      if (loc) meta.push(loc);
       if (t && t.mode === 'custom') meta.unshift(t.start + '-' + t.end);
       else if (t) meta.push(t.start);
 
-      var hasBadge = (c.weekType !== 'all' || c.startWeek > 1 || c.endWeek < Store.semester.weeks);
-      var hasExam = !!(c.exam && c.exam.date);
+      var hasBadge = (p.weekType !== 'all' || p.startWeek > 1 || p.endWeek < Store.semester.weeks);
+      var hasExam = !!(p.exam && p.exam.date);
+      var cid = p.courseId || p.id;
 
       return el('button', {
         class: 'course-block' + ((hasExam || hasBadge) ? ' has-marks' : ''),
-        style: { '--c': c.color },
-        title: c.name + ' · ' + (c.teacher || '') + ' · ' + (c.location || '') +
-               (hasExam ? '\n考试：' + c.exam.date + ' ' + (c.exam.start || '') : ''),
+        style: { '--c': p.color },
+        title: p.name + ' · ' + (p.teacher || '') + ' · ' + (loc || '') +
+               (hasExam ? '\n考试：' + p.exam.date + ' ' + (p.exam.start || '') : ''),
         onclick: function (e) {
           e.stopPropagation();
-          if (pickMode) { togglePick(c.day, c.periodId || ''); return; }
-          CourseDialog.detail(c.id);
+          if (pickMode) { togglePick(p.day, p.periodId || ''); return; }
+          CourseDialog.detail(cid);
         }
       }, [
         (hasExam || hasBadge) ? el('span', { class: 'cb-marks' }, [
-          hasExam ? el('span', { class: 'cb-exam', text: '考', title: '考试 ' + c.exam.date }) : null,
-          hasBadge ? el('span', { class: 'cb-badge', text: Store.weekTypeText(c.weekType).slice(0, 1) }) : null
+          hasExam ? el('span', { class: 'cb-exam', text: '考', title: '考试 ' + p.exam.date }) : null,
+          hasBadge ? el('span', { class: 'cb-badge', text: Store.weekTypeText(p.weekType).slice(0, 1) }) : null
         ]) : null,
         el('span', {
           class: 'cb-name',
           style: (hasExam || hasBadge) ? { paddingRight: (hasExam ? 21 : 16) + 'px' } : null,
-          text: c.name
+          text: p.name
         }),
         meta.length ? el('span', { class: 'cb-meta', text: meta.join(' · ') }) : null
       ]);
@@ -404,8 +474,6 @@
         teacher: c ? c.teacher : '',
         location: c ? c.location : '',
         color: c ? c.color : Store.COLORS[Store.courses.length % Store.COLORS.length],
-        day: c ? c.day : (preset.day || 1),
-        periodId: c ? c.periodId : (preset.periodId || (Store.periods[0] && Store.periods[0].id)),
         startWeek: c ? c.startWeek : 1,
         endWeek: c ? c.endWeek : Store.semester.weeks,
         weekType: c ? c.weekType : 'all',
@@ -414,16 +482,41 @@
         exam: c ? c.exam : null
       };
 
-      var timeMode = c ? (c.timeMode || 'period') : 'period';
+      // 现有全部时段（编辑时用来回填 / 保留未编辑的部分）
+      var origSlots = c ? Store.courseSlots(c).map(function (s) {
+        return {
+          day: s.day, timeMode: s.timeMode, periodId: s.periodId,
+          startTime: s.startTime, endTime: s.endTime, location: s.location || ''
+        };
+      }) : [];
 
-      /* ---------- 按节次：在「星期 × 节次」网格里直接点格子 ---------- */
+      /* ---------- 按节次：多选格子 + 逐格地点 ---------- */
       var picked = {};      // 'day|periodId' -> 1
+      var slotLocs = {};    // 'day|periodId' -> location
+      origSlots.forEach(function (s) {
+        if (s.timeMode === 'custom') return;
+        var k = s.day + '|' + s.periodId;
+        picked[k] = 1;
+        slotLocs[k] = s.location || '';
+      });
       if (preset.cells && preset.cells.length) {
-        // 课表上直接选的格子
-        preset.cells.forEach(function (cc) { picked[cellKey(cc.day, cc.periodId)] = 1; });
-      } else {
-        var startKey = data.day + '|' + data.periodId;
-        if (data.periodId && (timeMode === 'period' || isEdit)) picked[startKey] = 1;
+        preset.cells.forEach(function (cc) { picked[cc.day + '|' + cc.periodId] = 1; });
+      } else if (!isEdit && !Object.keys(picked).length) {
+        var pid0 = preset.periodId || (Store.periods[0] && Store.periods[0].id);
+        if (pid0) picked[(preset.day || 1) + '|' + pid0] = 1;
+      }
+
+      var customSlots = origSlots.filter(function (s) { return s.timeMode === 'custom'; });
+      var selDays = customSlots.length
+        ? customSlots.map(function (s) { return s.day; })
+        : [preset.day || 1];
+      var customStart = customSlots[0] ? customSlots[0].startTime : '08:00';
+      var customEnd = customSlots[0] ? customSlots[0].endTime : '09:40';
+      var customLoc = customSlots[0] ? (customSlots[0].location || '') : '';
+
+      var timeMode = c ? (c.timeMode || 'period') : 'period';
+      if (isEdit && !origSlots.some(function (s) { return s.timeMode !== 'custom'; }) && customSlots.length) {
+        timeMode = 'custom';
       }
 
       var gridRedraws = [];
@@ -432,19 +525,14 @@
 
       function toggleCell(day, pid) {
         var k = cellKey(day, pid);
-        if (picked[k]) {
-          if (isEdit) return;                 // 编辑时至少留一格
-          delete picked[k];
-        } else {
-          if (isEdit) picked = {};            // 编辑：换成新选的这一格
-          picked[k] = 1;
-        }
+        if (picked[k]) delete picked[k];
+        else picked[k] = 1;
         redrawGrid();
         updateCount();
+        renderSlotLoc();
       }
 
       function toggleCol(day) {
-        if (isEdit) return;
         var all = true;
         Store.periods.forEach(function (p) { if (!picked[cellKey(day, p.id)]) all = false; });
         Store.periods.forEach(function (p) {
@@ -453,10 +541,10 @@
         });
         redrawGrid();
         updateCount();
+        renderSlotLoc();
       }
 
       function toggleRow(pid) {
-        if (isEdit) return;
         var all = true;
         for (var d = 1; d <= 7; d++) { if (!picked[cellKey(d, pid)]) all = false; }
         for (var d2 = 1; d2 <= 7; d2++) {
@@ -465,6 +553,7 @@
         }
         redrawGrid();
         updateCount();
+        renderSlotLoc();
       }
 
       function countEl() { return V.$('#fPickCount'); }
@@ -491,7 +580,7 @@
         wrap.appendChild(head);
 
         Store.periods.forEach(function (p) {
-          var row = el('div', { class: 'gp-row' });
+          var row = el('div', { class: 'gp-r' });
           row.appendChild(el('button', {
             class: 'gp-row-label', type: 'button',
             title: '选中/取消这一整节',
@@ -524,25 +613,49 @@
       var gridPick = buildGridPick();
       gridRedraws.push(function () {
         V.$$('.gp-cell', gridPick).forEach(function (b) {
-          b.classList.toggle('on', !!picked[b.dataset.k]);
+          b.classList.toggle('cp-on', !!picked[b.dataset.k]);
         });
       });
 
       var pickCount = el('div', { class: 'ocr-hint', id: 'fPickCount', text: '' });
 
+      var slotLocBox = el('div', { class: 'slot-loc-box' });
+      function renderSlotLoc() {
+        slotLocBox.innerHTML = '';
+        var keys = Object.keys(picked);
+        if (!keys.length) { slotLocBox.style.display = 'none'; return; }
+        slotLocBox.style.display = '';
+        slotLocBox.appendChild(el('div', { class: 'ocr-hint', text: '各时段可单独设置地点（留空则用上方统一地点）' }));
+        var order = Store.periods.map(function (p) { return p.id; });
+        keys.sort(function (a, b) {
+          var pa = a.split('|'), pb = b.split('|');
+          return (+pa[0]) - (+pb[0]) || order.indexOf(pa[1]) - order.indexOf(pb[1]);
+        });
+        keys.forEach(function (k) {
+          var parts = k.split('|');
+          var day = +parts[0], pid = parts[1];
+          var pname = (Store.getPeriod(pid) || {}).name || '';
+          var inp = V.input({ placeholder: '留空则用统一地点', value: slotLocs[k] || '' });
+          inp.addEventListener('input', function () { slotLocs[k] = inp.value; });
+          inp.addEventListener('change', function () { slotLocs[k] = inp.value; });
+          slotLocBox.appendChild(el('div', { class: 'slot-loc-row' }, [
+            el('span', { class: 'slot-loc-label', text: Store.DAY_NAMES[day - 1] + ' ' + pname }),
+            inp
+          ]));
+        });
+      }
+
       var periodBox = el('div', { class: 'tm-sub' }, [
         gridPick,
         pickCount,
+        slotLocBox,
         el('div', {
           class: 'ocr-hint',
-          text: isEdit
-            ? '点格子可以把这门课挪到别的时间。'
-            : '想上几节课就点几个格子，比如「周一第 1 节」加「周三第 2 节」。点顶部的「周一」选中一整天，点左边的「第1节」选中这一节的七天。'
+          text: '想上几节课就点几个格子，这些时段都属于这一门课；点顶部「周一」选中一整天，点左侧「第1节」选中这一节的七天。'
         })
       ]);
 
       /* ---------- 自定义时间：星期多选 + 起止时间 ---------- */
-      var selDays = [data.day];
       var dayRedraws = [];
 
       function chipPick(items, selected, opts) {
@@ -558,7 +671,6 @@
                 if (opts.minOne && selected.length <= 1) return;
                 selected.splice(i, 1);
               } else {
-                if (opts.single) selected.length = 0;
                 selected.push(it.value);
               }
               dayRedraws.forEach(function (fn) { fn(); });
@@ -572,7 +684,7 @@
         });
         dayRedraws.push(function () {
           V.$$('.cp-item', wrap).forEach(function (b) {
-            b.classList.toggle('on', selected.indexOf(b._v) >= 0);
+            b.classList.toggle('cp-on', selected.indexOf(b._v) >= 0);
           });
         });
         return wrap;
@@ -580,15 +692,48 @@
 
       var dayPick = chipPick(
         Store.DAY_NAMES.map(function (n, i) { return { value: i + 1, label: n }; }),
-        selDays, { minOne: true, single: isEdit, grid: 'days' }
+        selDays, { minOne: true, grid: 'days' }
       );
 
-      var fStart = V.input({ type: 'time', value: (c && c.startTime) || '08:00' });
-      var fEnd = V.input({ type: 'time', value: (c && c.endTime) || '09:40' });
+      var fStart = V.input({ type: 'text', inputmode: 'numeric', placeholder: '08:00', value: customStart || '08:00' });
+      var fEnd = V.input({ type: 'text', inputmode: 'numeric', placeholder: '09:40', value: customEnd || '09:40' });
+      var fCustomLoc = V.input({ placeholder: '可选，例如：实验室', value: customLoc });
+
+      function normT(v) {
+        var m = /^(\d{1,2}):(\d{1,2})$/.exec((v || '').trim());
+        if (!m) return '';
+        var h = +m[1], mi = +m[2];
+        if (h > 23 || mi > 59) return '';
+        return ('0' + h).slice(-2) + ':' + ('0' + mi).slice(-2);
+      }
+      function bindTimeInput(inp) {
+        inp.addEventListener('input', function () {
+          var v = inp.value.replace(/[^\d]/g, '');
+          if (v.length === 4) inp.value = v.slice(0, 2) + ':' + v.slice(2);
+        });
+        inp.addEventListener('blur', function () {
+          var t = normT(inp.value);
+          if (t) inp.value = t;
+        });
+      }
+      bindTimeInput(fStart);
+      bindTimeInput(fEnd);
+      function timeChips(target) {
+        var times = [];
+        Store.periods.forEach(function (pp) { if (times.indexOf(pp.start) < 0) times.push(pp.start); });
+        ['08:00', '10:00', '14:00', '16:00', '19:00'].forEach(function (t) { if (times.indexOf(t) < 0) times.push(t); });
+        return el('div', { class: 'time-chips' }, times.slice(0, 8).map(function (t) {
+          return el('button', { class: 'chip', type: 'button', text: t, onclick: function () { target.value = t; } });
+        }));
+      }
 
       var customBox = el('div', { class: 'tm-sub' }, [
         V.field('星期几（可多选）', dayPick),
-        el('div', { class: 'field-row' }, [V.field('开始时间', fStart), V.field('结束时间', fEnd)]),
+        el('div', { class: 'field-row' }, [
+          V.field('开始时间', el('div', {}, [fStart, timeChips(fStart)])),
+          V.field('结束时间', el('div', {}, [fEnd, timeChips(fEnd)]))
+        ]),
+        V.field('地点（这些时段共用）', fCustomLoc),
         el('div', {
           class: 'ocr-hint',
           text: '不受「设置 → 课程时间」里的节次限制，比如 09:10-10:30 的实习课，课表里会按时间跨行显示。'
@@ -609,7 +754,7 @@
 
       var fName = V.input({ placeholder: '例如：高等数学 A', value: data.name, dataset: { autofocus: '1' } });
       var fTeacher = V.input({ placeholder: '可选', value: data.teacher });
-      var fLocation = V.input({ placeholder: '例如：教三 301', value: data.location });
+      var fLocation = V.input({ placeholder: '统一地点，例如：教三 301', value: data.location });
       var fNote = V.textarea({ placeholder: '可选，例如：需要带教材', value: data.note });
       var colorBox = V.colorPicker(data.color, function (v) { data.color = v; });
       var fWT = V.segment(
@@ -622,8 +767,10 @@
         value: data.credit || '', placeholder: '例如：3'
       });
       var fExamDate = V.input({ type: 'date', value: (data.exam && data.exam.date) || '' });
-      var fExamStart = V.input({ type: 'time', value: (data.exam && data.exam.start) || '' });
-      var fExamEnd = V.input({ type: 'time', value: (data.exam && data.exam.end) || '' });
+      var fExamStart = V.input({ type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', value: (data.exam && data.exam.start) || '' });
+      var fExamEnd = V.input({ type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', value: (data.exam && data.exam.end) || '' });
+      bindTimeInput(fExamStart);
+      bindTimeInput(fExamEnd);
 
       var body = [
         V.field('课程名称', fName),
@@ -672,6 +819,7 @@
       });
 
       updateCount();
+      renderSlotLoc();
 
       function weekPair() {
         var sw = Math.max(1, parseInt(V.$('#fSW').value, 10) || 1);
@@ -688,7 +836,6 @@
         var base = {
           name: name,
           teacher: fTeacher.value.trim(),
-          location: fLocation.value.trim(),
           color: data.color,
           credit: Math.max(0, parseFloat(fCredit.value) || 0),
           exam: examDate ? { date: examDate, start: fExamStart.value || '', end: fExamEnd.value || '' } : null,
@@ -698,57 +845,52 @@
           endWeek: wk.endWeek
         };
 
+        var uniformLoc = fLocation.value.trim();
+        var newSlots = [];
+
         if (timeMode === 'custom') {
-          var st = fStart.value, en = fEnd.value;
-          if (!st || !en) { UI.toast('请填写开始和结束时间', 'err'); return; }
+          var st = normT(fStart.value), en = normT(fEnd.value);
+          if (!st || !en) { UI.toast('请填写有效时间（HH:MM）', 'err'); return; }
           if (en <= st) { UI.toast('结束时间要晚于开始时间', 'err'); return; }
           if (!selDays.length) { UI.toast('请至少选一天', 'err'); return; }
+          var cl = fCustomLoc.value.trim() || uniformLoc;
+          selDays.forEach(function (day) {
+            newSlots.push({ day: day, timeMode: 'custom', startTime: st, endTime: en, location: cl });
+          });
+          // 编辑时保留未在 UI 中编辑的 period 时段
           if (isEdit) {
-            Store.updateCourse(courseId, Object.assign({}, base, {
-              day: selDays[0], timeMode: 'custom', startTime: st, endTime: en, periodId: ''
-            }));
-            m.close();
-            UI.toast('课程已更新');
-          } else {
-            selDays.forEach(function (day) {
-              Store.addCourse(Object.assign({}, base, {
-                day: day, timeMode: 'custom', startTime: st, endTime: en
-              }));
-            });
-            m.close();
-            UI.toast('已添加 ' + selDays.length + ' 节课');
-            if (preset.onDone) preset.onDone();
+            origSlots.forEach(function (s) { if (s.timeMode !== 'custom') newSlots.push(s); });
           }
-          return;
+        } else {
+          var combos = Object.keys(picked).map(function (k) {
+            var parts = k.split('|');
+            return { day: parseInt(parts[0], 10), periodId: parts[1] };
+          });
+          if (!combos.length) { UI.toast('请先选至少一个时段', 'err'); return; }
+          var order = Store.periods.map(function (p) { return p.id; });
+          combos.sort(function (a, b) {
+            return a.day - b.day || order.indexOf(a.periodId) - order.indexOf(b.periodId);
+          });
+          combos.forEach(function (cb) {
+            newSlots.push({
+              day: cb.day, timeMode: 'period', periodId: cb.periodId,
+              location: (slotLocs[cb.day + '|' + cb.periodId] || '').trim() || uniformLoc
+            });
+          });
+          // 编辑时保留未在 UI 中编辑的 custom 时段
+          if (isEdit) {
+            origSlots.forEach(function (s) { if (s.timeMode === 'custom') newSlots.push(s); });
+          }
         }
 
-        // 按节次：每个选中的格子生成一节课
-        var combos = Object.keys(picked).map(function (k) {
-          var parts = k.split('|');
-          return { day: parseInt(parts[0], 10), periodId: parts[1] };
-        });
-        if (!combos.length) { UI.toast('请先选至少一个时段', 'err'); return; }
-
-        var order = Store.periods.map(function (p) { return p.id; });
-        combos.sort(function (a, b) {
-          return a.day - b.day || order.indexOf(a.periodId) - order.indexOf(b.periodId);
-        });
-
         if (isEdit) {
-          Store.updateCourse(courseId, Object.assign({}, base, {
-            day: combos[0].day, timeMode: 'period',
-            periodId: combos[0].periodId, startTime: '', endTime: ''
-          }));
+          Store.updateCourse(courseId, Object.assign({}, base, { slots: newSlots }));
           m.close();
           UI.toast('课程已更新');
         } else {
-          combos.forEach(function (cb) {
-            Store.addCourse(Object.assign({}, base, {
-              day: cb.day, timeMode: 'period', periodId: cb.periodId
-            }));
-          });
+          Store.addCourse(Object.assign({}, base, { slots: newSlots }));
           m.close();
-          UI.toast('已添加 ' + combos.length + ' 节课');
+          UI.toast('已添加课程');
           if (preset.onDone) preset.onDone();
         }
       }
@@ -758,11 +900,22 @@
     detail: function (courseId) {
       var c = Store.getCourse(courseId);
       if (!c) return;
-      var t = Store.courseTime(c);
-      var p = t ? { name: t.label, start: t.start, end: t.end } : { name: '—', start: '', end: '' };
+      var slots = Store.courseSlots(c);
       var tasks = Store.tasks.filter(function (t) { return t.courseId === courseId; });
-      var timeLine = Store.DAY_NAMES[c.day - 1] + ' ' +
-        (t && t.mode === 'custom' ? (t.start + '–' + t.end) : (p.name + '　' + p.start + '–' + p.end));
+
+      var timeLines = slots.map(function (s) {
+        var dayName = Store.DAY_NAMES[(s.day || 1) - 1];
+        var str;
+        if (s.timeMode === 'custom') {
+          str = (s.startTime || '') + '–' + (s.endTime || '');
+        } else {
+          var p = Store.getPeriod(s.periodId);
+          str = p ? (p.name + '　' + p.start + '–' + p.end) : '—';
+        }
+        var loc = s.location ? '　·　' + V.escapeHTML(s.location) : '';
+        return dayName + ' ' + str + loc;
+      });
+      var timeLine = timeLines.join('<br>') || '—';
 
       var info = el('div', {
         class: 'preview-box',
@@ -777,7 +930,6 @@
             ? '<div>考试：' + c.exam.date + (c.exam.start ? ' ' + c.exam.start + (c.exam.end ? '–' + c.exam.end : '') : '') + '</div>'
             : '') +
           (c.teacher ? '<div>教师：' + V.escapeHTML(c.teacher) + '</div>' : '') +
-          (c.location ? '<div>地点：' + V.escapeHTML(c.location) + '</div>' : '') +
           (c.note ? '<div style="margin-top:6px">备注：' + V.escapeHTML(c.note) + '</div>' : '')
       });
 
@@ -865,3 +1017,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

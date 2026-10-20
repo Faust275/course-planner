@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：计划（打卡 / 进度 / 时长）
  * ========================================================== */
@@ -95,6 +97,10 @@
         if (state.status === 'done' && !p.done) return false;
         if (state.tag && !hasTag(p.tags, state.tag)) return false;
         return true;
+      });
+      list.sort(function (a, b) {
+        if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+        return 0;
       });
 
       if (!list.length) {
@@ -219,7 +225,7 @@
     view.render();
 
     if (res.completed) {
-      var node = V.$('.plan-card[data-id="' + id + '"]', view.root);
+      var node = V.$('.cp-plan-card[data-id="' + id + '"]', view.root);
       if (node) {
         celebrate(node);
         if (node.scrollIntoView) node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -349,7 +355,7 @@
             }
             view.render();
             if (res.completed) {
-              var node = V.$('.plan-card[data-id="' + p.id + '"]', view.root);
+              var node = V.$('.cp-plan-card[data-id="' + p.id + '"]', view.root);
               if (node) celebrate(node);
             }
             setTimeout(function () { justDoneId = ''; }, 1200);
@@ -378,6 +384,19 @@
       value: p ? String(p.target) : (type === 'duration' ? '600' : '100')
     });
     var fUnit = V.input({ placeholder: '页 / 章 / 个', value: p ? p.unit : '' });
+
+    var impOn = p ? !!p.important : false;
+    var fImp = el('button', {
+      class: 'chip', type: 'button',
+      style: impOn ? { background: 'var(--primary)', color: '#fff' } : null,
+      text: impOn ? '★ 已标记重要' : '标记为重要',
+      onclick: function () {
+        impOn = !impOn;
+        this.style.background = impOn ? 'var(--primary)' : '';
+        this.style.color = impOn ? '#fff' : '';
+        this.textContent = impOn ? '★ 已标记重要' : '标记为重要';
+      }
+    });
 
     var colorBox = el('div', { class: 'theme-grid' });
     function drawColors() {
@@ -432,6 +451,7 @@
         V.field('类型', typeSeg, '打卡＝每天/每周打勾；进度＝累加数值；时长＝累计分钟'),
         optBox,
         V.field('开始日期', fStart),
+        V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('备注', fNote),
         V.field('标签', fTags, '支持二级标签，如「学习/英语」'),
         V.field('颜色', colorBox),
@@ -452,7 +472,7 @@
               days: parseInt(fDays.value, 10) || 21,
               startDate: fStart.value,
               note: fNote.value, tags: fTags.getValue(),
-              color: color
+              color: color, important: impOn
             };
             if (type !== 'checkin') {
               data.target = parseFloat(fTarget.value) || 1;
@@ -473,3 +493,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

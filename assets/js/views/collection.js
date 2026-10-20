@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：收集（干员图鉴 + 寻访数据 + 我的森林）
  * 森林与干员图鉴原本在「专注」模块，现统一迁移到这里，
@@ -285,7 +287,7 @@
     sp = sp || speciesOf('camphor');
     var svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '16 2 68 118');
-    svg.setAttribute('class', 'tree-svg');
+    svg.setAttribute('class', 'cp-tree-svg');
 
     function add(tag, attrs, parent) {
       var n = document.createElementNS(NS, tag);
@@ -386,10 +388,10 @@
         var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
         if (v) v.render();
         // 直接在对应卡片上打特效，避免整页重渲染后特效错位（修复：右边树浇水左边树出特效）
-        var node = V.$('.tree-card[data-id="' + tree.id + '"]', v ? v.root : null);
+        var node = V.$('.cp-tree-card[data-id="' + tree.id + '"]', v ? v.root : null);
         if (node) {
-          node.classList.add('watered');
-          setTimeout(function () { node.classList.remove('watered'); }, 900);
+          node.classList.add('cp-watered');
+          setTimeout(function () { node.classList.remove('cp-watered'); }, 900);
         }
       }
     }, ['浇水 -' + POMO.WATER_COST + ' 分']));
@@ -414,7 +416,7 @@
           justPlantedId = tree.id;
           UI.toast('种下了一棵' + sp.name + '，积分 -' + cost);
           view.render();
-          var node = V.$('.tree-card[data-id="' + tree.id + '"]', view.root);
+          var node = V.$('.cp-tree-card[data-id="' + tree.id + '"]', view.root);
           if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }, [
@@ -446,3 +448,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

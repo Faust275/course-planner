@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 外观：主题配色 / 自定义背景
  * ========================================================== */
@@ -91,12 +93,12 @@
 
     if (bg.dataUrl) {
       layer.style.backgroundImage = 'url("' + bg.dataUrl + '")';
-      layer.classList.add('on');
-      document.body.classList.add('has-bg');
+      layer.classList.add('cp-on');
+      document.body.classList.add('cp-has-bg');
     } else {
       layer.style.backgroundImage = '';
-      layer.classList.remove('on');
-      document.body.classList.remove('has-bg');
+      layer.classList.remove('cp-on');
+      document.body.classList.remove('cp-has-bg');
     }
     document.documentElement.style.setProperty('--bg-mask', String(
       bg.mask == null ? 0.5 : bg.mask
@@ -186,3 +188,5 @@
     mixWhite: mixWhite
   };
 })(window);
+
+

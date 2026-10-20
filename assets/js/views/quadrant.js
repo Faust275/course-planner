@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：象限（全天 24 小时时间去向）
  * ========================================================== */
@@ -468,7 +470,7 @@
 
     var svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '0 0 ' + SIZE + ' ' + SIZE);
-    svg.setAttribute('class', 'ring-svg');
+    svg.setAttribute('class', 'cp-ring-svg');
 
     // 底环
     var base = document.createElementNS(NS, 'circle');
@@ -785,11 +787,11 @@
         } else {
           sumBox.style.display = '';
           sumBox.innerHTML =
-            '<div class="fs-line"><b>' + Math.round(s.kcal) + '</b><span>千卡（按食物自动估算）</span></div>' +
-            '<div class="fs-macros">' +
-            '<span class="macro m-p">蛋白 ' + Math.round(s.p) + 'g</span>' +
-            '<span class="macro m-f">脂肪 ' + Math.round(s.f) + 'g</span>' +
-            '<span class="macro m-c">碳水 ' + Math.round(s.c) + 'g</span>' +
+            '<div class="cp-fs-line"><b>' + Math.round(s.kcal) + '</b><span>千卡（按食物自动估算）</span></div>' +
+            '<div class="cp-fs-macros">' +
+            '<span class="cp-macro cp-m-p">蛋白 ' + Math.round(s.p) + 'g</span>' +
+            '<span class="cp-macro cp-m-f">脂肪 ' + Math.round(s.f) + 'g</span>' +
+            '<span class="cp-macro cp-m-c">碳水 ' + Math.round(s.c) + 'g</span>' +
             '</div>';
         }
         if (!manual && items.length) {
@@ -806,10 +808,10 @@
         var over = cur > quota;
         goalBox.style.display = '';
         goalBox.innerHTML =
-          '<div class="fg-row"><span>这一餐的目标</span><b>' + quota + ' 千卡</b></div>' +
-          '<div class="fg-bar"><i style="width:' + Math.min(100, pct) + '%;background:' +
+          '<div class="cp-fg-row"><span>这一餐的目标</span><b>' + quota + ' 千卡</b></div>' +
+          '<div class="cp-fg-bar"><i style="width:' + Math.min(100, pct) + '%;background:' +
           (over ? 'var(--red)' : 'var(--green)') + '"></i></div>' +
-          '<div class="fg-hint"' + (over ? ' style="color:var(--red)"' : '') + '>' +
+          '<div class="cp-fg-hint"' + (over ? ' style="color:var(--red)"' : '') + '>' +
           (over ? '超出 ' + Math.round(cur - quota) + ' 千卡' : ('还剩 ' + Math.round(quota - cur) + ' 千卡')) +
           '</div>';
       }
@@ -942,3 +944,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

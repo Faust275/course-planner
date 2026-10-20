@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：成绩（学分 / 多层占比 / 加权均分）
  * ========================================================== */
@@ -362,7 +364,7 @@
           onclick: function () {
             var name = fName.value.trim();
             if (!name) { UI.toast('请填写课程名称', 'err'); return; }
-            var target = V.$('.modal select').value || sid;
+            var target = V.$('.cp-modal select').value || sid;
             var key = 'm:' + name + '|' + uid();
             Store.saveGrade(target, {
               key: key, source: 'manual', courseId: '',
@@ -572,7 +574,7 @@
         txt += ' · GPA <b>' + fmt(t.summary.gpa, 2) + '</b> / ' + fmt(t.scale, 1) +
                ' · 加权均分 ' + fmt(t.summary.weighted, 1);
       }
-      previewBox.innerHTML = '<div class="pv-line">' + txt + '</div>';
+      previewBox.innerHTML = '<div class="cp-pv-line">' + txt + '</div>';
     }
 
     var m = V.modal({
@@ -641,3 +643,5 @@
     }
   };
 })(window);
+
+

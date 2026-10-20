@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：设置（学期 / 节次 / 数据备份）
  * ========================================================== */
@@ -27,7 +29,8 @@
     fav: { name: '收藏的词句', desc: '收藏过的每日一句与每日一词' },
     diet: { name: '饮食与热量', desc: '每日热量目标、三餐配比与营养素' },
     data: { name: '数据管理', desc: '同步码、备份文件与清空' },
-    about: { name: '使用提示', desc: '各模块的用法说明' }
+    about: { name: '使用提示', desc: '各模块的用法说明' },
+    pet: { name: '桌宠（开发）', desc: '龙泡泡桌宠：开发者开关与本地素材注入，仅自用' }
   };
 
   /**
@@ -106,13 +109,22 @@
       root.appendChild(el('div', { class: 'set-head' }, [
         el('button', {
           class: 'btn btn-sm',
-          onclick: function () { SUB = ''; view.render(); }
+          onclick: function () {
+            if (SUB === 'periods' && document.activeElement && document.activeElement.blur) {
+              document.activeElement.blur();
+              setTimeout(function () { SUB = ''; view.render(); }, 350);
+              return;
+            }
+            SUB = ''; view.render();
+          }
         }, [V.svg(V.icons.left, 15), '返回']),
         el('div', { class: 'set-head-title' }, [
           el('b', { text: meta.name }),
           el('span', { text: meta.desc })
         ])
       ]));
+
+            if (SUB === 'pet') { this.renderPet(root); return; }
 
             if (SUB === 'look') {
   /* ===================== 外观 ===================== */
@@ -129,8 +141,8 @@
             title: t.name,
             onclick: function () {
               Theme.setThemeColor(t.key);
-              V.$$('.theme-swatch', grid).forEach(function (x) { x.classList.remove('active'); });
-              sw.classList.add('active');
+              V.$$('.cp-theme-swatch', grid).forEach(function (x) { x.classList.remove('cp-active'); });
+              sw.classList.add('cp-active');
               UI.toast('已切换到「' + t.name + '」');
             }
           });
@@ -236,7 +248,7 @@
             text: '共 ' + Store.periods.length + ' 节' })
         ]));
 
-        // 使用深拷贝编辑，点保存才生效
+        // 实时自动保存：任何改动都会自动落盘，切页 / 返回不会丢
         var draft = Store.periods.map(function (p) {
           return { id: p.id, name: p.name, start: p.start, end: p.end };
         });
@@ -244,18 +256,51 @@
         var listBox = el('div', { class: 'period-list' });
         periodCard.appendChild(listBox);
 
+        var saveTimer = null;
+        var savedHint = el('div', { class: 'ocr-hint', text: '修改会自动保存' });
+
+        function flushSave(silent) {
+          if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+          if (!draft.length) { if (!silent) UI.toast('至少保留一节', 'err'); return false; }
+          var empty = draft.some(function (p) { return !p.start || !p.end; });
+          if (empty) {
+            if (!silent) UI.toast('时间不能为空', 'err');
+            savedHint.textContent = '有节次时间未填写，暂未保存';
+            return false;
+          }
+          Store.setPeriods(draft.map(function (p) {
+            return { id: p.id, name: (p.name || '').trim() || '未命名节次', start: p.start, end: p.end };
+          }));
+          savedHint.textContent = '已自动保存';
+          return true;
+        }
+
+        function queueSave() {
+          savedHint.textContent = '正在保存…';
+          if (saveTimer) clearTimeout(saveTimer);
+          saveTimer = setTimeout(function () { flushSave(true); }, 300);
+        }
+
         function drawPeriods() {
           listBox.innerHTML = '';
           draft.forEach(function (p, idx) {
+            var nameInp = V.input({
+              value: p.name, placeholder: '节次名', class: 'input p-name',
+              oninput: function () { p.name = this.value; queueSave(); }
+            });
+            var startInp = V.input({ type: 'time', value: p.start, class: 'input p-start' });
+            var endInp = V.input({ type: 'time', value: p.end, class: 'input p-end' });
+            startInp.addEventListener('input', function () { p.start = startInp.value; queueSave(); });
+            startInp.addEventListener('change', function () { p.start = startInp.value; queueSave(); });
+            endInp.addEventListener('input', function () { p.end = endInp.value; queueSave(); });
+            endInp.addEventListener('change', function () { p.end = endInp.value; queueSave(); });
+
             var row = el('div', { class: 'period-row' }, [
               el('span', { class: 'period-idx', text: String(idx + 1) }),
-              V.input({
-                value: p.name, placeholder: '节次名', class: 'input p-name',
-                oninput: function () { p.name = this.value; }
-              }),
-              V.input({ type: 'time', value: p.start, class: 'input p-start', oninput: function () { p.start = this.value; } }),
+              nameInp,
+              startInp,
               el('span', { class: 'period-dash', text: '—' }),
-              V.input({ type: 'time', value: p.end, class: 'input p-end', oninput: function () { p.end = this.value; } }),
+              endInp,
               el('button', {
                 class: 'icon-btn', title: '删除该节',
                 onclick: function () { removePeriod(p); }
@@ -266,15 +311,20 @@
         }
 
         function removePeriod(p) {
-          var used = Store.courses.filter(function (c) { return c.periodId === p.id; });
+          var used = Store.courses.filter(function (c) {
+            return Store.courseSlots(c).some(function (s) { return s.periodId === p.id; });
+          });
           var doRemove = function () {
             draft = draft.filter(function (x) { return x.id !== p.id; });
             if (used.length) {
-              // 删除被引用的节次时，同时移除对应课程
-              used.forEach(function (c) { Store.removeCourse(c.id); });
+              used.forEach(function (c) {
+                var rest = Store.courseSlots(c).filter(function (s) { return s.periodId !== p.id; });
+                if (!rest.length) { Store.removeCourse(c.id); }
+                else { Store.updateCourse(c.id, { slots: rest }); }
+              });
             }
             drawPeriods();
-            Store.setPeriods(draft);
+            flushSave(true);
             UI.toast('已删除节次');
           };
           if (!used.length) { doRemove(); return; }
@@ -282,12 +332,12 @@
             title: '删除节次',
             message: '有 ' + used.length + ' 门课程安排在这一节（' +
               used.map(function (c) { return c.name; }).join('、') +
-              '），删除节次会同时删除这些课程。确定继续吗？',
+              '），删除节次会移除这些课程的该时段。确定继续吗？',
             danger: true, okText: '一并删除'
           }).then(function (ok) { if (ok) doRemove(); });
         }
 
-        periodCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+        periodCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' } }, [
           el('button', {
             class: 'btn',
             onclick: function () {
@@ -297,26 +347,22 @@
               var end = addMinutes(start, 45);
               draft.push({ id: 'p_' + Date.now().toString(36), name: '第' + n + '节', start: start, end: end });
               drawPeriods();
+              queueSave();
             }
           }, [V.svg(V.icons.plus, 16), '添加一节']),
+          savedHint,
           el('div', { style: { marginLeft: 'auto', display: 'flex', gap: '8px' } }, [
             el('button', {
               class: 'btn',
               onclick: function () {
                 draft = Store.periods.map(function (p) { return { id: p.id, name: p.name, start: p.start, end: p.end }; });
                 drawPeriods();
-                UI.toast('已还原');
+                savedHint.textContent = '已重新载入';
               }
-            }, ['还原']),
+            }, ['重新载入']),
             el('button', {
               class: 'btn btn-primary',
-              onclick: function () {
-                if (!draft.length) { UI.toast('至少保留一节', 'err'); return; }
-                Store.setPeriods(draft.map(function (p) {
-                  return { id: p.id, name: p.name.trim() || '未命名节次', start: p.start || '08:00', end: p.end || '08:45' };
-                }));
-                UI.toast('节次已保存');
-              }
+              onclick: function () { flushSave(false); }
             }, ['保存节次'])
           ])
         ]));
@@ -346,7 +392,7 @@
             class: 'switch' + (on ? ' on' : ''),
             onclick: function () {
               on = !on;
-              sw.classList.toggle('on', on);
+              sw.classList.toggle('cp-on', on);
               var patch = {};
               patch[key] = on;
               Store.updateSettings(patch);
@@ -698,8 +744,8 @@
             class: 'switch' + (on ? ' on' : '') + (locked ? ' locked' : ''),
             onclick: function () {
               if (locked) { UI.toast('「' + v.name + '」需要保留入口'); return; }
-              var next = !sw.classList.contains('on');
-              sw.classList.toggle('on', next);
+              var next = !sw.classList.contains('cp-on');
+              sw.classList.toggle('cp-on', next);
               var nav = Object.assign({}, Store.state.settings.nav || {});
               nav[id] = next;
               Store.updateSettings({ nav: nav });
@@ -757,8 +803,8 @@
           var sw = el('button', {
             class: 'switch' + (on ? ' on' : ''),
             onclick: function () {
-              var next = !sw.classList.contains('on');
-              sw.classList.toggle('on', next);
+              var next = !sw.classList.contains('cp-on');
+              sw.classList.toggle('cp-on', next);
               Store.setDailyOn(d.k, next);
               UI.toast(next ? '首页已显示「' + d.name + '」' : '首页已隐藏「' + d.name + '」');
             }
@@ -924,8 +970,138 @@
     { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
     { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
     { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
-    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' }
+    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
+    { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b' }
   ];
+
+  view.renderPet = function (root) {
+    window.Pet.ensureStyle();
+    var cfg = Store.settings.pet;
+    function save() { Store.updateSettings({ pet: Object.assign({}, cfg) }); cfg = Store.settings.pet; }
+
+    /* --- 开发者开关 --- */
+    var sw = el('button', {
+      class: 'switch' + (cfg.enabled ? ' on' : ''),
+      onclick: function () {
+        cfg.enabled = !cfg.enabled;
+        sw.classList.toggle('cp-on', cfg.enabled);
+        save();
+        window.Pet.refresh();
+      }
+    }, [el('i')]);
+    root.appendChild(el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'switch-row' }, [
+        el('div', { class: 'switch-text' }, [
+          el('b', { text: '启用龙泡泡桌宠' }),
+          el('span', { text: '默认关闭，仅供个人自用。素材仅存于本机，请勿将含素材的成品对外分发。' })
+        ]),
+        sw
+      ])
+    ]));
+
+    /* --- 用法提示 --- */
+    root.appendChild(el('div', { class: 'card', style: { padding: '14px 18px', marginBottom: '14px' } }, [
+      el('p', { style: { margin: 0, fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.6' }, text: '本功能不内置任何方舟美术。请自行准备一张「横向等宽排列的龙泡泡行走帧」精灵图（或单张 PNG），在下方上传，会以 base64 保存在本机浏览器。反应帧可放在另一行（可选）。' })
+    ]));
+
+    /* --- 素材上传 --- */
+    var card = el('div', { class: 'card', style: { padding: '16px 18px' } });
+    var fileInput = el('input', { type: 'file', accept: 'image/*', style: { display: 'block', margin: '6px 0 2px' } });
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (f.size > 4 * 1024 * 1024) { UI.toast('图片过大（>4MB），请压缩后重试'); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        cfg.src = reader.result;
+        var img = new Image();
+        img.onload = function () {
+          if (cfg.frameW === 0 && cfg.frameH === 0) {
+            cfg.frameH = img.height;
+            cfg.frameW = Math.round(img.width / Math.max(1, cfg.frames || 1));
+          }
+          save();
+          syncInputs();
+          drawPreview();
+          window.Pet.refresh();
+        };
+        img.src = reader.result;
+        UI.toast('已载入素材');
+      };
+      reader.readAsDataURL(f);
+    });
+    card.appendChild(el('div', { class: 'section-title', text: '本地精灵图（龙泡泡）' }));
+    card.appendChild(fileInput);
+
+    /* --- 帧参数 --- */
+    var fields = [
+      ['frames', '行走帧数', 3, 1],
+      ['fps', '帧率 fps', 8, 1],
+      ['scale', '显示缩放', 1, 0.2],
+      ['speed', '游走速度 px/s', 70, 1],
+      ['rowWalk', '行走帧所在行(0起)', 0, 0],
+      ['rowReact', '反应帧行(-1=无)', -1, -1],
+      ['reactFrames', '反应帧数', 0, 0]
+    ];
+    var grid = el('div', { class: 'form-grid', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px', marginTop: '10px' } });
+    var inputs = {};
+    fields.forEach(function (f) {
+      var input = el('input', { type: 'number', step: f[3], value: cfg[f[0]], style: { width: '100%', boxSizing: 'border-box' } });
+      input.addEventListener('change', function () {
+        var v = parseFloat(input.value);
+        cfg[f[0]] = isNaN(v) ? f[2] : v;
+        save();
+        drawPreview();
+        window.Pet.refresh();
+      });
+      inputs[f[0]] = input;
+      grid.appendChild(el('label', { style: { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' } }, [
+        el('span', { text: f[1] }), input
+      ]));
+    });
+    function syncInputs() { fields.forEach(function (f) { if (inputs[f[0]]) inputs[f[0]].value = cfg[f[0]]; }); }
+    card.appendChild(el('div', { class: 'section-title', style: { marginTop: '16px' }, text: '帧参数' }));
+    card.appendChild(grid);
+
+    /* --- 行走预览 --- */
+    var preview = el('div', { style: { marginTop: '12px', height: '130px', border: '1px dashed var(--border)', borderRadius: '10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden', background: 'var(--bg-2)' } });
+    function drawPreview() {
+      preview.innerHTML = '';
+      if (!cfg.src || cfg.frameW <= 0 || cfg.frameH <= 0) {
+        preview.appendChild(el('span', { style: { color: 'var(--text-2)', fontSize: '13px', alignSelf: 'center', marginBottom: '40px' }, text: '上传精灵图后在此预览行走效果' }));
+        return;
+      }
+      var ds = Math.max(0.2, cfg.scale || 1);
+      var w = cfg.frameW * ds, h = cfg.frameH * ds;
+      var totalW = cfg.frameW * (cfg.frames || 1) * ds;
+      var box = el('div', { style: {
+        width: w + 'px', height: h + 'px',
+        backgroundImage: 'url(' + cfg.src + ')', backgroundRepeat: 'no-repeat',
+        backgroundSize: totalW + 'px ' + h + 'px',
+        backgroundPositionY: (-(cfg.rowWalk || 0) * h) + 'px',
+        animation: (cfg.frames > 1 ? ('petWalk ' + (cfg.frames / (cfg.fps || 8)) + 's steps(' + cfg.frames + ') infinite') : 'none')
+      } });
+      box.style.setProperty('--pet-total', totalW + 'px');
+      preview.appendChild(box);
+    }
+    card.appendChild(el('div', { class: 'section-title', style: { marginTop: '16px' }, text: '行走预览' }));
+    card.appendChild(preview);
+    drawPreview();
+
+    /* --- 清除素材 --- */
+    card.appendChild(el('button', {
+      class: 'btn btn-sm', style: { marginTop: '16px' },
+      onclick: function () {
+        cfg.src = '';
+        save();
+        drawPreview();
+        window.Pet.refresh();
+        UI.toast('已清除本地素材');
+      }
+    }, ['清除素材']));
+
+    root.appendChild(card);
+  };
 
   view.home = function () {
     var root = this.root;
@@ -1299,7 +1475,7 @@
       if (!a) { preview.textContent = '请选择开始和结束日期'; return; }
       preview.innerHTML = '对齐后：<b>' + DateUtil.toStr(a.monday) + '（周一）</b> 至 <b>' +
         DateUtil.toStr(a.sunday) + '（周日）</b>，共 <b>' + a.weeks + '</b> 周' +
-        (a.moved ? '<span class="pv-note">已自动对齐到整周</span>' : '');
+        (a.moved ? '<span class="cp-pv-note">已自动对齐到整周</span>' : '');
     }
 
     var semesterCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
@@ -1377,7 +1553,7 @@
         DateUtil.toStr(a.sunday) + '（周日）</b>，共 <b>' + a.weeks + '</b> 周' +
         ((a.monday.getTime() !== DateUtil.parse(fStart.value).getTime() ||
           a.sunday.getTime() !== DateUtil.parse(fEnd.value).getTime())
-          ? '<span class="pv-note">已自动对齐到整周</span>' : '');
+          ? '<span class="cp-pv-note">已自动对齐到整周</span>' : '');
     }
 
     var mm = V.modal({
@@ -1466,7 +1642,7 @@
 
     function refreshSample() {
       if (draft.linear) {
-        sampleBox.innerHTML = '<div class="pv-line">线性换算：绩点 = 分数 ÷ 100 × <b>' +
+        sampleBox.innerHTML = '<div class="cp-pv-line">线性换算：绩点 = 分数 ÷ 100 × <b>' +
           fmt(draft.scale, 1) + '</b>　例如 88 分 → <b>' + fmt(88 / 100 * draft.scale, 2) + '</b></div>';
         return;
       }
@@ -1478,7 +1654,7 @@
       var parts = samples.map(function (s) {
         return s + ' → ' + Number(gpOf(s)).toFixed(2);
       });
-      sampleBox.innerHTML = '<div class="pv-line">试算（分数 → 绩点）：' + parts.join('　') + '</div>';
+      sampleBox.innerHTML = '<div class="cp-pv-line">试算（分数 → 绩点）：' + parts.join('　') + '</div>';
     }
 
     function drawRules() {
@@ -1539,7 +1715,7 @@
         draft.linear = (v === 'linear');
         var want = draft.linear ? '线性换算' : '分段换算';
         V.$$('button', fMode).forEach(function (b) {
-          b.classList.toggle('active', b.textContent === want);
+          b.classList.toggle('cp-active', b.textContent === want);
         });
         drawRules();
         refreshSample();
@@ -1639,7 +1815,7 @@
       var t = Transcript.build(scopeIdsOf(scope));
       var txt = '共 <b>' + t.summary.count + '</b> 门 · <b>' + fmt(t.summary.credits, 1) + '</b> 学分';
       if (t.summary.gpa != null) txt += ' · GPA <b>' + fmt(t.summary.gpa, 2) + '</b>';
-      expPreview.innerHTML = '<div class="pv-line">' + txt + '</div>';
+      expPreview.innerHTML = '<div class="cp-pv-line">' + txt + '</div>';
     }
 
     var expCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
@@ -1678,7 +1854,7 @@
       fScale.value = String(draft.scale);
       var want = draft.linear ? '线性换算' : '分段换算';
       V.$$('button', fMode).forEach(function (b) {
-        b.classList.toggle('active', b.textContent === want);
+        b.classList.toggle('cp-active', b.textContent === want);
       });
       drawRules();
       refreshSample();
@@ -1859,7 +2035,7 @@
       var goal = parseFloat(fGoal.value) || 0;
       var ok = Math.abs(sum - 100) < 0.5;
       ratioHint.innerHTML = '合计 <b>' + Math.round(sum) + '%</b>' +
-        (ok ? '' : '<span class="pv-note">不是 100%，配额会按比例算</span>') +
+        (ok ? '' : '<span class="cp-pv-note">不是 100%，配额会按比例算</span>') +
         (goal ? '　·　早餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.breakfast.value) || 0) / 100) +
           '</b> / 午餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.lunch.value) || 0) / 100) +
           '</b> / 晚餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.dinner.value) || 0) / 100) +
@@ -1895,7 +2071,7 @@
       var r = Store.estimateTDEE();
       estBox.innerHTML = r
         ? ('基础代谢 <b>' + r.bmr + '</b> 千卡　×　活动系数 → 每日消耗约 <b>' + r.tdee + '</b> 千卡' +
-           '<div class="pv-note">减脂一般在这个数上减 300～500，增肌加 200～300</div>')
+           '<div class="cp-pv-note">减脂一般在这个数上减 300～500，增肌加 200～300</div>')
         : '填全年龄、身高、体重就能估算';
     }
     [fSex, fAge, fH, fW, fAct].forEach(function (x) {
@@ -2182,3 +2358,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+

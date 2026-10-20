@@ -1,3 +1,5 @@
+
+
 /* ==========================================================
  * 视图：今日（今天有什么课 / 什么作业该交了）
  * ========================================================== */
@@ -81,6 +83,68 @@
       ]);
       root.appendChild(hero);
       if (global.DailyCards) root.appendChild(DailyCards.section());
+
+      /* ---------- 最近的重要日程倒计时 ---------- */
+      (function () {
+        var todayStr = DateUtil.toStr(today);
+        var items = [];
+        Store.tasks.forEach(function (t) {
+          if (!t.important || t.status === 'done') return;
+          var d = t.dueDate || todayStr;
+          items.push({ kind: 'task', title: t.title, date: d, time: t.dueTime || '23:59' });
+        });
+        Store.events.forEach(function (e) {
+          if (!e.important || e.done) return;
+          items.push({ kind: 'event', title: e.title, date: e.date, time: e.start || '00:00' });
+        });
+        Store.plans.forEach(function (pl) {
+          if (!pl.important || pl.done) return;
+          var sd = DateUtil.parse(pl.startDate);
+          var ed = sd ? DateUtil.addDays(sd, (pl.days || 1) - 1) : null;
+          items.push({ kind: 'plan', title: pl.title, date: ed ? DateUtil.toStr(ed) : pl.startDate, time: '23:59' });
+        });
+        items = items.filter(function (x) { return x.date >= todayStr; })
+          .sort(function (a, b) {
+            var aa = a.date + ' ' + a.time, bb = b.date + ' ' + b.time;
+            return aa < bb ? -1 : aa > bb ? 1 : 0;
+          });
+        var near = items[0];
+        if (!near) return;
+        function fmt() {
+          var target = new Date(near.date.replace(/-/g, '/') + ' ' + near.time);
+          var diff = target.getTime() - Date.now();
+          if (diff <= 0) return '已到期';
+          var dd = Math.floor(diff / 86400000);
+          var hh = Math.floor((diff % 86400000) / 3600000);
+          var mm = Math.floor((diff % 3600000) / 60000);
+          if (dd > 0) return dd + ' 天 ' + hh + ' 时';
+          if (hh > 0) return hh + ' 时 ' + mm + ' 分';
+          return mm + ' 分钟';
+        }
+        var val = el('b', { style: { fontSize: '19px', color: 'var(--primary)' }, text: fmt() });
+        var card = el('div', {
+          class: 'card',
+          style: { display: 'flex', alignItems: 'center', gap: '14px', padding: '13px 16px', marginBottom: '16px', cursor: 'pointer', borderLeft: '4px solid var(--primary)' },
+          onclick: function () {
+            if (near.kind === 'task') App.go('tasks');
+            else if (near.kind === 'event') App.go('agenda');
+            else App.go('plans');
+          }
+        }, [
+          el('div', { style: { flex: '1', minWidth: '0' } }, [
+            el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)' }, text: '★ 最近的重要日程' }),
+            el('div', { style: { fontSize: '14.5px', fontWeight: '650', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }, text: near.title }),
+            el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '2px' }, text: near.date + ' ' + near.time })
+          ]),
+          el('div', { style: { flex: '0 0 auto', textAlign: 'right' } }, [
+            el('div', { style: { fontSize: '10.5px', color: 'var(--text-3)' }, text: '倒计时' }),
+            val
+          ])
+        ]);
+        root.appendChild(card);
+        if (view._cdTimer) clearInterval(view._cdTimer);
+        view._cdTimer = setInterval(function () { if (val.isConnected) val.textContent = fmt(); }, 30000);
+      })();
 
       var leftCol = el('div', { class: 'today-left' });
       var rightCol = el('div', { class: 'today-right' });
@@ -509,3 +573,5 @@
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
+
+
