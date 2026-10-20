@@ -1,0 +1,2254 @@
+/* ==========================================================
+ * 视图：设置（学期 / 节次 / 数据备份）
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+
+  /** 当前所在的二级设置页（空 = 首页） */
+  var SUB = '';
+
+  /** 标签页里当前选中的预设分组 */
+  var TAG_GROUP = '学习';
+
+  var SUB_META = {
+    periods: { name: '课程时间', desc: '设置每天几节课、每节课的起止时间' },
+    semester: { name: '学期与周次', desc: '学期列表、起止日期与周数' },
+    look: { name: '外观', desc: '主题配色与背景图片' },
+    tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
+    nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
+    rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
+    reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
+    speech: { name: '语音识别', desc: '待办的语音输入方式与讯飞配置' },
+    ocr: { name: '图片识别', desc: '导入课表的识别方式与云端接口' },
+    gpa: { name: '成绩与 GPA', desc: '学分绩点的换算规则与成绩单导出' },
+    fav: { name: '收藏的词句', desc: '收藏过的每日一句与每日一词' },
+    diet: { name: '饮食与热量', desc: '每日热量目标、三餐配比与营养素' },
+    data: { name: '数据管理', desc: '同步码、备份文件与清空' },
+    about: { name: '使用提示', desc: '各模块的用法说明' }
+  };
+
+  /**
+   * 打开标签编辑弹窗
+   * @param {string} name 原标签名（空 = 新建）
+   */
+  function openTagEditor(name) {
+    V.tagEditor(name, function (res) {
+      if (name && res.name !== name) {
+        var n = Store.renameTag(name, res.name);
+        if (n) UI.toast('已把 ' + n + ' 条记录的标签改成「' + res.name + '」');
+      }
+      Store.setTagMeta(res.name, { icon: res.icon, color: res.color });
+      UI.toast('已保存');
+      view.render();
+    }, {
+      canDelete: !!name,
+      canReset: !!name && Store.tagStyle(name).own,
+      onReset: function () {
+        Store.clearTagMeta(name);
+        UI.toast('已恢复「' + name + '」的预设图标与颜色');
+        view.render();
+      },
+      onDelete: function () {
+        V.confirm({
+          title: '删除标签',
+          message: '会把「' + name + '」及其下的二级标签从所有记录上去掉（记录本身保留），同时清除对应的图标设置。',
+          danger: true, okText: '删除'
+        }).then(function (ok) {
+          if (!ok) return;
+          var n = Store.removeTagEverywhere(name);
+          UI.toast('已从 ' + n + ' 条记录中移除');
+          view.render();
+        });
+      }
+    });
+  }
+
+  var view = {
+    id: 'settings',
+    name: '设置',
+    icon: V.icons.settings,
+    title: '设置',
+    order: 30,
+    nav: true,
+    noAutoRender: true,
+
+    root: null,
+
+    mount: function (host) {
+      this.root = el('section', { class: 'view', id: 'view-settings' });
+      host.appendChild(this.root);
+      this.render();
+      return this.root;
+    },
+
+    onEnter: function () { SUB = ''; this.render(); },
+
+    render: function () {
+      var root = this.root;
+      root.innerHTML = '';
+
+      // 「新手教程」没有独立页面，直接弹引导
+      if (SUB === 'guide') {
+        SUB = '';
+        this.home();
+        if (global.Onboard) Onboard.start({ from: 'settings' });
+        return;
+      }
+      root.style.maxWidth = '760px';
+
+      if (!SUB) { this.home(); return; }
+
+      /* ---- 二级页：返回条 ---- */
+      var meta = SUB_META[SUB] || { name: '设置', desc: '' };
+      root.appendChild(el('div', { class: 'set-head' }, [
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () { SUB = ''; view.render(); }
+        }, [V.svg(V.icons.left, 15), '返回']),
+        el('div', { class: 'set-head-title' }, [
+          el('b', { text: meta.name }),
+          el('span', { text: meta.desc })
+        ])
+      ]));
+
+            if (SUB === 'look') {
+  /* ===================== 外观 ===================== */
+        var st = Store.state.settings;
+        var lookCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        lookCard.appendChild(el('div', { class: 'section-title' }, ['外观']));
+
+        /* --- 主题色 --- */
+        var grid = el('div', { class: 'theme-grid' });
+        Theme.THEMES.forEach(function (t) {
+          var sw = el('button', {
+            class: 'theme-swatch' + (st.theme === t.key ? ' active' : ''),
+            style: { '--c': t.c },
+            title: t.name,
+            onclick: function () {
+              Theme.setThemeColor(t.key);
+              V.$$('.theme-swatch', grid).forEach(function (x) { x.classList.remove('active'); });
+              sw.classList.add('active');
+              UI.toast('已切换到「' + t.name + '」');
+            }
+          });
+          grid.appendChild(sw);
+        });
+
+        var colorInput = document.createElement('input');
+        colorInput.type = 'color';
+        colorInput.value = st.customColor || '#4f46e5';
+        colorInput.addEventListener('input', function () { Theme.previewColor(colorInput.value); });
+        colorInput.addEventListener('change', function () {
+          Theme.setThemeColor('custom', colorInput.value);
+          UI.toast('已保存自定义主题色');
+        });
+        grid.appendChild(el('div', { class: 'theme-custom' }, [
+          colorInput,
+          el('span', { text: '自定义' })
+        ]));
+        lookCard.appendChild(V.field('主题色', grid, '切换会立刻应用到整个界面'));
+
+        /* --- 背景图 --- */
+        var bgData = st.background.dataUrl || '';
+        var preview = el('div', { class: 'bg-preview' + (bgData ? ' has-img' : '') });
+        if (bgData) preview.style.backgroundImage = 'url("' + bgData + '")';
+        else preview.appendChild(el('span', { text: '暂无背景图' }));
+
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', function () {
+          var f = fileInput.files && fileInput.files[0];
+          if (!f) return;
+          Theme.compressImage(f, function (dataUrl, err) {
+            if (!dataUrl) { UI.toast(err || '处理图片失败', 'err'); return; }
+            Theme.setBackground(dataUrl);
+            UI.toast('背景已更新');
+            view.render();
+          });
+        });
+
+        var maskVal = st.background.mask == null ? 0.5 : st.background.mask;
+        var maskInput = el('input', {
+          type: 'range', min: '0', max: '0.85', step: '0.05', value: String(maskVal)
+        });
+        maskInput.addEventListener('input', function () { Theme.previewMask(maskInput.value); });
+        maskInput.addEventListener('change', function () {
+          Theme.setBackground(undefined, Number(maskInput.value));
+        });
+
+        lookCard.appendChild(V.field('背景图片', el('div', {}, [
+          preview,
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, [
+            el('button', {
+              class: 'btn', onclick: function () { fileInput.click(); }
+            }, [V.svg(V.icons.upload, 16), '选择图片']),
+            bgData ? el('button', {
+              class: 'btn btn-danger', onclick: function () {
+                Theme.setBackground('');
+                UI.toast('已移除背景');
+                view.render();
+              }
+            }, [V.svg(V.icons.trash, 16), '移除']) : null,
+            fileInput
+          ]),
+          bgData ? el('div', { class: 'slider-row' }, [
+            el('span', { text: '背景更明显', style: { flex: '0 0 auto' } }),
+            maskInput,
+            el('span', { text: '更淡', style: { flex: '0 0 auto', color: 'var(--text-3)' } })
+          ]) : null
+        ]), '图片会压缩后存在本地，建议用浅色、低对比的图'));
+
+        root.appendChild(lookCard);
+
+            }
+
+      if (SUB === 'diet') {
+  /* ===================== 饮食与热量 ===================== */
+        renderDietPage(root);
+      }
+
+      if (SUB === 'fav') {
+  /* ===================== 收藏的词句 ===================== */
+        renderFavPage(root);
+      }
+
+      if (SUB === 'gpa') {
+  /* ===================== 成绩与 GPA ===================== */
+        renderGpaPage(root);
+      }
+
+      if (SUB === 'semester') {
+  /* ===================== 学期 ===================== */
+        renderSemesterPage(root);
+      }
+
+      if (SUB === 'periods') {
+  /* ===================== 节次 ===================== */
+        var periodCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        periodCard.appendChild(el('div', { class: 'section-title' }, [
+          '上课节次',
+          el('span', { style: { marginLeft: 'auto', fontSize: '11.5px', color: 'var(--text-3)', fontWeight: '400' },
+            text: '共 ' + Store.periods.length + ' 节' })
+        ]));
+
+        // 使用深拷贝编辑，点保存才生效
+        var draft = Store.periods.map(function (p) {
+          return { id: p.id, name: p.name, start: p.start, end: p.end };
+        });
+
+        var listBox = el('div', { class: 'period-list' });
+        periodCard.appendChild(listBox);
+
+        function drawPeriods() {
+          listBox.innerHTML = '';
+          draft.forEach(function (p, idx) {
+            var row = el('div', { class: 'period-row' }, [
+              el('span', { class: 'period-idx', text: String(idx + 1) }),
+              V.input({
+                value: p.name, placeholder: '节次名', class: 'input p-name',
+                oninput: function () { p.name = this.value; }
+              }),
+              V.input({ type: 'time', value: p.start, class: 'input p-start', oninput: function () { p.start = this.value; } }),
+              el('span', { class: 'period-dash', text: '—' }),
+              V.input({ type: 'time', value: p.end, class: 'input p-end', oninput: function () { p.end = this.value; } }),
+              el('button', {
+                class: 'icon-btn', title: '删除该节',
+                onclick: function () { removePeriod(p); }
+              }, [V.svg(V.icons.trash, 17)])
+            ]);
+            listBox.appendChild(row);
+          });
+        }
+
+        function removePeriod(p) {
+          var used = Store.courses.filter(function (c) { return c.periodId === p.id; });
+          var doRemove = function () {
+            draft = draft.filter(function (x) { return x.id !== p.id; });
+            if (used.length) {
+              // 删除被引用的节次时，同时移除对应课程
+              used.forEach(function (c) { Store.removeCourse(c.id); });
+            }
+            drawPeriods();
+            Store.setPeriods(draft);
+            UI.toast('已删除节次');
+          };
+          if (!used.length) { doRemove(); return; }
+          V.confirm({
+            title: '删除节次',
+            message: '有 ' + used.length + ' 门课程安排在这一节（' +
+              used.map(function (c) { return c.name; }).join('、') +
+              '），删除节次会同时删除这些课程。确定继续吗？',
+            danger: true, okText: '一并删除'
+          }).then(function (ok) { if (ok) doRemove(); });
+        }
+
+        periodCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+          el('button', {
+            class: 'btn',
+            onclick: function () {
+              var last = draft[draft.length - 1];
+              var n = draft.length + 1;
+              var start = last ? last.end : '08:00';
+              var end = addMinutes(start, 45);
+              draft.push({ id: 'p_' + Date.now().toString(36), name: '第' + n + '节', start: start, end: end });
+              drawPeriods();
+            }
+          }, [V.svg(V.icons.plus, 16), '添加一节']),
+          el('div', { style: { marginLeft: 'auto', display: 'flex', gap: '8px' } }, [
+            el('button', {
+              class: 'btn',
+              onclick: function () {
+                draft = Store.periods.map(function (p) { return { id: p.id, name: p.name, start: p.start, end: p.end }; });
+                drawPeriods();
+                UI.toast('已还原');
+              }
+            }, ['还原']),
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () {
+                if (!draft.length) { UI.toast('至少保留一节', 'err'); return; }
+                Store.setPeriods(draft.map(function (p) {
+                  return { id: p.id, name: p.name.trim() || '未命名节次', start: p.start || '08:00', end: p.end || '08:45' };
+                }));
+                UI.toast('节次已保存');
+              }
+            }, ['保存节次'])
+          ])
+        ]));
+
+        drawPeriods();
+        root.appendChild(periodCard);
+
+            }
+
+      if (SUB === 'reward') {
+  /* ===================== 奖励机制 ===================== */
+        renderRewardPage(root);
+      }
+
+      if (SUB === 'rec') {
+  /* ===================== 记录偏好 ===================== */
+        var recCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        recCard.appendChild(el('div', { class: 'section-title' }, ['记录偏好']));
+        recCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '6px', lineHeight: '1.7' },
+          text: '关掉后，象限页不再显示对应卡片，「记一笔」里也不会出现。已有记录会保留。'
+        }));
+
+        function switchRow(title, desc, key) {
+          var on = Store.settings[key];
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : ''),
+            onclick: function () {
+              on = !on;
+              sw.classList.toggle('on', on);
+              var patch = {};
+              patch[key] = on;
+              Store.updateSettings(patch);
+            }
+          }, [el('i')]);
+          return el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: title }),
+              el('span', { text: desc })
+            ]),
+            sw
+          ]);
+        }
+
+        recCard.appendChild(switchRow('饮食记录', '记录每餐内容、消费与热量，并在象限中统计', 'trackMeal'));
+        recCard.appendChild(switchRow('睡眠记录', '记录入睡与醒来时间，并统计睡眠时长', 'trackSleep'));
+        root.appendChild(recCard);
+
+            }
+
+      if (SUB === 'speech') {
+        var asr = Store.state.settings.asr || {};
+        var spCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        spCard.appendChild(el('div', { class: 'section-title' }, ['语音识别']));
+
+        var modeNow = global.Speech ? global.Speech.mode() : 'none';
+        var nativeOK = global.Speech ? global.Speech.nativeSupported() : false;
+        spCard.appendChild(el('div', {
+          style: { fontSize: '12.5px', lineHeight: '1.7', marginBottom: '12px', color: 'var(--text-2)' },
+          text: nativeOK
+            ? '当前浏览器支持原生语音识别（iPhone Safari 可用；安卓 Chrome 需要访问 Google 服务，国内常常失败）。'
+            : '当前浏览器不支持原生语音识别，需要配置讯飞后才能用语音输入。'
+        }));
+
+        spCard.appendChild(el('div', { class: 'preview-box', style: { marginBottom: '12px' } }, [
+          el('div', { text: '当前生效方案：' + (
+            modeNow === 'native' ? '浏览器原生（免费）' :
+            modeNow === 'xunfei' ? '讯飞语音听写' : '不可用') })
+        ]));
+
+        spCard.appendChild(V.field('优先方式', V.segment([
+          { value: 'auto', label: '自动' },
+          { value: 'native', label: '仅浏览器' },
+          { value: 'xunfei', label: '仅讯飞' }
+        ], asr.prefer || 'auto', function (v) {
+          // 重新取最新配置，避免覆盖刚填的密钥
+          var cur = Store.state.settings.asr || {};
+          Store.updateSettings({ asr: Object.assign({}, cur, { prefer: v }) });
+          view.render();
+        }), '自动＝优先用浏览器原生，不支持时回落到讯飞'));
+
+        var fAppId = V.input({ placeholder: '例如 5f7a8b2c', value: asr.appId || '' });
+        var fKey = V.input({ placeholder: 'APIKey', value: asr.apiKey || '' });
+        var fSecret = V.input({ placeholder: 'APISecret', value: asr.apiSecret || '' });
+
+        function saveAsr() {
+          var cur = Store.state.settings.asr || {};
+          Store.updateSettings({
+            asr: {
+              prefer: cur.prefer || 'auto',
+              appId: fAppId.value.trim(),
+              apiKey: fKey.value.trim(),
+              apiSecret: fSecret.value.trim()
+            }
+          });
+          UI.toast('已保存语音配置');
+        }
+
+        spCard.appendChild(V.field('讯飞 AppID', fAppId));
+        spCard.appendChild(V.field('讯飞 APIKey', fKey));
+        spCard.appendChild(V.field('讯飞 APISecret', fSecret));
+
+        spCard.appendChild(el('p', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
+          text: '在讯飞开放平台创建「语音听写」应用即可拿到这三个值，有免费额度。密钥只存在这台设备的浏览器里。'
+        }));
+
+        spCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+          el('button', { class: 'btn btn-primary', text: '保存', onclick: saveAsr }),
+          el('button', {
+            class: 'btn', text: '清空',
+            onclick: function () {
+              Store.updateSettings({ asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' } });
+              UI.toast('已清空');
+              view.render();
+            }
+          })
+        ]));
+
+        root.appendChild(spCard);
+      }
+
+      if (SUB === 'ocr') {
+        var oc = Store.state.settings.ocr || {};
+        var ocCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        ocCard.appendChild(el('div', { class: 'section-title' }, ['图片识别']));
+
+        ocCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '12px' },
+          text: '默认在本机识别（免费、图片不出设备）。如果版式复杂或识别不准，可以填一个 OpenAI 兼容的视觉接口，用云端识别。'
+        }));
+
+        ocCard.appendChild(V.field('优先方式', V.segment([
+          { value: 'local', label: '本地识别' },
+          { value: 'cloud', label: '云端识别' }
+        ], oc.prefer === 'cloud' ? 'cloud' : 'local', function (v) {
+          var cur = Store.state.settings.ocr || {};
+          Store.updateSettings({ ocr: Object.assign({}, cur, { prefer: v }) });
+          view.render();
+        }), '本地＝Tesseract（约 1.8MB 模型按需下载）；云端＝调用下面的接口'));
+
+        var fEndpoint = V.input({ placeholder: 'https://api.openai.com/v1', value: oc.endpoint || '' });
+        var fKey = V.input({ placeholder: 'sk-…', value: oc.apiKey || '' });
+        var fModel = V.input({ placeholder: 'gpt-4o-mini', value: oc.model || '' });
+
+        ocCard.appendChild(V.field('接口地址', fEndpoint, 'OpenAI 兼容的 base URL，会自动补 /chat/completions'));
+        ocCard.appendChild(V.field('API Key', fKey));
+        ocCard.appendChild(V.field('模型', fModel, '需要支持图片输入，例如 gpt-4o-mini / qwen-vl-max'));
+
+        ocCard.appendChild(el('p', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
+          text: '密钥只保存在本机浏览器里，请求直接从浏览器发往你填的接口。'
+        }));
+
+        ocCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+          el('button', {
+            class: 'btn btn-primary', text: '保存',
+            onclick: function () {
+              var cur = Store.state.settings.ocr || {};
+              Store.updateSettings({
+                ocr: {
+                  prefer: cur.prefer === 'cloud' ? 'cloud' : 'local',
+                  provider: 'openai',
+                  endpoint: fEndpoint.value.trim(),
+                  apiKey: fKey.value.trim(),
+                  model: fModel.value.trim()
+                }
+              });
+              UI.toast('已保存图片识别配置');
+            }
+          }),
+          el('button', {
+            class: 'btn', text: '清空云端配置',
+            onclick: function () {
+              Store.updateSettings({
+                ocr: { prefer: 'local', provider: '', endpoint: '', apiKey: '', model: '' }
+              });
+              UI.toast('已清空');
+              view.render();
+            }
+          })
+        ]));
+
+        root.appendChild(ocCard);
+      }
+
+      if (SUB === 'tags') {
+  /* ===================== 标签 ===================== */
+        var tagCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        tagCard.appendChild(el('div', { class: 'section-title' }, ['标签']));
+        tagCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+          text: '标签可以带图标和颜色。像「学习」「生活」「运动」这类常用标签不用设置就会自动配上图标；点开任意一个标签，都能换成别的图标、改成想要的颜色，也可以改名（改名会同步到所有打过这个标签的记录）。'
+        }));
+
+        /* ---- 已有标签（含只设置过样式、还没用到的） ---- */
+        var tree = Store.tagTree();
+        var seen = {};
+        tree.forEach(function (g) {
+          seen[g.name] = 1;
+          g.children.forEach(function (c) { seen[c.full] = 1; });
+        });
+        var extra = Object.keys(Store.state.settings.tagMeta || {}).filter(function (k) {
+          return !seen[k];
+        });
+        if (extra.length) {
+          var emap = {}, eorder = [];
+          extra.forEach(function (k) {
+            var p = tagParts(k);
+            if (!emap[p.lv1]) { emap[p.lv1] = { name: p.lv1, count: 0, children: [] }; eorder.push(p.lv1); }
+            if (p.lv2) emap[p.lv1].children.push({ full: k, name: p.lv2, count: 0 });
+          });
+          tree = tree.concat(eorder.map(function (k) { return emap[k]; }));
+        }
+        var usedCard = el('div', { style: { marginBottom: '14px' } });
+
+        function tagRowBtn(name, count, indent) {
+          var s = Store.tagStyle(name);
+          var parts = tagParts(name);
+          var ico = s.icon && V.icons[s.icon]
+            ? V.svg(V.icons[s.icon], 15)
+            : el('i', { class: 'tc-dot' });
+          return el('button', {
+            class: 'tag-row' + (indent ? ' indent' : ''),
+            onclick: function () { openTagEditor(name); }
+          }, [
+            el('span', { class: 'tr-icon', style: { '--tc': s.color } }, [ico]),
+            el('span', { class: 'tr-text' }, [
+              el('b', { text: indent ? parts.lv2 : name }),
+              el('span', { text: count ? count + ' 条记录' : '尚未使用' })
+            ]),
+            s.own ? el('span', { class: 'tr-badge', text: '自定义' })
+                  : (s.preset ? el('span', { class: 'tr-badge preset', text: '预设' }) : null),
+            V.svg(V.icons.right, 15)
+          ]);
+        }
+
+        if (tree.length) {
+          usedCard.appendChild(el('div', { class: 'sub-title', text: '已有标签' }));
+          tree.forEach(function (g) {
+            usedCard.appendChild(tagRowBtn(g.name, g.count, false));
+            g.children.forEach(function (c) {
+              usedCard.appendChild(tagRowBtn(c.full, c.count, true));
+            });
+          });
+        } else {
+          usedCard.appendChild(el('div', {
+            class: 'q-empty',
+            text: '还没有用过标签。在待办、灵感、记账里加上标签后，就能在这里统一改图标和颜色。'
+          }));
+        }
+        tagCard.appendChild(usedCard);
+
+        tagCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+          el('button', {
+            class: 'btn btn-sm',
+            onclick: function () { openTagEditor(''); }
+          }, [V.svg(V.icons.plus, 15), '新建标签'])
+        ]));
+
+        /* ---- 常用标签组合 ---- */
+        var presetCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        presetCard.appendChild(el('div', { class: 'section-title' }, ['常用标签组合']));
+        presetCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+          text: '下面这些是常用的图标组合，点一个可以直接改它的图标、颜色和文字；也可以整组一键套用。'
+        }));
+
+        var groups = Store.tagGroups();
+        var gbar = el('div', { class: 'pg-bar' });
+        groups.forEach(function (g) {
+          gbar.appendChild(el('button', {
+            class: 'pg-tab' + (TAG_GROUP === g ? ' active' : ''),
+            text: g,
+            onclick: function () { TAG_GROUP = g; view.render(); }
+          }));
+        });
+        presetCard.appendChild(gbar);
+
+        var presets = Store.tagPresets().filter(function (p) { return p.group === TAG_GROUP; });
+        var pgrid = el('div', { class: 'pg-grid' });
+        presets.forEach(function (p) {
+          var s = Store.tagStyle(p.name);
+          var parts = tagParts(p.name);
+          var meta = Store.state.settings.tagMeta || {};
+          var custom = !!meta[p.name];
+          pgrid.appendChild(el('button', {
+            class: 'pg-item' + (custom ? ' custom' : ''),
+            onclick: function () { openTagEditor(p.name); }
+          }, [
+            el('span', { class: 'tr-icon', style: { '--tc': s.color } },
+              [s.icon && V.icons[s.icon] ? V.svg(V.icons[s.icon], 15) : el('i', { class: 'tc-dot' })]),
+            el('span', { class: 'pg-name', text: parts.lv2 || p.name }),
+            custom ? el('span', { class: 'pg-flag', text: '已改' }) : null
+          ]));
+        });
+        presetCard.appendChild(pgrid);
+
+        presetCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+          el('button', {
+            class: 'btn btn-sm',
+            onclick: function () {
+              presets.forEach(function (p) {
+                Store.setTagMeta(p.name, { icon: p.icon, color: p.color });
+              });
+              UI.toast('已套用「' + TAG_GROUP + '」这组图标');
+              view.render();
+            }
+          }, ['套用整组（' + presets.length + ' 个）']),
+          el('button', {
+            class: 'btn btn-sm',
+            onclick: function () {
+              V.confirm({
+                title: '恢复默认',
+                message: '清除全部标签的自定义图标与颜色，回到系统预设效果。标签名字不会变。',
+                okText: '恢复'
+              }).then(function (ok) {
+                if (!ok) return;
+                Store.updateSettings({ tagMeta: {} });
+                UI.toast('已恢复默认图标与颜色');
+                view.render();
+              });
+            }
+          }, ['全部恢复默认'])
+        ]));
+
+        root.appendChild(tagCard);
+        root.appendChild(presetCard);
+      }
+
+      if (SUB === 'nav') {
+  /* ===================== 模块显示 ===================== */
+        var navCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        navCard.appendChild(el('div', { class: 'section-title' }, ['模块显示']));
+        navCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '8px', lineHeight: '1.7' },
+          text: '关掉的模块不会出现在导航里（数据仍保留）。用上下箭头调整顺序，排在最前面的会出现在底部导航；开启的模块超过 5 个时，多出来的会自动收进「更多」。'
+        }));
+
+        /** 当前完整顺序（按 App.views，已应用自定义顺序） */
+        function orderedIds() {
+          return App.views.filter(function (x) { return x.nav !== false; })
+            .map(function (x) { return x.id; });
+        }
+
+        function setOrder(ids) {
+          Store.updateSettings({ navOrder: ids });
+          if (App.rebuildNav) App.rebuildNav();
+          view.render();
+        }
+
+        function move(id, dir) {
+          var ids = orderedIds();
+          var i = ids.indexOf(id);
+          var j = i + dir;
+          if (i < 0 || j < 0 || j >= ids.length) return;
+          var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+          var v = App.views.filter(function (x) { return x.id === id; })[0];
+          setOrder(ids);
+          UI.toast('「' + (v ? v.name : '') + '」移到第 ' + (j + 1) + ' 位');
+        }
+
+        function moveBtn(icon, title, disabled, onclick) {
+          var attrs = { class: 'icon-btn', title: title, onclick: onclick };
+          if (disabled) attrs.disabled = 'disabled';
+          return el('button', attrs, [V.svg(icon, 15)]);
+        }
+
+        var ids = orderedIds();
+        var cfg = Store.state.settings.nav || {};
+
+        ids.forEach(function (id, idx) {
+          var v = App.views.filter(function (x) { return x.id === id; })[0];
+          if (!v) return;
+          var locked = (id === 'today' || id === 'settings');
+          var on = locked ? true : (cfg[id] !== false);
+
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : '') + (locked ? ' locked' : ''),
+            onclick: function () {
+              if (locked) { UI.toast('「' + v.name + '」需要保留入口'); return; }
+              var next = !sw.classList.contains('on');
+              sw.classList.toggle('on', next);
+              var nav = Object.assign({}, Store.state.settings.nav || {});
+              nav[id] = next;
+              Store.updateSettings({ nav: nav });
+              if (App.rebuildNav) App.rebuildNav();
+              UI.toast(next ? '已显示「' + v.name + '」' : '已隐藏「' + v.name + '」');
+            }
+          }, [el('i')]);
+
+          navCard.appendChild(el('div', { class: 'switch-row nav-row' + (on ? '' : ' off') }, [
+            el('span', { class: 'nav-idx', text: String(idx + 1) }),
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: v.name }),
+              el('span', { text: locked ? '始终显示' : (v.title || '') })
+            ]),
+            el('div', { class: 'nav-move' }, [
+              moveBtn(V.icons.up, '上移', idx === 0, function () { move(id, -1); }),
+              moveBtn(V.icons.down, '下移', idx === ids.length - 1, function () { move(id, 1); })
+            ]),
+            sw
+          ]));
+        });
+
+        navCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+          el('button', {
+            class: 'btn btn-sm',
+            onclick: function () {
+              V.confirm({
+                title: '恢复默认顺序',
+                message: '把模块顺序恢复为系统默认（今日 / 课程表 / 日程 / 象限…）。',
+                okText: '恢复'
+              }).then(function (ok) {
+                if (!ok) return;
+                setOrder([]);
+                UI.toast('已恢复默认顺序');
+              });
+            }
+          }, ['恢复默认顺序'])
+        ]));
+
+        root.appendChild(navCard);
+
+        /* ---- 首页卡片开关 ---- */
+        var dailyCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        dailyCard.appendChild(el('div', { class: 'section-title' }, ['首页卡片']));
+        dailyCard.appendChild(el('p', {
+          style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+          text: '决定「今日」页顶部要不要显示每日一句 / 每日一词。关掉不影响数据，收藏过的词句仍然保留。'
+        }));
+
+        [
+          { k: 'poem', name: '每日一句', desc: '古诗 / 古文，共 ' + ((global.Daily && Daily.poems.length) || 0) + ' 篇' },
+          { k: 'word', name: '每日一词', desc: '专四词汇，共 ' + ((global.Daily && Daily.words.length) || 0) + ' 词' }
+        ].forEach(function (d) {
+          var on = Store.dailyOn(d.k);
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : ''),
+            onclick: function () {
+              var next = !sw.classList.contains('on');
+              sw.classList.toggle('on', next);
+              Store.setDailyOn(d.k, next);
+              UI.toast(next ? '首页已显示「' + d.name + '」' : '首页已隐藏「' + d.name + '」');
+            }
+          }, [el('i')]);
+          dailyCard.appendChild(el('div', { class: 'switch-row' + (on ? '' : ' off') }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: d.name }),
+              el('span', { text: d.desc })
+            ]),
+            sw
+          ]));
+        });
+
+        dailyCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+          el('button', {
+            class: 'btn btn-sm',
+            onclick: function () { SUB = 'fav'; view.render(); }
+          }, ['查看收藏的词句 →'])
+        ]));
+        root.appendChild(dailyCard);
+
+            }
+
+      if (SUB === 'data') {
+  /* ===================== 数据 ===================== */
+        /* ---- 设备间同步 ---- */
+        var syncCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['手机 ⇄ 电脑同步']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+            text: '数据只存在各自设备的浏览器里，没有服务器，所以要手动同步。用同步码最省事：点「生成同步码」复制一段文本，发到另一台设备（微信「文件传输助手」就行），在那台设备点「粘贴同步码」即可。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+            el('button', { class: 'btn btn-primary', onclick: syncCodeDialog },
+              [V.svg(V.icons.copy, 16), '生成同步码']),
+            el('button', { class: 'btn', onclick: pasteSyncDialog },
+              [V.svg(V.icons.download, 16), '粘贴同步码'])
+          ]),
+          el('div', {
+            class: 'ocr-hint',
+            style: { marginTop: '10px' },
+            text: '注意：同步是「整体覆盖」不是「合并」。建议固定一个方向，比如始终以手机为准同步到电脑。另外不同浏览器各存各的（手机 Safari 和 Chrome 是两套），固定用一个就不会乱。'
+          })
+        ]);
+        root.appendChild(syncCard);
+
+        /* ---- 文件备份 ---- */
+        var dataCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['文件备份']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '课程、日程、计划、待办、灵感、记账、时间记录与设置都保存在当前浏览器本地（localStorage），不会上传到任何服务器。清理浏览器数据前，建议导出一份文件备份。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+            el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
+            el('button', { class: 'btn', onclick: importData }, [V.svg(V.icons.upload, 16), '导入备份']),
+            el('button', {
+              class: 'btn btn-danger', onclick: function () {
+                V.confirm({
+                  title: '清空全部数据',
+                  message: '将删除所有课程、作业与设置，且无法恢复。建议先导出备份。',
+                  danger: true, okText: '清空'
+                }).then(function (ok) {
+                  if (ok) { Store.reset(); UI.toast('已重置为初始状态'); App.go('today'); }
+                });
+              }
+            }, [V.svg(V.icons.trash, 16), '清空数据'])
+          ])
+        ]);
+        root.appendChild(dataCard);
+
+        /* ---- 开发者选项 ---- */
+        var devInput = V.input({ placeholder: '输入开发者口令', class: 'input', style: { maxWidth: '220px' } });
+        var devCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px', border: '1px dashed var(--text-3)' } }, [
+          el('div', { class: 'section-title' }, ['开发者选项']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+            text: '仅供调试抽卡与奖励机制使用。输入正确口令并点击按钮，可一次性发放 1000 积分及对应合成玉（按当前比例 1 积分 = ' + POMO.JADE_PER_POINT + ' 合成玉）。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
+            devInput,
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () {
+                if (String(devInput.value || '').trim() !== '我已经太烧了') {
+                  UI.toast('口令不正确', 'err');
+                  return;
+                }
+                var G = 1000;
+                var jade = G * POMO.JADE_PER_POINT;
+                var pm = Store.state.pomodoro;
+                pm.points += G;
+                pm.jade += jade;
+                pm.earned += G;
+                Store.emit();
+                UI.toast('已发放 ' + G + ' 积分与 ' + jade + ' 合成玉');
+                view.render();
+              }
+            }, ['发放测试积分'])
+          ])
+        ]);
+        root.appendChild(devCard);
+
+            }
+
+      if (SUB === 'about') {
+  /* ===================== 说明 ===================== */
+        var about = el('div', { class: 'card', style: { padding: '16px 18px' } }, [
+          el('div', { class: 'section-title' }, ['使用提示']),
+          el('ul', { style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '2' } }, [
+            el('li', { text: '· 在「课程表」点击任意空白格子，就能为该星期、该节次安排一门课。' }),
+            el('li', { text: '· 课程可设置单双周与起止周次，适合两周一次的实验课。' }),
+            el('li', { text: '· 「日程」把未来 7 天的课程与一次性安排放在一起，按天排列。' }),
+          el('li', { text: '· 「日历」用月视图回看过去的记录，也能看到未来的课程与日程。' }),
+            el('li', { text: '· 课程可以填学分和考试时间；学分填了会自动进「成绩」，考试会显示在课程表和日程上。' }),
+            el('li', { text: '· 「成绩」支持多层占比（总评 → 平时 → 作业/考勤），按学分加权算均分，可分学期查看。' }),
+            el('li', { text: '· 绩点换算规则在「成绩与 GPA」里自己填（4.0 / 5.0 制或线性均可），成绩单可导出 CSV 或打印成 PDF。' }),
+            el('li', { text: '· 「计划」支持打卡与进度条两种方式，达标后自动完成并奖励积分。' }),
+            el('li', { text: '· 奖励机制有「森林」和「抽卡」两种，积分各自独立不通用；切换时不清零、不兑换，已攒的都保留。' }),
+            el('li', { text: '· 抽卡按明日方舟标准寻访：600 合成玉单抽、6000 十连，1 积分 = 160 合成玉；六星 2%，50 抽后概率递增；每自然天第一个十连保底至少一位五星，其余十连不保底；重复干员提升潜能（0~5），满潜能后多余复制转化为积分。' }),
+            el('li', { text: '· 「象限」用 24 小时环形图统计时间去向，可记录睡眠、饮食与活动。' }),
+            el('li', { text: '· 记饮食时可以搜食物名（米饭、鸡胸、奶茶…），热量和蛋白质/脂肪/碳水会自动估算，也能手动改。' }),
+            el('li', { text: '· 在「设置 → 饮食与热量」里设每日热量目标、三餐配比和营养素目标，记录时会提示这餐还剩多少额度。' }),
+          el('li', { text: '· 象限与记账支持「今天 / 一周 / 一月 / 一季」，图表可切饼图或方形图。' }),
+            el('li', { text: '· 标签支持二级：写成「学习/高数」，就能按一级或二级分别统计。' }),
+            el('li', { text: '· 标签自带图标和颜色：常用标签（学习、生活、运动…）自动配上，也能在「设置 → 标签」里换图标、改颜色、改名。' }),
+            el('li', { text: '· 「待办」可关联课程，设置截止日期后，到期会出现在「今日」页。' }),
+            el('li', { text: '· 灵感已并入「待办」：切到顶部的「灵感」分页就能随手记，点「转为待办」一键搬过去。' }),
+            el('li', { text: '· 每日一句 / 每日一词可以单独关掉（模块显示 → 首页卡片）；喜欢的话点星标收藏，在「收藏的词句」里回看。' }),
+            el('li', { text: '· 外观可换 9 套配色或自选颜色，也能传一张图做背景。' }),
+            el('li', { text: '· 「每日一词」右上角有「小测验」，看释义拼单词，答错会提示差在哪。' }),
+          el('li', { text: '· 「导入课表」会自动跳过「星期几 / 第几节」表头，并把课程名、地点、老师拆开，核对后一键导入。' }),
+          el('li', { text: '· 新建待办时点麦克风可以说话输入，会自动拆出日期和时间。' }),
+          el('li', { text: '· 设置按分类整理，点「课程时间」可改每天节数与上下课时间。' }),
+          el('li', { text: '· 「模块显示」里可以开关模块，也能用上下箭头调整它们在导航里的顺序。' }),
+          el('li', { text: '· 手机竖屏用底部导航，横屏自动收到左侧，网页宽屏变成两栏。' }),
+            el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App。' })
+          ])
+        ]);
+        root.appendChild(about);
+      }
+
+      if (SUB === 'ach') {
+        var list = Store.achievementList();
+        var doneCount = 0;
+        list.forEach(function (a) { if (Store.isAchieved(a)) doneCount++; });
+
+        root.appendChild(el('div', { class: 'set-head' }, [
+          el('button', { class: 'icon-btn', onclick: function () { SUB = ''; view.render(); } },
+            [V.svg('M18 6L6 18M6 6l12 12', 20)]),
+          el('div', { class: 'set-head-title' }, [
+            el('b', { text: '成就' }),
+            el('span', { text: '已完成 ' + doneCount + ' / ' + list.length })
+          ])
+        ]));
+
+        var achCard = el('div', { class: 'card', style: { padding: '14px 16px' } });
+        achCard.appendChild(el('div', { class: 'section-title' }, ['全部成就']));
+
+        // 按「抽卡 / 集卡 / 种树」分组展示
+        (Store.ACH_GROUPS || []).forEach(function (grp) {
+          var items = list.filter(function (a) { return a.group === grp; });
+          if (!items.length) return;
+          var doneG = items.filter(function (a) { return Store.isAchieved(a); }).length;
+          achCard.appendChild(el('div', { class: 'ach-group-head' }, [
+            el('b', { text: grp }),
+            el('span', { text: doneG + ' / ' + items.length })
+          ]));
+
+          var grid = el('div', { class: 'ach-grid' });
+          items.forEach(function (a) {
+            var done = Store.isAchieved(a);
+            // 累计型成就用 metric/threshold；事件型（十连特定结果）只看是否发生过
+            var isCounted = !!a.metric;
+            var val = isCounted ? Store.achievementValue(a.metric) : (done ? 1 : 0);
+            var denom = isCounted ? a.threshold : 1;
+            var tier = Store.ACH_TIERS[a.tier] || { color: '#888', label: '' };
+            var pct = Math.max(0, Math.min(100, Math.round(val / denom * 100)));
+            grid.appendChild(el('div', { class: 'ach-item' + (done ? ' done' : '') }, [
+              el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
+              el('div', { class: 'ach-body' }, [
+                el('div', { class: 'ach-name' }, [
+                  el('b', { text: a.name }),
+                  el('span', { class: 'ach-tier', style: { color: tier.color }, text: tier.label })
+                ]),
+                el('div', { class: 'ach-desc', text: a.desc }),
+                el('div', { class: 'ach-progress' }, [
+                  el('div', { class: 'ach-bar' }, [el('i', { style: { width: (done ? 100 : pct) + '%', background: tier.color } })]),
+                  el('span', {
+                    class: 'ach-count',
+                    text: isCounted
+                      ? (Math.min(val, a.threshold) + ' / ' + a.threshold)
+                      : (done ? '已达成' : '待触发')
+                  })
+                ])
+              ]),
+              el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
+                el('span', { class: 'ach-pts', text: '+' + a.points }),
+                el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
+              ])
+            ]));
+          });
+          achCard.appendChild(grid);
+        });
+        root.appendChild(achCard);
+
+        root.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+          text: '成就分「抽卡 / 集卡 / 种树」三类：达成条件即可解锁，并获得对应积分（抽卡模式下会折算成合成玉）。'
+            + '「集齐三星」需集满全部 22 名三星干员；连续未出星计数跨所有单抽与十连累计。'
+        }));
+      }
+
+    }
+  };
+
+  /* ==========================================================
+   * 设置首页：分类入口
+   * ========================================================== */
+  var SUBS = [
+    { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5' },
+    { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9' },
+    { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899' },
+    { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
+    { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
+    { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
+    { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
+    { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
+    { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438' },
+    { key: 'ocr', name: '图片识别', desc: '拍照/截图导入课表，本地或云端识别', icon: V.icons.camera, color: '#7c3aed' },
+    { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981' },
+    { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
+    { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
+    { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
+    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
+    { key: 'ach', name: '成就', desc: '抽卡 / 集卡 / 种树三类成就', icon: V.icons.sparkle, color: '#f59e0b' }
+  ];
+
+  view.home = function () {
+    var root = this.root;
+
+    /* ---- 数据概览 ---- */
+    var st = {
+      courses: Store.courses.length,
+      events: Store.events.length,
+      plans: Store.plans.length,
+      tasks: Store.tasks.length,
+      notes: Store.notes.length,
+      ledger: Store.ledger.length
+    };
+    root.appendChild(el('div', { class: 'task-summary' }, [
+      V.statCard(st.courses, '课程', 'var(--primary)'),
+      V.statCard(st.plans, '计划', 'var(--green)'),
+      V.statCard(st.tasks, '待办', 'var(--amber)'),
+      V.statCard(st.ledger, '账目', 'var(--text-2)')
+    ]));
+
+    /* ---- 分类列表 ---- */
+    var list = el('div', { class: 'card', style: { padding: '4px 6px' } });
+    SUBS.forEach(function (item) {
+      list.appendChild(el('button', {
+        class: 'set-item',
+        onclick: function () { SUB = item.key; view.render(); }
+      }, [
+        el('span', { class: 'set-icon', style: { background: item.color } }, [V.svg(item.icon, 18)]),
+        el('span', { class: 'set-text' }, [
+          el('b', { text: item.name }),
+          el('span', { text: item.desc })
+        ]),
+        V.svg(V.icons.right, 16)
+      ]));
+    });
+    root.appendChild(list);
+
+    root.appendChild(el('div', {
+      style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '12px', lineHeight: '1.7' },
+      text: '所有数据只保存在这台设备的浏览器里，不会上传。换设备前记得在「数据管理」里导出一份备份。'
+    }));
+  };
+
+  function addMinutes(hhmm, mins) {
+    var p = (hhmm || '08:00').split(':');
+    var total = (+p[0]) * 60 + (+p[1]) + mins;
+    total = Math.max(0, Math.min(23 * 60 + 59, total));
+    var h = Math.floor(total / 60), m = total % 60;
+    return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+  }
+
+  function exportData() {
+    try {
+      var text = Store.exportJSON();
+      var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      UI.toast('备份已导出');
+    } catch (e) {
+      UI.toast('导出失败：' + e.message, 'err');
+    }
+  }
+
+  function importData() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var obj = JSON.parse(String(reader.result));
+          var nc = (obj.courses || []).length;
+          var nt = (obj.tasks || []).length;
+          V.confirm({
+            title: '导入备份',
+            message: '将用备份中的 ' + nc + ' 门课程、' + nt + ' 条待办覆盖当前数据。当前数据无法恢复，确定继续吗？',
+            danger: true, okText: '覆盖导入'
+          }).then(function (ok) {
+            if (!ok) return;
+            try {
+              Store.importJSON(String(reader.result));
+              UI.toast('导入成功');
+              App.go('schedule');
+            } catch (err) {
+              UI.toast('导入失败：' + err.message, 'err');
+            }
+          });
+        } catch (e) {
+          UI.toast('文件不是有效的 JSON', 'err');
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+    input.click();
+  }
+
+  /* ==========================================================
+   * 同步码：备份压缩成一段文本，复制 / 粘贴即可跨设备同步
+   * ========================================================== */
+  function utf8Bytes(str) { return new TextEncoder().encode(str); }
+
+  function bytesToB64(bytes) {
+    var s = '', CH = 0x8000;
+    for (var i = 0; i < bytes.length; i += CH) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    }
+    return btoa(s);
+  }
+
+  function b64ToBytes(b64) {
+    var bin = atob(String(b64).replace(/\s+/g, ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /** 备份 JSON → 同步码（能压缩就压缩） */
+  function packSync(text) {
+    var raw = utf8Bytes(text);
+    if (typeof CompressionStream !== 'undefined') {
+      try {
+        return new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip')))
+          .arrayBuffer()
+          .then(function (buf) { return 'CP1G' + bytesToB64(new Uint8Array(buf)); })
+          .catch(function () { return 'CP1R' + bytesToB64(raw); });
+      } catch (e) { /* 老浏览器没有压缩能力，退化 */ }
+    }
+    return Promise.resolve('CP1R' + bytesToB64(raw));
+  }
+
+  /** 同步码 → 备份 JSON */
+  function unpackSync(code) {
+    var s = String(code || '').replace(/\s+/g, '');
+    if (!s) return Promise.reject(new Error('请先粘贴同步码'));
+    if (s.charAt(0) === '{') return Promise.resolve(String(code));   // 直接粘了原始 JSON
+    var head = s.slice(0, 4), body = s.slice(4);
+    var bytes;
+    try { bytes = b64ToBytes(body); }
+    catch (e) { return Promise.reject(new Error('同步码不完整或已损坏')); }
+    if (head === 'CP1R') return Promise.resolve(new TextDecoder().decode(bytes));
+    if (head === 'CP1G') {
+      if (typeof DecompressionStream === 'undefined') {
+        return Promise.reject(new Error('这台设备不支持解压，请改用文件备份'));
+      }
+      return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')))
+        .arrayBuffer()
+        .then(function (buf) { return new TextDecoder().decode(buf); })
+        .catch(function () { return Promise.reject(new Error('同步码损坏，请重新复制')); });
+    }
+    return Promise.reject(new Error('不是有效的同步码，请整段复制'));
+  }
+
+  function copyToClipboard(text, ta) {
+    function fallback() {
+      try {
+        ta.removeAttribute('readonly');
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, 999999);
+        var ok = document.execCommand('copy');
+        ta.setAttribute('readonly', 'readonly');
+        UI.toast(ok ? '同步码已复制' : '请长按文本框手动复制', ok ? 'ok' : 'err');
+      } catch (e) {
+        UI.toast('请长按文本框手动复制', 'err');
+      }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { UI.toast('同步码已复制'); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  /** 生成并展示同步码 */
+  function syncCodeDialog() {
+    packSync(Store.exportJSON()).then(function (code) {
+      var kb = (code.length / 1024).toFixed(1);
+      var ta = V.textarea({ class: 'textarea sync-code', rows: 5, readonly: 'readonly' });
+      ta.value = code;
+      var big = code.length > 80000;
+      var m = V.modal({
+        title: '同步码',
+        width: '480px',
+        body: [
+          el('p', {
+            class: 'ocr-hint',
+            text: '把这段码发到另一台设备（微信「文件传输助手」、备忘录都行），' +
+                  '在那台设备打开「设置 → 数据管理 → 粘贴同步码」就同步完成了。'
+          }),
+          ta,
+          el('div', {
+            class: 'ocr-hint',
+            text: '大小约 ' + kb + ' KB' +
+                  (big ? '（偏大，多半来自自定义背景图，这种情况建议改用「导出备份」传文件）' : '')
+          })
+        ],
+        footer: el('div', { class: 'modal-foot' }, [
+          el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
+          el('button', {
+            class: 'btn btn-primary', text: '复制同步码',
+            onclick: function () { copyToClipboard(code, ta); }
+          })
+        ])
+      });
+      // 打开就先尝试复制一次，省一步
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function () { UI.toast('同步码已复制'); }, function () {});
+      }
+    }).catch(function (e) {
+      UI.toast('生成失败：' + e.message, 'err');
+    });
+  }
+
+  /** 粘贴同步码 */
+  function pasteSyncDialog() {
+    var ta = V.textarea({
+      class: 'textarea sync-code', rows: 5,
+      placeholder: '在这里粘贴另一台设备复制的同步码'
+    });
+    var m = V.modal({
+      title: '粘贴同步码',
+      width: '480px',
+      autofocus: true,
+      body: [
+        el('p', {
+          class: 'ocr-hint',
+          text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。'
+        }),
+        ta
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '同步到这台设备',
+          onclick: function () { doImportSync(ta.value, m); }
+        })
+      ])
+    });
+  }
+
+  function doImportSync(code, m) {
+    unpackSync(code).then(function (json) {
+      var obj;
+      try { obj = JSON.parse(json); }
+      catch (e) { throw new Error('内容不是有效的备份'); }
+      var parts = [];
+      if ((obj.courses || []).length) parts.push(obj.courses.length + ' 门课程');
+      if ((obj.tasks || []).length) parts.push(obj.tasks.length + ' 条待办');
+      if ((obj.plans || []).length) parts.push(obj.plans.length + ' 个计划');
+      if ((obj.ledger || []).length) parts.push(obj.ledger.length + ' 条账目');
+      if ((obj.notes || []).length) parts.push(obj.notes.length + ' 条灵感');
+      return V.confirm({
+        title: '同步到这台设备',
+        message: '将用这份备份' + (parts.length ? '（' + parts.join('、') + '）' : '') +
+                 '覆盖当前数据。这台设备上的现有内容会被替换，无法恢复。',
+        danger: true, okText: '覆盖同步'
+      }).then(function (ok) {
+        if (!ok) return;
+        Store.importJSON(json);
+        m.close();
+        UI.toast('同步完成');
+        App.go('schedule');
+      });
+    }).catch(function (e) {
+      UI.toast('同步失败：' + e.message, 'err');
+    });
+  }
+
+  /* ==========================================================
+   * 二级页：学期与周次
+   * 起止日期可以随便选，保存时自动对齐到整周（开始=周一，结束=周日）
+   * ========================================================== */
+  function renderSemesterPage(root) {
+    /* ---- 所有学期 ---- */
+    var listCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    listCard.appendChild(el('div', { class: 'section-title' }, ['所有学期']));
+    listCard.appendChild(el('p', {
+      style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.7', marginBottom: '10px' },
+      text: '点一个学期就切换过去，课程表和成绩都跟着换。旧学期会一直留着，随时能回来补录。'
+    }));
+
+    Store.semesters.forEach(function (sem) {
+      var isCur = sem.id === Store.currentSemesterId;
+      var st = DateUtil.parse(sem.startDate);
+      var en = st ? DateUtil.addDays(DateUtil.weekStart(st), (sem.weeks || 20) * 7 - 1) : null;
+      var cr = Store.creditsOf(sem.id);
+      listCard.appendChild(el('div', {
+        class: 'sem-row' + (isCur ? ' is-cur' : ''),
+        onclick: function () {
+          if (isCur) return;
+          Store.switchSemester(sem.id);
+          UI.toast('已切换到「' + sem.name + '」');
+          view.render();
+        }
+      }, [
+        el('div', { class: 'sem-main' }, [
+          el('b', { text: sem.name }),
+          el('span', {
+            text: (st ? DateUtil.toStr(st).slice(0, 10) + ' – ' + DateUtil.toStr(en).slice(0, 10) : '') +
+                  ' · ' + sem.weeks + ' 周 · ' + cr + ' 学分'
+          })
+        ]),
+        isCur ? el('span', { class: 'chip chip-primary', text: '当前' })
+              : el('span', { class: 'chip', text: '切换' }),
+        Store.semesters.length > 1 ? el('button', {
+          class: 'icon-btn', title: '删除这个学期',
+          onclick: function (ev) {
+            ev.stopPropagation();
+            var n = Store.courses.filter(function (c) { return c.semesterId === sem.id; }).length;
+            V.confirm({
+              title: '删除学期',
+              message: '会同时删掉「' + sem.name + '」里的 ' + n + ' 门课程和它们的成绩，无法恢复。',
+              danger: true, okText: '删除'
+            }).then(function (ok) {
+              if (!ok) return;
+              Store.removeSemester(sem.id);
+              UI.toast('已删除学期');
+              view.render();
+            });
+          }
+        }, [V.svg(V.icons.trash, 15)]) : null
+      ]));
+    });
+
+    listCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+      el('button', {
+        class: 'btn btn-sm btn-primary',
+        onclick: function () { addSemesterDialog(); }
+      }, [V.svg(V.icons.plus, 15), '新建学期'])
+    ]));
+    root.appendChild(listCard);
+
+    /* ---- 当前学期的起止日期 ---- */
+    var cur = Store.semester;
+    var fName = V.input({ value: cur.name, placeholder: '例如：2026–2027 学年 秋季学期' });
+    var d0 = DateUtil.parse(cur.startDate) || DateUtil.today();
+    var m0 = DateUtil.weekStart(d0);
+    var fStart = V.input({ type: 'date', value: DateUtil.toStr(m0) });
+    var fEnd = V.input({
+      type: 'date',
+      value: DateUtil.toStr(DateUtil.addDays(m0, (cur.weeks || 20) * 7 - 1))
+    });
+    var preview = el('div', { class: 'preview-box', id: 'semPreview' });
+
+    /** 起止日期 → 对齐后的整周区间 */
+    function align() {
+      var a = DateUtil.parse(fStart.value);
+      var b = DateUtil.parse(fEnd.value);
+      if (!a || !b) return null;
+      var monday = DateUtil.weekStart(a);
+      var sunday = DateUtil.weekEnd(b);
+      var days = DateUtil.diffDays(sunday, monday) + 1;
+      return {
+        monday: monday, sunday: sunday,
+        weeks: Math.max(1, Math.round(days / 7)),
+        moved: (monday.getTime() !== a.getTime()) || (sunday.getTime() !== b.getTime())
+      };
+    }
+
+    function refreshPreview() {
+      var a = align();
+      if (!a) { preview.textContent = '请选择开始和结束日期'; return; }
+      preview.innerHTML = '对齐后：<b>' + DateUtil.toStr(a.monday) + '（周一）</b> 至 <b>' +
+        DateUtil.toStr(a.sunday) + '（周日）</b>，共 <b>' + a.weeks + '</b> 周' +
+        (a.moved ? '<span class="pv-note">已自动对齐到整周</span>' : '');
+    }
+
+    var semesterCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['当前学期']),
+      V.field('学期名称', fName),
+      el('div', { class: 'field-row' }, [
+        V.field('开始日期', fStart),
+        V.field('结束日期', fEnd)
+      ]),
+      preview,
+      el('div', { class: 'ocr-hint',
+        text: '随便选哪一天都行：开始日会自动退回所在周的周一，结束日会延伸到所在周的周日，周数按整周算。' }),
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () {
+            var a = align();
+            if (!a) { UI.toast('请选择开始和结束日期', 'err'); return; }
+            Store.updateSemester({
+              name: fName.value.trim() || '我的学期',
+              startDate: DateUtil.toStr(a.monday),
+              weeks: a.weeks
+            });
+            UI.toast(a.moved ? '已保存，起止日期已对齐到整周' : '学期设置已保存');
+            view.render();
+          }
+        }, ['保存学期设置']),
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            var w = Store.currentWeek();
+            UI.toast(w >= 1 && w <= Store.semester.weeks
+              ? ('今天是第 ' + w + ' 周')
+              : '今天不在学期范围内');
+            view.render();
+          }
+        }, ['检查当前周次'])
+      ])
+    ]);
+    root.appendChild(semesterCard);
+
+    refreshPreview();
+    fStart.addEventListener('change', refreshPreview);
+    fEnd.addEventListener('change', refreshPreview);
+  }
+
+  /* ---- 新建学期：同样填起止日期，自动对齐整周 ---- */
+  function addSemesterDialog() {
+    var cur = Store.semester;
+    var curStart = DateUtil.parse(cur.startDate);
+    var nextStart = curStart
+      ? DateUtil.weekStart(DateUtil.addDays(curStart, (cur.weeks || 20) * 7 + 7))
+      : DateUtil.weekStart(DateUtil.today());
+    var fName = V.input({ value: cur.name.replace(/秋/g, '春'), dataset: { autofocus: '1' } });
+    var fStart = V.input({ type: 'date', value: DateUtil.toStr(nextStart) });
+    var fEnd = V.input({
+      type: 'date',
+      value: DateUtil.toStr(DateUtil.addDays(nextStart, (cur.weeks || 20) * 7 - 1))
+    });
+    var preview = el('div', { class: 'preview-box' });
+
+    function align() {
+      var a = DateUtil.parse(fStart.value), b = DateUtil.parse(fEnd.value);
+      if (!a || !b) return null;
+      var monday = DateUtil.weekStart(a);
+      var sunday = DateUtil.weekEnd(b);
+      var days = DateUtil.diffDays(sunday, monday) + 1;
+      return { monday: monday, sunday: sunday, weeks: Math.max(1, Math.round(days / 7)) };
+    }
+
+    function refreshPreview() {
+      var a = align();
+      if (!a) { preview.textContent = '请选择开始和结束日期'; return; }
+      preview.innerHTML = '对齐后：<b>' + DateUtil.toStr(a.monday) + '（周一）</b> 至 <b>' +
+        DateUtil.toStr(a.sunday) + '（周日）</b>，共 <b>' + a.weeks + '</b> 周' +
+        ((a.monday.getTime() !== DateUtil.parse(fStart.value).getTime() ||
+          a.sunday.getTime() !== DateUtil.parse(fEnd.value).getTime())
+          ? '<span class="pv-note">已自动对齐到整周</span>' : '');
+    }
+
+    var mm = V.modal({
+      title: '新建学期',
+      width: '460px',
+      autofocus: true,
+      body: [
+        V.field('学期名称', fName),
+        el('div', { class: 'field-row' }, [
+          V.field('开始日期', fStart),
+          V.field('结束日期', fEnd)
+        ]),
+        preview,
+        el('div', { class: 'ocr-hint',
+          text: '不用挑周一：选任意一天都会自动对齐到整周。新建后自动切换过去，原来的学期和成绩都还在。' })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { mm.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '创建并切换',
+          onclick: function () {
+            var d1 = DateUtil.parse(fStart.value), d2 = DateUtil.parse(fEnd.value);
+            if (!d1) { UI.toast('请选择开始日期', 'err'); return; }
+            if (!d2) { UI.toast('请选择结束日期', 'err'); return; }
+            if (DateUtil.diffDays(d2, d1) < 0) { UI.toast('结束日期不能早于开始日期', 'err'); return; }
+            var a = align();
+            Store.addSemester({
+              name: fName.value.trim() || '新学期',
+              startDate: DateUtil.toStr(a.monday),
+              weeks: a.weeks
+            });
+            mm.close();
+            UI.toast('已创建并切换');
+            view.render();
+          }
+        })
+      ])
+    });
+
+    refreshPreview();
+    fStart.addEventListener('change', refreshPreview);
+    fEnd.addEventListener('change', refreshPreview);
+  }
+
+  /* ==========================================================
+   * 二级页：成绩与 GPA
+   * 1) 自定义绩点换算规则
+   * 2) 成绩单导出（CSV / 打印 PDF）
+   * ========================================================== */
+  function renderGpaPage(root) {
+    var esc = (global.Transcript && Transcript.esc) || function (s) {
+      return String(s == null ? '' : s);
+    };
+    var fmt = (global.Transcript && Transcript.fmt) || function (v, d) {
+      if (v == null || v === '' || isNaN(v)) return '—';
+      var p = Math.pow(10, d || 0);
+      return String(Math.round(Number(v) * p) / p);
+    };
+
+    var cfg = Store.gpaConfig();
+    var draft = {
+      scale: Number(cfg.scale) || 4,
+      linear: !!cfg.linear,
+      rules: cfg.rules.map(function (r) {
+        return { min: Number(r.min) || 0, gp: Number(r.gp) || 0 };
+      })
+    };
+    if (!draft.rules.length) draft.rules = [{ min: 60, gp: draft.scale }];
+
+    var tableBox = el('div', { class: 'gpa-table' });
+    var sampleBox = el('div', { class: 'preview-box' });
+
+    function sorted() {
+      return draft.rules.slice().sort(function (a, b) { return b.min - a.min; });
+    }
+
+    /** 用草稿规则试算绩点（不落库） */
+    function gpOf(score) {
+      if (draft.linear) return Math.round(score / 100 * draft.scale * 100) / 100;
+      var sr = sorted();
+      for (var i = 0; i < sr.length; i++) {
+        if (score >= sr[i].min) return sr[i].gp;
+      }
+      return sr.length ? sr[sr.length - 1].gp : 0;
+    }
+
+    function refreshSample() {
+      if (draft.linear) {
+        sampleBox.innerHTML = '<div class="pv-line">线性换算：绩点 = 分数 ÷ 100 × <b>' +
+          fmt(draft.scale, 1) + '</b>　例如 88 分 → <b>' + fmt(88 / 100 * draft.scale, 2) + '</b></div>';
+        return;
+      }
+      if (!draft.rules.length) {
+        sampleBox.textContent = '至少保留一档，否则没法换算绩点';
+        return;
+      }
+      var samples = [95, 90, 86, 82, 78, 74, 71, 66, 63, 55];
+      var parts = samples.map(function (s) {
+        return s + ' → ' + Number(gpOf(s)).toFixed(2);
+      });
+      sampleBox.innerHTML = '<div class="pv-line">试算（分数 → 绩点）：' + parts.join('　') + '</div>';
+    }
+
+    function drawRules() {
+      tableBox.innerHTML = '';
+      var list = sorted();
+      list.forEach(function (item) {
+        var minInp = V.input({
+          type: 'number', min: '0', max: '100', step: '1',
+          value: item.min, class: 'input gp-min'
+        });
+        minInp.addEventListener('input', function () {
+          item.min = Math.max(0, Math.min(100, parseFloat(minInp.value) || 0));
+          refreshSample();
+        });
+
+        var gpInp = V.input({
+          type: 'number', min: '0', max: '100', step: '0.1',
+          value: item.gp, class: 'input gp-gp'
+        });
+        gpInp.addEventListener('input', function () {
+          item.gp = Math.max(0, Math.min(100, parseFloat(gpInp.value) || 0));
+          refreshSample();
+        });
+
+        tableBox.appendChild(el('div', { class: 'gp-row' }, [
+          el('span', { class: 'gp-lb', text: '分数 ≥' }),
+          minInp,
+          el('span', { class: 'gp-lb', text: '→ 绩点' }),
+          gpInp,
+          el('button', {
+            class: 'icon-btn', title: '删除这一档',
+            onclick: function () {
+              draft.rules = draft.rules.filter(function (x) { return x !== item; });
+              drawRules();
+              refreshSample();
+            }
+          }, [V.svg(V.icons.trash, 15)])
+        ]));
+      });
+      if (!list.length) {
+        tableBox.appendChild(el('div', { class: 'q-empty', text: '没有规则了，点下面「添加一档」' }));
+      }
+    }
+
+    var fScale = V.input({
+      type: 'number', min: '1', max: '10', step: '0.5',
+      value: String(draft.scale), class: 'input'
+    });
+    fScale.addEventListener('input', function () {
+      draft.scale = Math.max(1, Math.min(10, parseFloat(fScale.value) || 4));
+      refreshSample();
+    });
+
+    var fMode = V.segment(
+      [{ value: 'step', label: '分段换算' }, { value: 'linear', label: '线性换算' }],
+      draft.linear ? 'linear' : 'step',
+      function (v) {
+        draft.linear = (v === 'linear');
+        var want = draft.linear ? '线性换算' : '分段换算';
+        V.$$('button', fMode).forEach(function (b) {
+          b.classList.toggle('active', b.textContent === want);
+        });
+        drawRules();
+        refreshSample();
+      }
+    );
+
+    /* ---- 卡片：换算规则 ---- */
+    var ruleCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['GPA 换算规则']),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '10px' },
+        text: '决定「考试分数」怎么折成「绩点」。每所学校算法不同，按自己的规则改就行；改完所有学期的 GPA 会按新规则立刻重算。'
+      }),
+      V.field('换算方式', fMode),
+      V.field('满分绩点', fScale, '4.0 制填 4，5.0 制填 5'),
+      el('div', { class: 'sub-title', style: { marginTop: '14px' }, text: '分段规则（从高到低）' }),
+      tableBox,
+      el('button', {
+        class: 'btn btn-sm', style: { marginTop: '8px' },
+        onclick: function () {
+          var low = 60;
+          sorted().forEach(function (r) { if (r.min < low) low = r.min; });
+          draft.rules.push({ min: Math.max(0, low - 5), gp: 0 });
+          drawRules();
+          refreshSample();
+        }
+      }, [V.svg(V.icons.plus, 14), '添加一档']),
+      sampleBox,
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () {
+            var clean = draft.rules
+              .map(function (r) {
+                return { min: Math.max(0, Math.min(100, Number(r.min) || 0)),
+                         gp: Math.max(0, Math.min(100, Number(r.gp) || 0)) };
+              })
+              .sort(function (a, b) { return b.min - a.min; });
+            if (!clean.length) clean = Store.defaultGpaRules();
+            Store.setGpaConfig({ scale: draft.scale, linear: draft.linear, rules: clean });
+            UI.toast('GPA 规则已保存');
+            view.render();
+          }
+        }, ['保存规则']),
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            applyPreset(0);
+          }
+        }, ['恢复默认'])
+      ])
+    ]);
+    root.appendChild(ruleCard);
+
+    /* ---- 卡片：常用方案 ---- */
+    var presetCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    presetCard.appendChild(el('div', { class: 'section-title' }, ['常用方案']));
+    presetCard.appendChild(el('p', {
+      class: 'ocr-hint', style: { marginBottom: '10px' },
+      text: '挑一个靠近学校规则的方案，再在上面微调，最后点保存。'
+    }));
+    var presetGrid = el('div', { class: 'pg-grid' });
+    Store.GPA_PRESETS.forEach(function (pr, idx) {
+      presetGrid.appendChild(el('button', {
+        class: 'pg-item', type: 'button',
+        onclick: function () { applyPreset(idx); }
+      }, [
+        el('span', { class: 'tr-icon', style: { '--tc': '#10b981' } }, [V.svg(V.icons.chart, 15)]),
+        el('span', { class: 'pg-name', text: pr.name })
+      ]));
+    });
+    presetCard.appendChild(presetGrid);
+    root.appendChild(presetCard);
+
+    /* ---- 卡片：成绩单导出 ---- */
+    var scope = 'current';
+    var scopeBox = el('div', { class: 'pg-bar' });
+    var expPreview = el('div', { class: 'preview-box' });
+
+    var scopeOpts = [{ key: 'current', name: '当前学期' }];
+    Store.semesters.forEach(function (sm) { scopeOpts.push({ key: sm.id, name: sm.name }); });
+    scopeOpts.push({ key: 'all', name: '全部' });
+
+    function drawScope() {
+      scopeBox.innerHTML = '';
+      scopeOpts.forEach(function (o) {
+        scopeBox.appendChild(el('button', {
+          class: 'pg-tab' + (scope === o.key ? ' active' : ''),
+          text: o.name, type: 'button',
+          onclick: function () { scope = o.key; drawScope(); drawExpPreview(); }
+        }));
+      });
+    }
+
+    function drawExpPreview() {
+      if (!global.Transcript) { expPreview.textContent = '正在准备…'; return; }
+      var t = Transcript.build(scopeIdsOf(scope));
+      var txt = '共 <b>' + t.summary.count + '</b> 门 · <b>' + fmt(t.summary.credits, 1) + '</b> 学分';
+      if (t.summary.gpa != null) txt += ' · GPA <b>' + fmt(t.summary.gpa, 2) + '</b>';
+      expPreview.innerHTML = '<div class="pv-line">' + txt + '</div>';
+    }
+
+    var expCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['成绩单导出']),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '10px' },
+      text: 'CSV 可以用 Excel、数字表格直接打开；打印会在新窗口打开排版好的成绩单，可直接存成 PDF。'
+      }),
+      scopeBox,
+      expPreview,
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            Transcript.downloadCsv(scopeIdsOf(scope), scopeNameOf(scope));
+            UI.toast('已导出 CSV');
+          }
+        }, [V.svg(V.icons.download, 16), '导出 CSV']),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () {
+            Transcript.print(scopeIdsOf(scope), scopeNameOf(scope));
+          }
+        }, [V.svg(V.icons.download, 16), '打印 / 存 PDF'])
+      ])
+    ]);
+    root.appendChild(expCard);
+
+    function applyPreset(idx) {
+      var pr = Store.GPA_PRESETS[idx];
+      if (!pr) return;
+      draft.linear = !!pr.linear;
+      draft.scale = pr.scale || 4;
+      var rs = pr.rules || Store.defaultGpaRules();
+      draft.rules = rs.map(function (r) { return { min: r.min, gp: r.gp }; });
+      fScale.value = String(draft.scale);
+      var want = draft.linear ? '线性换算' : '分段换算';
+      V.$$('button', fMode).forEach(function (b) {
+        b.classList.toggle('active', b.textContent === want);
+      });
+      drawRules();
+      refreshSample();
+      UI.toast('已套用「' + pr.name + '」，确认后点保存');
+    }
+
+    drawRules();
+    refreshSample();
+    drawScope();
+    drawExpPreview();
+
+    function scopeIdsOf(sc) {
+      if (sc === 'all') return Store.semesters.map(function (sm) { return sm.id; });
+      if (sc === 'current') return [Store.currentSemesterId];
+      return [sc];
+    }
+
+    /** 导出时用真实学期名，别写成「当前学期」 */
+    function scopeNameOf(sc) {
+      if (sc === 'all') return '全部学期';
+      var id = (sc === 'current') ? Store.currentSemesterId : sc;
+      var sm = Store.semesterById(id);
+      return sm ? sm.name : '当前学期';
+    }
+  }
+
+  /* ==========================================================
+   * 二级页：收藏的词句
+   * ========================================================== */
+  function renderFavPage(root) {
+    var poems = Store.favPoems();
+    var words = Store.favWords();
+
+    /* ---- 诗词 ---- */
+    var pCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    pCard.appendChild(el('div', { class: 'section-title' }, [
+      '收藏的诗词',
+      el('span', {
+        style: { marginLeft: 'auto', fontSize: '11.5px', color: 'var(--text-3)', fontWeight: '400' },
+        text: poems.length + ' 篇'
+      })
+    ]));
+
+    if (!poems.length) {
+      pCard.appendChild(el('p', { class: 'ocr-hint', style: { marginBottom: '0' },
+        text: '还没有收藏。在「今日」页点「每日一句」卡片右上角的星标，或在诗词详情里点「收藏」。' }));
+    } else {
+      poems.forEach(function (x) {
+        var p = x.item;
+        var src = (p.d ? p.d + ' · ' : '') + p.a +
+          (String(p.a).indexOf('《') === 0 ? '' : '《' + p.t + '》');
+        pCard.appendChild(el('div', {
+          class: 'fav-row',
+          onclick: function () {
+            if (global.DailyCards) DailyCards.openPoem(x.idx);
+          }
+        }, [
+          el('span', { class: 'fv-quote', text: '“' }),
+          el('div', { class: 'fav-main' }, [
+            el('b', { text: p.ex }),
+            el('span', { text: src })
+          ]),
+          el('button', {
+            class: 'icon-btn', title: '取消收藏',
+            onclick: function (e) {
+              e.stopPropagation();
+              Store.toggleFavPoem(x.idx);
+              UI.toast('已取消收藏');
+              view.render();
+            }
+          }, [V.svg(V.icons.trash, 15)])
+        ]));
+      });
+    }
+    root.appendChild(pCard);
+
+    /* ---- 单词 ---- */
+    var wCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    wCard.appendChild(el('div', { class: 'section-title' }, [
+      '收藏的单词',
+      el('span', {
+        style: { marginLeft: 'auto', fontSize: '11.5px', color: 'var(--text-3)', fontWeight: '400' },
+        text: words.length + ' 词'
+      })
+    ]));
+
+    if (!words.length) {
+      wCard.appendChild(el('p', { class: 'ocr-hint', style: { marginBottom: '0' },
+        text: '还没有收藏。在「每日一词」卡片上点星标，或在单词详情里点「收藏」。' }));
+    } else {
+      words.forEach(function (x) {
+        var w = x.item;
+        wCard.appendChild(el('div', {
+          class: 'fav-row',
+          onclick: function () {
+            if (x.idx >= 0 && global.DailyCards) DailyCards.openWord(x.idx);
+          }
+        }, [
+          el('div', { class: 'fav-main' }, [
+            el('b', { text: w.w + (w.ph ? '  ' + w.ph : '') }),
+            el('span', { text: w.def || '（没有更多释义）' })
+          ]),
+          el('button', {
+            class: 'icon-btn', title: '取消收藏',
+            onclick: function (e) {
+              e.stopPropagation();
+              Store.toggleFavWord(w.w);
+              UI.toast('已取消收藏');
+              view.render();
+            }
+          }, [V.svg(V.icons.trash, 15)])
+        ]));
+      });
+
+      wCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            var first = Store.favWords()[0];
+            if (first && first.idx >= 0 && global.DailyCards) DailyCards.openQuiz(first.item);
+            else UI.toast('没有可以测验的收藏词', 'err');
+          }
+        }, ['考考我（第一个收藏词）'])
+      ]));
+    }
+    root.appendChild(wCard);
+
+    /* ---- 回到卡片开关 ---- */
+    root.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+      el('button', {
+        class: 'btn btn-sm',
+        onclick: function () { SUB = 'nav'; view.render(); }
+      }, ['首页卡片的显示开关 →'])
+    ]));
+  }
+
+  /* ==========================================================
+   * 二级页：饮食与热量
+   * 每日目标 kcal、三餐配比、三大营养素目标
+   * ========================================================== */
+  function renderDietPage(root) {
+    var d = Store.dietConfig();
+    var pf = d.profile || {};
+
+    var fGoal = V.input({
+      type: 'number', min: '0', step: '50',
+      value: d.goal ? String(d.goal) : '', placeholder: '例如 1800',
+      class: 'input'
+    });
+
+    var ratioInputs = {};
+    var ratioBox = el('div', { class: 'diet-ratio' });
+    [
+      { k: 'breakfast', l: '早餐' },
+      { k: 'lunch', l: '午餐' },
+      { k: 'dinner', l: '晚餐' },
+      { k: 'snack', l: '加餐' }
+    ].forEach(function (t) {
+      var inp = V.input({
+        type: 'number', min: '0', max: '100', step: '5',
+        value: String(d.ratio[t.k] == null ? 0 : d.ratio[t.k]),
+        class: 'input'
+      });
+      ratioInputs[t.k] = inp;
+      ratioBox.appendChild(el('div', { class: 'dr-item' }, [
+        el('span', { class: 'dr-label', text: t.l }),
+        inp,
+        el('i', { text: '%' })
+      ]));
+    });
+
+    var ratioHint = el('div', { class: 'ocr-hint' });
+    function drawRatioHint() {
+      var sum = 0;
+      Object.keys(ratioInputs).forEach(function (k) {
+        sum += parseFloat(ratioInputs[k].value) || 0;
+      });
+      var goal = parseFloat(fGoal.value) || 0;
+      var ok = Math.abs(sum - 100) < 0.5;
+      ratioHint.innerHTML = '合计 <b>' + Math.round(sum) + '%</b>' +
+        (ok ? '' : '<span class="pv-note">不是 100%，配额会按比例算</span>') +
+        (goal ? '　·　早餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.breakfast.value) || 0) / 100) +
+          '</b> / 午餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.lunch.value) || 0) / 100) +
+          '</b> / 晚餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.dinner.value) || 0) / 100) +
+          '</b> / 加餐 <b>' + Math.round(goal * (parseFloat(ratioInputs.snack.value) || 0) / 100) + '</b> 千卡' : '');
+    }
+    Object.keys(ratioInputs).forEach(function (k) {
+      ratioInputs[k].addEventListener('input', drawRatioHint);
+    });
+    fGoal.addEventListener('input', drawRatioHint);
+
+    /* ---- 个人资料（估算用） ---- */
+    var fSex = V.select([
+      { value: 'female', label: '女' }, { value: 'male', label: '男' }
+    ], pf.sex || 'female');
+    var fAge = V.input({ type: 'number', min: '10', max: '90', value: pf.age || '', placeholder: '20', class: 'input' });
+    var fH = V.input({ type: 'number', min: '120', max: '220', value: pf.height || '', placeholder: '165', class: 'input' });
+    var fW = V.input({ type: 'number', min: '30', max: '200', step: '0.5', value: pf.weight || '', placeholder: '55', class: 'input' });
+    var fAct = V.select([
+      { value: '1.2', label: '久坐（几乎不动）' },
+      { value: '1.375', label: '轻度（每周 1-3 次运动）' },
+      { value: '1.55', label: '中度（每周 3-5 次）' },
+      { value: '1.725', label: '高强度（每周 6-7 次）' }
+    ], pf.activity || '1.375');
+
+    var estBox = el('div', { class: 'preview-box' });
+    function drawEst() {
+      Store.setDiet({
+        profile: {
+          sex: fSex.value, age: fAge.value, height: fH.value,
+          weight: fW.value, activity: fAct.value
+        }
+      });
+      var r = Store.estimateTDEE();
+      estBox.innerHTML = r
+        ? ('基础代谢 <b>' + r.bmr + '</b> 千卡　×　活动系数 → 每日消耗约 <b>' + r.tdee + '</b> 千卡' +
+           '<div class="pv-note">减脂一般在这个数上减 300～500，增肌加 200～300</div>')
+        : '填全年龄、身高、体重就能估算';
+    }
+    [fSex, fAge, fH, fW, fAct].forEach(function (x) {
+      x.addEventListener('change', drawEst);
+      x.addEventListener('input', drawEst);
+    });
+
+    /* ---- 营养素 ---- */
+    var fP = V.input({ type: 'number', min: '0', value: d.protein || '', placeholder: '自动', class: 'input' });
+    var fF = V.input({ type: 'number', min: '0', value: d.fat || '', placeholder: '自动', class: 'input' });
+    var fC = V.input({ type: 'number', min: '0', value: d.carb || '', placeholder: '自动', class: 'input' });
+
+    function saveAll() {
+      Store.setDiet({
+        goal: parseFloat(fGoal.value) || 0,
+        ratio: {
+          breakfast: parseFloat(ratioInputs.breakfast.value) || 0,
+          lunch: parseFloat(ratioInputs.lunch.value) || 0,
+          dinner: parseFloat(ratioInputs.dinner.value) || 0,
+          snack: parseFloat(ratioInputs.snack.value) || 0
+        },
+        protein: parseFloat(fP.value) || 0,
+        fat: parseFloat(fF.value) || 0,
+        carb: parseFloat(fC.value) || 0
+      });
+      UI.toast('已保存');
+      view.render();
+    }
+
+    var goalCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['每日热量目标']),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '10px' },
+        text: '设一个每天想吃到多少千卡。有了目标，记录饮食时会提示这一餐还剩多少额度，超过会标红。填 0 就是只用记录、不设目标。'
+      }),
+      V.field('每日目标（千卡）', fGoal),
+      el('div', { class: 'sub-title', style: { marginTop: '12px' }, text: '三餐配比' }),
+      ratioBox,
+      ratioHint,
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            ratioInputs.breakfast.value = '30';
+            ratioInputs.lunch.value = '40';
+            ratioInputs.dinner.value = '30';
+            ratioInputs.snack.value = '0';
+            drawRatioHint();
+          }
+        }, ['恢复 30/40/30']),
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            ratioInputs.breakfast.value = '25';
+            ratioInputs.lunch.value = '35';
+            ratioInputs.dinner.value = '30';
+            ratioInputs.snack.value = '10';
+            drawRatioHint();
+          }
+        }, ['留出加餐 25/35/30/10'])
+      ])
+    ]);
+    root.appendChild(goalCard);
+
+    var estCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['用个人资料估算']),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '10px' },
+        text: '不知道该定多少就先估一下。这是公式估算值，只作参考，不能替代专业建议。'
+      }),
+      el('div', { class: 'field-row' }, [
+        V.field('性别', fSex),
+        V.field('年龄', fAge)
+      ]),
+      el('div', { class: 'field-row' }, [
+        V.field('身高（cm）', fH),
+        V.field('体重（kg）', fW)
+      ]),
+      V.field('活动量', fAct),
+      estBox,
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-sm btn-primary',
+          onclick: function () {
+            var r = Store.estimateTDEE();
+            if (!r) { UI.toast('先填全年龄、身高、体重', 'err'); return; }
+            fGoal.value = String(r.tdee);
+            drawRatioHint();
+            UI.toast('已填为 ' + r.tdee + ' 千卡，记得保存');
+          }
+        }, ['用这个数当目标']),
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            var r = Store.estimateTDEE();
+            if (!r) { UI.toast('先填全资料', 'err'); return; }
+            fGoal.value = String(Math.round((r.tdee - 400) / 50) * 50);
+            drawRatioHint();
+            UI.toast('已填为减脂档 ' + fGoal.value + ' 千卡');
+          }
+        }, ['减脂档（−400）'])
+      ])
+    ]);
+    root.appendChild(estCard);
+
+    var macroCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+      el('div', { class: 'section-title' }, ['三大营养素目标（克）']),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '10px' },
+        text: '选填。填了之后，一天吃够不够蛋白、脂肪是不是偏高，一眼能看到。留空就只统计、不设目标。'
+      }),
+      el('div', { class: 'field-row' }, [
+        V.field('蛋白质（g）', fP),
+        V.field('脂肪（g）', fF),
+        V.field('碳水（g）', fC)
+      ]),
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            var goal = parseFloat(fGoal.value) || 0;
+            if (!goal) { UI.toast('先填每日目标', 'err'); return; }
+            fP.value = String(Math.round(goal * 0.2 / 4));
+            fF.value = String(Math.round(goal * 0.3 / 9));
+            fC.value = String(Math.round(goal * 0.5 / 4));
+            UI.toast('按 20% / 30% / 50% 算好了，记得保存');
+          }
+        }, ['按 20/30/50 自动算']),
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            var w = parseFloat(fW.value) || 0;
+            if (!w) { UI.toast('先填体重', 'err'); return; }
+            fP.value = String(Math.round(w * 1.6));
+            UI.toast('按体重 ×1.6 g 填好了');
+          }
+        }, ['蛋白按体重 ×1.6g'])
+      ]),
+      el('div', { style: { display: 'flex', gap: '8px', marginTop: '14px' } }, [
+        el('button', { class: 'btn btn-primary', onclick: saveAll }, ['保存'])
+      ])
+    ]);
+    root.appendChild(macroCard);
+
+    drawRatioHint();
+    drawEst();
+  }
+
+  /** 供其它页面直接跳到某个设置子页 */
+  global.SettingsView = {
+    go: function (key) {
+      SUB = key;
+      if (global.App && App.currentId === 'settings') view.render();
+      else if (global.App) App.go('settings');
+    }
+  };
+
+  /* ==========================================================
+   * 二级页：奖励机制（森林 / 抽卡）
+   * ========================================================== */
+  function renderRewardPage(root) {
+    var pm = Store.pomodoro;
+    var mode = pm.mode;
+
+    var pickCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    pickCard.appendChild(el('div', { class: 'section-title' }, ['选择奖励机制']));
+    pickCard.appendChild(el('p', {
+      style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+      text: '两种机制的奖励积分各自独立、不能互相花费。切换时不会清零、也不会兑换——已经攒下的森林积分和合成玉都原样保留，之后获得的积分进入当前选中的机制。'
+    }));
+
+    var opts = [
+      {
+        k: 'forest', name: '森林', icon: V.icons.tree || V.icons.idea, color: '#4c8c4a',
+        desc: '用积分种树、浇水，看着森林一天天长起来',
+        bal: pm.points + ' 积分'
+      },
+      {
+        k: 'gacha', name: '抽卡寻访', icon: V.icons.jade, color: '#00a89a',
+        desc: '攒合成玉寻访明日方舟干员，主页展示已获得的角色',
+        bal: pm.jade + ' 合成玉'
+      }
+    ];
+
+    var gridBox = el('div', { class: 'reward-grid' });
+    opts.forEach(function (o) {
+      var on = mode === o.k;
+      gridBox.appendChild(el('button', {
+        class: 'rw-item' + (on ? ' on' : ''), type: 'button',
+        style: { '--rc': o.color },
+        onclick: function () {
+          if (mode === o.k) return;
+          Store.setRewardMode(o.k);
+          UI.toast('已切换到「' + o.name + '」');
+          view.render();
+        }
+      }, [
+        el('span', { class: 'rw-icon' }, [V.svg(o.icon, 22)]),
+        el('span', { class: 'rw-main' }, [
+          el('b', { text: o.name }),
+          el('span', { text: o.desc }),
+          el('i', { text: o.bal })
+        ]),
+        on ? el('span', { class: 'rw-flag', text: '使用中' }) : null
+      ]));
+    });
+    pickCard.appendChild(gridBox);
+
+    pickCard.appendChild(el('div', { class: 'rw-balance' }, [
+      el('div', { class: 'rwb-item' }, [
+        el('b', { text: String(pm.points) }),
+        el('span', { text: '森林积分' })
+      ]),
+      el('span', { class: 'rwb-plus', text: '+' }),
+      el('div', { class: 'rwb-item' }, [
+        el('b', { text: String(pm.jade) }),
+        el('span', { text: '合成玉' })
+      ]),
+      el('span', { class: 'rwb-eq', text: '=' }),
+      el('div', { class: 'rwb-item total' }, [
+        el('b', { text: String(Store.totalPoints()) }),
+        el('span', { text: '折合总积分' })
+      ])
+    ]));
+    pickCard.appendChild(el('p', {
+      class: 'ocr-hint', style: { marginBottom: '0' },
+      text: '1 积分 = ' + POMO.JADE_PER_POINT + ' 合成玉；累计获得过 ' + pm.earned +
+            ' 积分（不管切到哪种机制，这个数都不会变）。'
+    }));
+    root.appendChild(pickCard);
+
+    /* ---- 抽卡机制：规则与图鉴 ---- */
+    if (mode === 'gacha') {
+      var s = Store.gachaStats();
+      var gCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+      gCard.appendChild(el('div', { class: 'section-title' }, [
+        '寻访规则',
+        el('span', {
+          style: { marginLeft: 'auto', fontSize: '11.5px', color: 'var(--text-3)', fontWeight: '400' },
+          text: '明日方舟标准寻访'
+        })
+      ]));
+
+      var rows = [
+        ['单抽', POMO.PULL_COST + ' 合成玉（= 1 积分）'],
+        ['十连', POMO.TEN_COST + ' 合成玉（= 10 积分）'],
+        ['六星概率', POMO.RATE_6 + '%'],
+        ['五星 / 四星 / 三星', POMO.RATE_5 + '% / ' + POMO.RATE_4 + '% / 40%'],
+        ['保底', '连续 ' + POMO.PITY_START + ' 抽没出六星后，每抽 +' + POMO.PITY_STEP + '%'],
+        ['十连保底', '十连内至少一位五星及以上'],
+        ['当前六星概率', s.rate6 + '%（距上次六星 ' + s.pity + ' 抽）']
+      ];
+      rows.forEach(function (r) {
+        gCard.appendChild(el('div', { class: 'rw-rule' }, [
+          el('span', { text: r[0] }),
+          el('b', { text: r[1] })
+        ]));
+      });
+
+      gCard.appendChild(el('div', { class: 'dp-macros', style: { marginTop: '10px' } }, [
+        el('span', { class: 'macro', style: { background: '#ff930022', color: '#ff9300' },
+          text: '6★ ' + (s.byR[6] || [0, 0])[0] + '/' + (s.byR[6] || [0, 0])[1] }),
+        el('span', { class: 'macro', style: { background: '#f7d54733', color: '#c99a00' },
+          text: '5★ ' + (s.byR[5] || [0, 0])[0] + '/' + (s.byR[5] || [0, 0])[1] }),
+        el('span', { class: 'macro', style: { background: '#c79bff22', color: '#8b5cf6' },
+          text: '4★ ' + (s.byR[4] || [0, 0])[0] + '/' + (s.byR[4] || [0, 0])[1] }),
+        el('span', { class: 'macro', style: { background: '#6bc8ff22', color: '#0284c7' },
+          text: '3★ ' + (s.byR[3] || [0, 0])[0] + '/' + (s.byR[3] || [0, 0])[1] })
+      ]));
+
+      gCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '14px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () { if (global.Gacha) Gacha.open(); }
+        }, [V.svg(V.icons.jade, 16), '去寻访']),
+        el('button', {
+          class: 'btn',
+          onclick: function () { if (global.Gacha) Gacha.openOps(); }
+        }, ['我的干员 ' + s.owned + '/' + s.total])
+      ]));
+      root.appendChild(gCard);
+    }
+  }
+
+  (window.VIEWS = window.VIEWS || []).push(view);
+})(window);
