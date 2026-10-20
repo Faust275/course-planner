@@ -46,8 +46,9 @@ course-planner-web/
 ├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
 ├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
 ├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径
+├── verify_stats.mjs          统计复盘：自然口径、日均对比、热力条刻度、区间缓存失效
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（331 条）
+└── tests/run.mjs             纯函数单测（401 条）
 ```
 
 ## 构建
@@ -71,14 +72,15 @@ python3 build.py
 ```bash
 node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析、
                              #             时间冲突、.ics 生成与折行、全局搜索、
-                             #             重复任务顺延、农历换算、纪念日届数）
+                             #             重复任务顺延、农历换算、纪念日届数、
+                             #             统计口径与跨午夜睡眠归属）
 
 # UI 回归（需 playwright；先起本地静态服务）
 python3 -m http.server 8137 &
 node verify_build.mjs        # 启动、路由、桌宠、IndexedDB、控制台报错
 node eq_check.mjs            # 12 个视图全量类名计算样式对比
 node verify_backup.mjs       # 自动备份
-node verify_sync_scope.mjs   # 同步码三档
+node verify_sync_scope.mjs   # 同步码分档
 node verify_parts2.mjs       # 同步码分片
 node verify_batch.mjs        # 课表批量导入
 node verify_conflict.mjs     # 课表时间冲突
@@ -88,6 +90,7 @@ node verify_repeat.mjs       # 重复任务展开生成
 node verify_anniv.mjs        # 倒数纪念日（含农历）
 node verify_export.mjs       # 课表导出图片
 node verify_subtask.mjs      # 子任务（含设置页联动开关）
+node verify_stats.mjs       # 统计与复盘（自然口径、对比、热力条、缓存）
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。

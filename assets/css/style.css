@@ -3036,3 +3036,170 @@ mark.cp-hit {
   .cp-subtask-set-row { gap: 10px; }
   .cp-subtask-set-text b { font-size: 13px; }
 }
+
+/* ==========================================================
+ * 统计与复盘（nav:false 视图，从象限页进入）
+ * ========================================================== */
+.cp-stats-more {
+  display: block;
+  width: 100%;
+  margin: 2px 0 10px;
+  padding: 7px 0;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.cp-stats-more:hover { background: var(--primary-weak); border-color: var(--primary); }
+
+/* 顶部四格 */
+.cp-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cp-stat-cell {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.cp-stat-label { font-size: 11.5px; color: var(--text-3); margin-bottom: 4px; }
+.cp-stat-value { font-size: 18px; font-weight: 700; letter-spacing: -.2px; line-height: 1.25; }
+
+/* 对比开关 */
+.cp-cmp-row { display: flex; margin-bottom: 10px; }
+.cp-cmp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.cp-cmp-toggle i {
+  width: 26px; height: 15px; border-radius: 999px;
+  background: var(--line); position: relative; flex: none;
+  transition: background .18s;
+}
+.cp-cmp-toggle i::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #fff; transition: transform .18s;
+}
+.cp-cmp-toggle.is-on { color: var(--primary); border-color: var(--primary); background: var(--primary-weak); }
+.cp-cmp-toggle.is-on i { background: var(--primary); }
+.cp-cmp-toggle.is-on i::after { transform: translateX(11px); }
+.cp-cmp-toggle.is-off { opacity: .55; cursor: default; }
+
+.cp-cmp-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.65;
+  margin: -2px 0 12px;
+}
+
+/* 对比小标签 */
+.cp-cmp-chip {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.cp-cmp-chip.is-flat { color: var(--text-3); }
+.cp-cmp-chip.is-up { color: var(--primary); }
+.cp-cmp-chip.is-down { color: #0ea5e9; }
+
+/* 图表卡 */
+.cp-chart-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-chart-sub { font-size: 11.5px; color: var(--text-3); margin: 2px 0 12px; }
+
+/* 图例 */
+.cp-legend { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.cp-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.cp-legend-row i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.cp-legend-name { color: var(--text-2); }
+.cp-legend-val { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+.cp-legend-pct { width: 42px; text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* 对比表 */
+.cp-cmp-table { display: flex; flex-direction: column; }
+.cp-cmp-tr {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr .9fr;
+  gap: 8px;
+  padding: 8px 2px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.cp-cmp-tr:last-child { border-bottom: 0; }
+.cp-cmp-th { color: var(--text-3); font-size: 11.5px; border-bottom: 1px solid var(--line); }
+.cp-cmp-tr .is-dim { color: var(--text-3); }
+.cp-cmp-tr .is-diff { text-align: right; }
+.cp-cmp-tr .is-diff.is-flat { color: var(--text-3); }
+.cp-cmp-tr .is-diff.is-up { color: var(--primary); }
+.cp-cmp-tr .is-diff.is-down { color: #0ea5e9; }
+
+/* 周热力条 */
+.cp-heat { display: flex; gap: 5px; flex-wrap: wrap; }
+.cp-heat-week {
+  flex: 1 1 0;
+  min-width: 40px;
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid transparent;
+}
+.cp-heat-week b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cp-heat-week span { font-size: 10px; opacity: .7; }
+.cp-heat-week.cp-lv-0 { background: var(--surface-2); color: var(--text-3); }
+.cp-heat-week.cp-lv-1 { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--text-2); }
+.cp-heat-week.cp-lv-2 { background: color-mix(in srgb, var(--primary) 30%, var(--surface)); color: var(--text); }
+.cp-heat-week.cp-lv-3 { background: color-mix(in srgb, var(--primary) 52%, var(--surface)); color: #fff; }
+.cp-heat-week.cp-lv-4 { background: var(--primary); color: #fff; }
+.cp-heat-week.cp-is-partial { border-color: var(--line); border-style: dashed; }
+
+/* 口径说明 */
+.cp-stats-note { padding: 14px 16px; margin-bottom: 14px; }
+.cp-stats-note-title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--text-2); }
+.cp-stats-note-body p {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.75;
+  margin: 0 0 6px;
+}
+.cp-stats-note-body p:last-child { margin-bottom: 0; }
+.cp-stats-note-inline {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.65;
+  margin-top: 10px;
+}
+
+/* 统计页的周期切换条：跟标题同一行时靠左，不推到最右 */
+#view-stats .cp-week-bar { flex-wrap: wrap; gap: 8px; }
+#view-stats .cp-week-bar .cp-dim-tabs { margin-left: 0; }
+
+@media (max-width: 560px) {
+  .cp-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .cp-cmp-tr { grid-template-columns: 1fr 1fr 1fr .8fr; font-size: 12px; }
+  .cp-heat-week { min-width: 32px; padding: 6px 2px; }
+}
+
+/* 逐日模式：格数多，收窄一点 */
+.cp-heat.cp-is-daily .cp-heat-week { min-width: 26px; padding: 7px 2px; }
+.cp-heat.cp-is-daily .cp-heat-week b { font-size: 10.5px; }

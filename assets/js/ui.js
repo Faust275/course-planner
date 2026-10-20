@@ -362,7 +362,11 @@
     var max = 1;
     list.forEach(function (x) { if (x.value > max) max = x.value; });
 
-    var box = el('div', { class: 'chart-bars' + (list.length > 12 ? ' dense' : '') });
+    // 项目少时柱子会被 flex 拉得很宽，用 maxCols 给每列封顶并居中
+    var box = el('div', {
+      class: 'chart-bars' + (list.length > 12 ? ' dense' : '') + (opts.maxCols ? ' capped' : ''),
+      style: opts.maxCols ? { maxWidth: (opts.maxCols * 92) + 'px', margin: '0 auto' } : null
+    });
     // 柱子多时稀疏显示标签，避免挤成一团
     var step = list.length > 24 ? 5 : list.length > 14 ? 3 : list.length > 9 ? 2 : 1;
     list.forEach(function (x, i) {
@@ -422,8 +426,14 @@
   }
 
   /** 范围切换：今天 / 一周 / 一月 / 一季 */
+  /**
+   * 统计范围切换条
+   * @param {string} cur 当前 key
+   * @param {function} onChange
+   * @param {string[]} [keys] 要显示的 key 列表，默认 ['day','week','month','term']
+   */
   function rangeTabs(cur, onChange, keys) {
-    keys = keys || ['day', 'week', 'month', 'season'];
+    keys = keys || ['day', 'week', 'month', 'term'];
     var wrap = el('div', { class: 'dim-tabs' });
     keys.forEach(function (k) {
       var r = RANGES[k];

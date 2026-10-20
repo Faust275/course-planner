@@ -177,6 +177,18 @@
         return card;
       }
 
+      // 跨午夜说明：这里的总时长是「实际落在这天内的时间」，不是那一觉的总长
+      var crosses = list.some(function (r) {
+        return TimeUtil.toMin(r.end) <= TimeUtil.toMin(r.start);   // 醒来时间不晚于入睡 = 跨了午夜
+      });
+      if (crosses) {
+        card.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '2px 0 8px', lineHeight: '1.6' },
+          text: '睡眠按实际时刻归属：23:00 睡、7:00 醒，昨天算 1 小时、今天算 7 小时，' +
+                '所以这里显示的不是一觉的总长度。想看整晚总长请点开单条记录。'
+        }));
+      }
+
       list.forEach(function (r) {
         var dur = TimeUtil.diffMin(r.start, r.end);
         var qText = { good: '睡得好', normal: '一般', bad: '没睡好' }[r.quality] || '一般';
@@ -343,6 +355,10 @@
     var head = el('div', { class: 'section-title' }, ['时间统计']);
     head.appendChild(V.rangeTabs(qRange, function (k) { qRange = k; rerender(); }));
     card.appendChild(head);
+    card.appendChild(el('button', {
+      class: 'cp-stats-more',
+      onclick: function () { App.go('stats'); }
+    }, ['看统计与复盘 →']));
 
     card.appendChild(el('div', {
       style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '10px' },

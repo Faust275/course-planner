@@ -3108,6 +3108,173 @@ mark.cp-hit {
   .cp-subtask-set-text b { font-size: 13px; }
 }
 
+/* ==========================================================
+ * 统计与复盘（nav:false 视图，从象限页进入）
+ * ========================================================== */
+.cp-stats-more {
+  display: block;
+  width: 100%;
+  margin: 2px 0 10px;
+  padding: 7px 0;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.cp-stats-more:hover { background: var(--primary-weak); border-color: var(--primary); }
+
+/* 顶部四格 */
+.cp-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cp-stat-cell {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.cp-stat-label { font-size: 11.5px; color: var(--text-3); margin-bottom: 4px; }
+.cp-stat-value { font-size: 18px; font-weight: 700; letter-spacing: -.2px; line-height: 1.25; }
+
+/* 对比开关 */
+.cp-cmp-row { display: flex; margin-bottom: 10px; }
+.cp-cmp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.cp-cmp-toggle i {
+  width: 26px; height: 15px; border-radius: 999px;
+  background: var(--line); position: relative; flex: none;
+  transition: background .18s;
+}
+.cp-cmp-toggle i::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #fff; transition: transform .18s;
+}
+.cp-cmp-toggle.is-on { color: var(--primary); border-color: var(--primary); background: var(--primary-weak); }
+.cp-cmp-toggle.is-on i { background: var(--primary); }
+.cp-cmp-toggle.is-on i::after { transform: translateX(11px); }
+.cp-cmp-toggle.is-off { opacity: .55; cursor: default; }
+
+.cp-cmp-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.65;
+  margin: -2px 0 12px;
+}
+
+/* 对比小标签 */
+.cp-cmp-chip {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.cp-cmp-chip.is-flat { color: var(--text-3); }
+.cp-cmp-chip.is-up { color: var(--primary); }
+.cp-cmp-chip.is-down { color: #0ea5e9; }
+
+/* 图表卡 */
+.cp-chart-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-chart-sub { font-size: 11.5px; color: var(--text-3); margin: 2px 0 12px; }
+
+/* 图例 */
+.cp-legend { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.cp-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.cp-legend-row i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.cp-legend-name { color: var(--text-2); }
+.cp-legend-val { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+.cp-legend-pct { width: 42px; text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* 对比表 */
+.cp-cmp-table { display: flex; flex-direction: column; }
+.cp-cmp-tr {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr .9fr;
+  gap: 8px;
+  padding: 8px 2px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.cp-cmp-tr:last-child { border-bottom: 0; }
+.cp-cmp-th { color: var(--text-3); font-size: 11.5px; border-bottom: 1px solid var(--line); }
+.cp-cmp-tr .is-dim { color: var(--text-3); }
+.cp-cmp-tr .is-diff { text-align: right; }
+.cp-cmp-tr .is-diff.is-flat { color: var(--text-3); }
+.cp-cmp-tr .is-diff.is-up { color: var(--primary); }
+.cp-cmp-tr .is-diff.is-down { color: #0ea5e9; }
+
+/* 周热力条 */
+.cp-heat { display: flex; gap: 5px; flex-wrap: wrap; }
+.cp-heat-week {
+  flex: 1 1 0;
+  min-width: 40px;
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid transparent;
+}
+.cp-heat-week b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cp-heat-week span { font-size: 10px; opacity: .7; }
+.cp-heat-week.cp-lv-0 { background: var(--surface-2); color: var(--text-3); }
+.cp-heat-week.cp-lv-1 { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--text-2); }
+.cp-heat-week.cp-lv-2 { background: color-mix(in srgb, var(--primary) 30%, var(--surface)); color: var(--text); }
+.cp-heat-week.cp-lv-3 { background: color-mix(in srgb, var(--primary) 52%, var(--surface)); color: #fff; }
+.cp-heat-week.cp-lv-4 { background: var(--primary); color: #fff; }
+.cp-heat-week.cp-is-partial { border-color: var(--line); border-style: dashed; }
+
+/* 口径说明 */
+.cp-stats-note { padding: 14px 16px; margin-bottom: 14px; }
+.cp-stats-note-title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; color: var(--text-2); }
+.cp-stats-note-body p {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.75;
+  margin: 0 0 6px;
+}
+.cp-stats-note-body p:last-child { margin-bottom: 0; }
+.cp-stats-note-inline {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.65;
+  margin-top: 10px;
+}
+
+/* 统计页的周期切换条：跟标题同一行时靠左，不推到最右 */
+#view-stats .cp-week-bar { flex-wrap: wrap; gap: 8px; }
+#view-stats .cp-week-bar .cp-dim-tabs { margin-left: 0; }
+
+@media (max-width: 560px) {
+  .cp-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .cp-cmp-tr { grid-template-columns: 1fr 1fr 1fr .8fr; font-size: 12px; }
+  .cp-heat-week { min-width: 32px; padding: 6px 2px; }
+}
+
+/* 逐日模式：格数多，收窄一点 */
+.cp-heat.cp-is-daily .cp-heat-week { min-width: 26px; padding: 7px 2px; }
+.cp-heat.cp-is-daily .cp-heat-week b { font-size: 10.5px; }
+
 </style>
 <script>
 
@@ -4283,6 +4450,22 @@ window.AK_OPS = [
   var listeners = [];
   var state = null;
 
+  /**
+   * 数据版本号：每次写操作 +1。
+   * 统计结果都按它做缓存键，写一次就整体失效，省得在每个写函数里手动清缓存
+   * （手动清必然漏，漏了就会出现「改了课表，统计还是旧的」）。
+   */
+  var rev = 0;
+  /** 单日统计缓存：{ '2025-01-01': { rev, val } } */
+  var dayStatCache = {};
+  /** 区间统计缓存：{ 'from|to': { rev, val } } */
+  var rangeStatCache = {};
+
+  function touch() {
+    rev++;
+    return rev;
+  }
+
   function uid(prefix) {
     return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
@@ -4294,6 +4477,36 @@ window.AK_OPS = [
     var a = TimeUtil.toMin(start), b = TimeUtil.toMin(end);
     if (b <= a) return [[a, 1440], [0, b]];
     return [[a, b]];
+  }
+
+  /**
+   * 某一天「实际睡了多少分钟」。
+   * 睡眠记录挂在入睡那天（date），所以一天真正睡着的时间由两段拼成：
+   *   1. 昨晚（date-1）睡下、跨过午夜、今天早上醒来 —— 取 [00:00, end]
+   *   2. 今晚（date）睡下、可能跨到明天 —— 取 [start, 24:00]
+   * 这样「1/1 睡 23:00–7:00」不会在 1/1 记 8 小时、1/2 记 0 小时，
+   * 而是 1/1 记 1 小时、1/2 记 7 小时，日内分布才和现实一致。
+   * 同一夜的多段记录先合并，避免两段重叠被重复计时。
+   * @param {string} _next 保留位（旧调用方传了次日日期），目前不使用
+   */
+  function sleepByNight(sleeps, dateStr, _next) {
+    var d = DateUtil.parse(dateStr);
+    if (!d) return 0;
+    var prev = DateUtil.toStr(DateUtil.addDays(d, -1));
+    var ranges = [];
+    sleeps.forEach(function (r) {
+      if (!r || !r.start || !r.end) return;
+      var a = TimeUtil.toMin(r.start), b = TimeUtil.toMin(r.end);
+      var overnight = b <= a;
+      if (r.date === dateStr) {
+        // 今晚这一段：只取今天之内能落下的部分
+        ranges.push([a, overnight ? 1440 : b]);
+      } else if (r.date === prev && overnight) {
+        // 昨晚跨过来：只取今天早上那半截
+        ranges.push([0, b]);
+      }
+    });
+    return mergeTotal(ranges);
   }
 
   /** 合并重叠区间后返回总分钟数（避免重复计时） */
@@ -4323,19 +4536,116 @@ window.AK_OPS = [
   };
 
   /* ===== 统计范围 ===== */
+  /**
+   * 两种口径：
+   *   cal  —— 自然日历（今天 / 本周一起算 / 本月 1 号起算 / 本学期），用于统计与复盘
+   *   win  —— 滑动窗口（最近 N 天，含今天），用于记账这种「近 30 天花了多少」的场景
+   * days 只在 win 口径下有意义；cal 口径的实际天数由日历决定，见 rangeDates()。
+   */
   var RANGES = {
-    day:   { key: 'day',   name: '今天', days: 1 },
-    week:  { key: 'week',  name: '一周', days: 7 },
-    month: { key: 'month', name: '一月', days: 30 },
-    season:{ key: 'season',name: '一季', days: 90 }
+    day:   { key: 'day',   name: '今天', mode: 'cal', days: 1 },
+    week:  { key: 'week',  name: '本周', mode: 'cal', days: 7 },
+    month: { key: 'month', name: '本月', mode: 'cal', days: 30 },
+    term:  { key: 'term',  name: '本学期', mode: 'cal', days: 120 },
+    recent7:  { key: 'recent7',  name: '最近 7 天',  mode: 'win', days: 7 },
+    recent30: { key: 'recent30', name: '最近 30 天', mode: 'win', days: 30 }
   };
 
-  /** 日期区间 [from, to]（含两端） */
-  function rangeDates(key) {
-    var n = (RANGES[key] || RANGES.week).days;
-    var to = DateUtil.today();
-    var from = DateUtil.addDays(to, -(n - 1));
-    return { from: DateUtil.toStr(from), to: DateUtil.toStr(to), days: n, key: key };
+  /** 记账页用的四档（自然口径为主，末档保留滑动窗口） */
+  var LEDGER_RANGES = ['day', 'week', 'month', 'recent30'];
+
+  /** 自然周 / 自然月的起止（周一为一周之始） */
+  function weekBounds(d) {
+    d = d || DateUtil.today();
+    var s = DateUtil.weekStart(d);
+    return { from: s, to: DateUtil.addDays(s, 6) };
+  }
+  function monthBounds(d) {
+    d = d || DateUtil.today();
+    var s = new Date(d.getFullYear(), d.getMonth(), 1);
+    var e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return { from: s, to: e };
+  }
+
+  /**
+   * 日期区间（含两端）。
+   * 「今天 / 本周 / 本月」的 to 一律截到今天——统计不该把未来的空白天算进分母。
+   * @param {string} key RANGES 的 key
+   * @param {object} [sem] 学期对象，默认当前学期（term 口径用）
+   */
+  function rangeDates(key, sem) {
+    var R = RANGES[key] || RANGES.week;
+    var today = DateUtil.today();
+
+    if (R.mode === 'win') {
+      var wf = DateUtil.addDays(today, -(R.days - 1));
+      return { from: DateUtil.toStr(wf), to: DateUtil.toStr(today), days: R.days, key: R.key, mode: 'win' };
+    }
+
+    var from = today, to = today;
+    if (R.key === 'day') {
+      from = today; to = today;
+    } else if (R.key === 'week') {
+      var wb = weekBounds(today);
+      from = wb.from; to = to < wb.to ? today : wb.to;
+    } else if (R.key === 'month') {
+      var mb = monthBounds(today);
+      from = mb.from; to = today < mb.to ? today : mb.to;
+    } else if (R.key === 'term') {
+      var s = sem || (state && Store.currentSemester ? Store.currentSemester() : null);
+      var start = (s && DateUtil.parse(s.startDate)) || DateUtil.weekStart(today);
+      var weeks = (s && s.weeks) || 20;
+      var end = DateUtil.addDays(start, weeks * 7 - 1);
+      from = start;
+      // 学期还没开学：空区间，由调用方显示提示
+      if (today < start) { from = today; to = today; }
+      else to = today < end ? today : end;
+    }
+    var n = DateUtil.diffDays(to, from) + 1;
+    return { from: DateUtil.toStr(from), to: DateUtil.toStr(to), days: Math.max(1, n), key: R.key, mode: 'cal' };
+  }
+
+  /**
+   * 参照区间：拿同样的口径往前挪一个周期，用来做「比上次」。
+   * 今天 → 昨天；本周 → 上周；本月 → 上月；本学期 → 无（返回 null）；
+   * 滑动窗口 → 等长的上一段，保证天数一致，可以直接比总量。
+   * 自然口径的上月天数可能与本月不同，比较时请统一换成日均。
+   */
+  function compareRange(key, r) {
+    r = r || rangeDates(key);
+    var from = DateUtil.parse(r.from), to = DateUtil.parse(r.to);
+    if (!from || !to) return null;
+    if (r.key === 'day') {
+      var y = DateUtil.addDays(from, -1);
+      return { from: DateUtil.toStr(y), to: DateUtil.toStr(y), days: 1, key: 'day', mode: 'cal' };
+    }
+    if (r.key === 'week') {
+      var pw = weekBounds(DateUtil.addDays(from, -1));
+      return { from: DateUtil.toStr(pw.from), to: DateUtil.toStr(pw.to), days: 7, key: 'week', mode: 'cal' };
+    }
+    if (r.key === 'month') {
+      var pm = monthBounds(DateUtil.addDays(from, -1));
+      // 参照月同样截到「同一天数」，避免月末几天没得比
+      var span = DateUtil.diffDays(to, from);
+      var pmTo = DateUtil.addDays(pm.from, span);
+      if (pmTo > pm.to) pmTo = pm.to;
+      return {
+        from: DateUtil.toStr(pm.from), to: DateUtil.toStr(pmTo),
+        days: DateUtil.diffDays(pmTo, pm.from) + 1, key: 'month', mode: 'cal'
+      };
+    }
+    if (r.key === 'term') return null;   // 没有「上一学期」的可靠数据，不做比较
+    // 滑动窗口：紧邻的等长区间
+    var n = r.days;
+    var pf = DateUtil.addDays(from, -n);
+    var pt = DateUtil.addDays(from, -1);
+    return { from: DateUtil.toStr(pf), to: DateUtil.toStr(pt), days: n, key: r.key, mode: 'win' };
+  }
+
+  /** 日均（保留一位小数），供跨长度区间比较 */
+  function perDay(total, days) {
+    if (!days) return 0;
+    return Math.round(total / days * 10) / 10;
   }
 
   /** 区间内每天的日期字符串 */
@@ -5263,6 +5573,7 @@ window.AK_OPS = [
     },
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () {
+      touch();          // 统计缓存随写操作整体失效
       this.save();
       // 桌面小组件：把快照推给原生桥。仅当运行在安卓壳（存在 window.AndroidBridge）时生效，
       // Web 版 / 普通浏览器里 AndroidBridge 不存在，整段被 try/catch 安全跳过，零副作用。
@@ -6530,10 +6841,11 @@ window.AK_OPS = [
         .sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
     },
 
+    /** 睡眠总分钟（按实际时刻归属：跨午夜的部分算到后一天） */
     sleepMinutes: function (dateStr) {
-      return mergeTotal(this.sleepsOf(dateStr).reduce(function (acc, r) {
-        return acc.concat(expandRange(r.start, r.end));
-      }, []));
+      var d = DateUtil.parse(dateStr) || DateUtil.today();
+      var next = DateUtil.toStr(DateUtil.addDays(d, 1));
+      return sleepByNight(state.sleeps, dateStr, next);
     },
 
   /* ===== 番茄钟 / 积分 / 养树 ===== */
@@ -7202,8 +7514,19 @@ window.AK_OPS = [
       return { running: running, finished: finished, todayPending: todayPending, total: state.plans.length };
     },
 
-    /** 区间内的时间去向汇总 */
+    /** 区间内的时间去向汇总（按 from|to 缓存，整学期的重复渲染不再逐天重算） */
     rangeStat: function (from, to) {
+      var ck = from + '|' + to;
+      var hit = rangeStatCache[ck];
+      if (hit && hit.rev === rev) return hit.val;
+      var val = this._rangeStat(from, to);
+      // 简单上限：翻很多年后缓存会涨，超过 64 组就清空重来
+      if (Object.keys(rangeStatCache).length > 64) rangeStatCache = {};
+      rangeStatCache[ck] = { rev: rev, val: val };
+      return val;
+    },
+
+    _rangeStat: function (from, to) {
       var dates = eachDate(from, to);
       var keys = ['sleep', 'course', 'event', 'activity', 'meal', 'idle'];
       var sum = {}, daily = [];
@@ -7217,7 +7540,7 @@ window.AK_OPS = [
           sum[seg.key] += seg.minutes;
           if (seg.key !== 'idle') per += seg.minutes;
         });
-        daily.push({ date: ds, d: DateUtil.parse(ds), recorded: per, idle: sum.idle });
+        daily.push({ date: ds, d: DateUtil.parse(ds), recorded: per, idle: Math.max(0, 1440 - per) });
       }, this);
 
       var labels = { sleep: '睡眠', course: '上课', event: '日程', activity: '活动', meal: '用餐', idle: '未记录' };
@@ -7235,6 +7558,45 @@ window.AK_OPS = [
         pct: total ? Math.round(recorded / total * 100) : 0,
         days: dates.length
       };
+    },
+
+    /**
+     * 带参照的区间统计：拿同口径的上一个周期做对比。
+     * 两段天数可能不等（2 月和 3 月），所以只输出**日均**，不输出总量差值——
+     * 「本月比上月多花了 300」可能只是因为多了一天。
+     */
+    compareStat: function (key, r) {
+      r = r || rangeDates(key);
+      var cur = this.rangeStat(r.from, r.to);
+      var pr = compareRange(key, r);
+      if (!pr) return { cur: cur, prev: null, cmp: null, range: r, prevRange: null };
+      var prev = this.rangeStat(pr.from, pr.to);
+      var keys = ['sleep', 'course', 'event', 'activity', 'meal'];
+      var cmp = {};
+      keys.forEach(function (k) {
+        var a = 0, b = 0;
+        cur.segments.forEach(function (s) { if (s.key === k) a = s.minutes; });
+        prev.segments.forEach(function (s) { if (s.key === k) b = s.minutes; });
+        var da = perDay(a, cur.days), db = perDay(b, prev.days);
+        cmp[k] = {
+          cur: a, prev: b,
+          curPerDay: da, prevPerDay: db,
+          diffPerDay: Math.round((da - db) * 10) / 10,
+          // 相对变化：参照期为 0 时不算百分比，返回 null 让界面显示「新增」
+          pct: db > 0 ? Math.round((da - db) / db * 100) : null
+        };
+      });
+      cmp.recorded = {
+        cur: cur.recorded, prev: prev.recorded,
+        curPerDay: perDay(cur.recorded, cur.days),
+        prevPerDay: perDay(prev.recorded, prev.days),
+        diffPerDay: Math.round((perDay(cur.recorded, cur.days) - perDay(prev.recorded, prev.days)) * 10) / 10,
+        pct: prev.recorded > 0
+          ? Math.round((perDay(cur.recorded, cur.days) - perDay(prev.recorded, prev.days)) /
+                       perDay(prev.recorded, prev.days) * 100)
+          : null
+      };
+      return { cur: cur, prev: prev, cmp: cmp, range: r, prevRange: pr };
     },
 
     /** 区间内的账目汇总 */
@@ -7647,8 +8009,19 @@ window.AK_OPS = [
     /**
      * 某天的时间分配
      * @returns {segments:[{key,label,minutes,color}], idle, courses, events}
+     * 结果按「日期 + 数据版本号」缓存：一天算一次，翻看整学期也不会重复算 140 遍。
+     * 任何写操作都会让版本号 +1（见 touch()），缓存自然失效，不用逐处清缓存。
      */
     dayStat: function (dateStr) {
+      dateStr = dateStr || DateUtil.toStr(DateUtil.today());
+      var hit = dayStatCache[dateStr];
+      if (hit && hit.rev === rev) return hit.val;
+      var val = this._dayStat(dateStr);
+      dayStatCache[dateStr] = { rev: rev, val: val };
+      return val;
+    },
+
+    _dayStat: function (dateStr) {
       var d = DateUtil.parse(dateStr) || DateUtil.today();
       var dow = DateUtil.isoDow(d);
       var weekNo = this.weekOf(d);
@@ -7812,7 +8185,13 @@ window.AK_OPS = [
   global.POMO = POMO;
   global.LEDGER_CATS = LEDGER_CATS;
   global.RANGES = RANGES;
+  global.LEDGER_RANGES = LEDGER_RANGES;
   global.rangeDates = rangeDates;
+  global.compareRange = compareRange;
+  global.perDay = perDay;
+  global.weekBounds = weekBounds;
+  global.monthBounds = monthBounds;
+  global.sleepByNight = sleepByNight;
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;
@@ -8204,7 +8583,11 @@ window.AK_OPS = [
     var max = 1;
     list.forEach(function (x) { if (x.value > max) max = x.value; });
 
-    var box = el('div', { class: 'chart-bars' + (list.length > 12 ? ' dense' : '') });
+    // 项目少时柱子会被 flex 拉得很宽，用 maxCols 给每列封顶并居中
+    var box = el('div', {
+      class: 'chart-bars' + (list.length > 12 ? ' dense' : '') + (opts.maxCols ? ' capped' : ''),
+      style: opts.maxCols ? { maxWidth: (opts.maxCols * 92) + 'px', margin: '0 auto' } : null
+    });
     // 柱子多时稀疏显示标签，避免挤成一团
     var step = list.length > 24 ? 5 : list.length > 14 ? 3 : list.length > 9 ? 2 : 1;
     list.forEach(function (x, i) {
@@ -8264,8 +8647,14 @@ window.AK_OPS = [
   }
 
   /** 范围切换：今天 / 一周 / 一月 / 一季 */
+  /**
+   * 统计范围切换条
+   * @param {string} cur 当前 key
+   * @param {function} onChange
+   * @param {string[]} [keys] 要显示的 key 列表，默认 ['day','week','month','term']
+   */
   function rangeTabs(cur, onChange, keys) {
-    keys = keys || ['day', 'week', 'month', 'season'];
+    keys = keys || ['day', 'week', 'month', 'term'];
     var wrap = el('div', { class: 'dim-tabs' });
     keys.forEach(function (k) {
       var r = RANGES[k];
@@ -13590,6 +13979,18 @@ window.AK_OPS = [
         return card;
       }
 
+      // 跨午夜说明：这里的总时长是「实际落在这天内的时间」，不是那一觉的总长
+      var crosses = list.some(function (r) {
+        return TimeUtil.toMin(r.end) <= TimeUtil.toMin(r.start);   // 醒来时间不晚于入睡 = 跨了午夜
+      });
+      if (crosses) {
+        card.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '2px 0 8px', lineHeight: '1.6' },
+          text: '睡眠按实际时刻归属：23:00 睡、7:00 醒，昨天算 1 小时、今天算 7 小时，' +
+                '所以这里显示的不是一觉的总长度。想看整晚总长请点开单条记录。'
+        }));
+      }
+
       list.forEach(function (r) {
         var dur = TimeUtil.diffMin(r.start, r.end);
         var qText = { good: '睡得好', normal: '一般', bad: '没睡好' }[r.quality] || '一般';
@@ -13756,6 +14157,10 @@ window.AK_OPS = [
     var head = el('div', { class: 'section-title' }, ['时间统计']);
     head.appendChild(V.rangeTabs(qRange, function (k) { qRange = k; rerender(); }));
     card.appendChild(head);
+    card.appendChild(el('button', {
+      class: 'cp-stats-more',
+      onclick: function () { App.go('stats'); }
+    }, ['看统计与复盘 →']));
 
     card.appendChild(el('div', {
       style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '10px' },
@@ -14359,6 +14764,419 @@ window.AK_OPS = [
 })(window);
 
 
+
+</script>
+<script>
+
+/* ==========================================================
+ * 视图：统计与复盘（nav:false，从「象限 → 时间统计 → 看统计」进入）
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+
+  /** 周期：今天 / 本周 / 本月 / 本学期（自然日历口径，见 store.js 的 RANGES） */
+  var RANGE_KEYS = ['day', 'week', 'month', 'term'];
+  var curRange = 'week';
+  /** 图表类型：pie 饼状图 / bar 方形图 */
+  var chartType = 'bar';
+  /** 是否展开对比 */
+  var showCompare = false;
+
+  function hmText(min) {
+    min = Math.round(min);
+    var h = Math.floor(min / 60), m = min % 60;
+    if (h <= 0) return m + ' 分';
+    return h + ' 小时 ' + (m ? m + ' 分' : '');
+  }
+
+  function hmShort(min) {
+    if (min < 60) return Math.round(min) + 'm';
+    var h = min / 60;
+    return (h >= 10 ? Math.round(h) : Math.round(h * 10) / 10) + 'h';
+  }
+
+  function md(s) { return s ? s.slice(5).replace('-', '/') : ''; }
+
+  var view = {
+    id: 'stats',
+    name: '统计',
+    icon: V.icons.chart,
+    title: '统计与复盘',
+    order: 60,
+    nav: false,
+
+    root: null,
+
+    mount: function (host) {
+      this.root = el('section', { class: 'view', id: 'view-stats' });
+      host.appendChild(this.root);
+      this.render();
+      return this.root;
+    },
+
+    onEnter: function () { this.render(); },
+
+    render: function () {
+      var root = this.root;
+      root.innerHTML = '';
+
+      var r = rangeDates(curRange);
+      // 学期还没开学：「本学期」区间会退化成今天，需要单独说清楚
+      var sem = Store.currentSemester();
+      var semStart = sem && sem.startDate ? sem.startDate : '';
+      var termNotStarted = curRange === 'term' && semStart && semStart > DateUtil.toStr(DateUtil.today());
+
+      /* ---------- 周期切换 ---------- */
+      var bar = el('div', { class: 'week-bar', style: { marginBottom: '12px' } }, [
+        el('div', { class: 'week-label' }, [
+          el('span', { text: RANGES[curRange].name + '统计' }),
+          el('small', { text: md(r.from) + ' – ' + md(r.to) + ' · ' + r.days + ' 天' })
+        ]),
+        V.rangeTabs(curRange, function (k) { curRange = k; view.render(); }, RANGE_KEYS)
+      ]);
+      root.appendChild(bar);
+
+      if (termNotStarted) {
+        root.appendChild(el('div', { class: 'card' }, [
+          V.empty(V.icons.calendar, '本学期还没开始',
+            '学期开始日是 ' + semStart + '，现在统计不到任何东西。可以在「设置 → 学期」里改一下开学日期。')
+        ]));
+        return;
+      }
+
+      var st = Store.compareStat(curRange, r);
+
+      /* ---------- 顶部四个数 ---------- */
+      var rec = st.cmp ? st.cmp.recorded : null;
+      var cards = [
+        { label: '已记录', value: hmText(st.cur.recorded), color: 'var(--primary)', big: true,
+          cmp: rec, unit: 'min' },
+        { label: '日均记录', value: hmText(perDay(st.cur.recorded, st.cur.days)), color: 'var(--primary)',
+          cmp: rec, unit: 'perday' },
+        { label: '睡眠日均', value: hmText(perDay(segMinutes(st.cur.segments, 'sleep'), st.cur.days)),
+          color: '#6366f1', cmp: st.cmp && st.cmp.sleep, unit: 'perday' },
+        { label: '上课日均', value: hmText(perDay(segMinutes(st.cur.segments, 'course'), st.cur.days)),
+          color: '#f59e0b', cmp: st.cmp && st.cmp.course, unit: 'perday' }
+      ];
+      var grid = el('div', { class: 'cp-stat-grid' });
+      cards.forEach(function (c) {
+        var card = el('div', { class: 'cp-stat-cell' }, [
+          el('div', { class: 'cp-stat-label', text: c.label }),
+          el('div', { class: 'cp-stat-value', style: { color: c.color }, text: c.value })
+        ]);
+        if (showCompare && c.cmp) {
+          card.appendChild(cmpChip(c.cmp, c.unit));
+        }
+        grid.appendChild(card);
+      });
+      root.appendChild(grid);
+
+      /* ---------- 对比开关 ---------- */
+      var cmpRow = el('div', { class: 'cp-cmp-row' });
+      var canCompare = !!st.cmp;
+      cmpRow.appendChild(el('button', {
+        class: 'cp-cmp-toggle' + (showCompare ? ' is-on' : '') + (canCompare ? '' : ' is-off'),
+        onclick: function () {
+          if (!canCompare) return;
+          showCompare = !showCompare;
+          view.render();
+        }
+      }, [
+        el('i'),
+        showCompare ? '正在对比' : '与上一周期对比',
+        canCompare ? '' : '（本学期没有可比的上一段）'
+      ]));
+      root.appendChild(cmpRow);
+
+      if (showCompare && st.prevRange) {
+        root.appendChild(el('div', {
+          class: 'cp-cmp-hint',
+          text: '参照区间：' + md(st.prevRange.from) + ' – ' + md(st.prevRange.to) +
+                '（' + st.prevRange.days + ' 天）。两段天数不一样，所以只比日均，不比总量。'
+        }));
+      }
+
+      /* ---------- 时间去向 ---------- */
+      root.appendChild(chartCard(st));
+
+      /* ---------- 对比明细 ---------- */
+      if (showCompare && st.cmp) {
+        root.appendChild(compareTable(st));
+      }
+
+      /* ---------- 周热力条 ---------- */
+      root.appendChild(heatCard(st));
+
+      /* ---------- 逐日记录量 ----------
+         只在 8–35 天时给：更短的话上面已经有逐日热力条，更长的话
+         chartDaily 会自动聚合成周，和上面的周热力条重复，还容易被误读成「一天 69 小时」。 */
+      if (st.cur.days >= 8 && st.cur.days <= 35) {
+        root.appendChild(dailyCard(st.cur));
+      }
+
+      /* ---------- 口径说明 ---------- */
+      root.appendChild(el('div', { class: 'card cp-stats-note' }, [
+        el('div', { class: 'cp-stats-note-title', text: '这些数字是怎么算的' }),
+        el('div', { class: 'cp-stats-note-body' }, [
+          el('p', { text: '「已记录」= 睡眠 + 上课 + 日程 + 活动 + 用餐的总时长。一天 1440 分钟，剩下的算未记录。' }),
+          el('p', { text: '上课按「当前课表 + 当天是第几周」推算。所以改了课表以后，过去几周的上课时长会跟着变——这是推算的代价，不是 bug。' }),
+          el('p', { text: '睡眠按实际时刻归属：23:00 睡、7:00 醒，前一天算 1 小时、后一天算 7 小时。这样「今天睡了多久」和现实一致，代价是单看某天不会显示整觉长度。' }),
+          el('p', { text: '「今天」只算到此刻之前的整天数据，不会把还没过的时间算成未记录。' })
+        ])
+      ]));
+    },
+
+    focusRecord: function (type, id) {
+      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
+    }
+  };
+
+  function segMinutes(segments, key) {
+    for (var i = 0; i < segments.length; i++) if (segments[i].key === key) return segments[i].minutes;
+    return 0;
+  }
+
+  /** 对比小标签：涨红跌绿不合适（时间不是股票），统一用「多了/少了」+ 中性色 */
+  function cmpChip(c, unit) {
+    var diff = unit === 'min' ? null : c.diffPerDay;
+    var pct = c.pct;
+    if (unit === 'min') {
+      // 总量卡片：换算成日均再比，否则「本月 30 天 vs 上月 28 天」永远显示变多
+      return el('div', { class: 'cp-cmp-chip is-flat', text: '区间不同，请看日均' });
+    }
+    var flat = Math.abs(diff) < 1;
+    var up = diff > 0;
+    var text = flat ? '与上期持平'
+      : (up ? '日均多 ' : '日均少 ') + hmText(Math.abs(diff));
+    if (!flat && pct !== null) text += '（' + (up ? '+' : '') + pct + '%）';
+    return el('div', {
+      class: 'cp-cmp-chip ' + (flat ? 'is-flat' : (up ? 'is-up' : 'is-down')),
+      text: text
+    });
+  }
+
+  /* ==========================================================
+   * 时间去向
+   * ========================================================== */
+  function chartCard(st) {
+    var cur = st.cur;
+    var card = el('div', { class: 'card cp-chart-card' });
+
+    var head = el('div', { class: 'section-title' }, ['时间去向']);
+    head.appendChild(el('div', { class: 'dim-tabs' }, [
+      { v: 'bar', n: '方形图' },
+      { v: 'pie', n: '饼状图' }
+    ].map(function (o) {
+      return el('button', {
+        class: 'dim-tab' + (chartType === o.v ? ' active' : ''),
+        text: o.n,
+        onclick: function () { chartType = o.v; view.render(); }
+      });
+    })));
+    card.appendChild(head);
+
+    card.appendChild(el('div', {
+      class: 'cp-chart-sub',
+      text: '已记录 ' + hmText(cur.recorded) + ' · 占区间 ' + cur.pct + '%'
+    }));
+
+    var recordedSegs = cur.segments.filter(function (s) { return s.key !== 'idle' && s.minutes > 0; });
+    var items = recordedSegs.map(function (s) {
+      return { label: s.label, value: s.minutes, color: s.color, key: s.key };
+    });
+
+    if (!items.length) {
+      card.appendChild(V.empty(V.icons.chart, '这段时间还没有任何记录',
+        '在「象限」里记录睡眠、饮食和活动，这里就会长出东西来。'));
+      return card;
+    }
+
+    if (chartType === 'pie') {
+      card.appendChild(V.chartPie(items, {
+        centerTop: hmShort(cur.recorded), centerSub: '已记录', fmt: hmText
+      }));
+    } else {
+      card.appendChild(V.chartBars(items, { fmt: hmShort, maxCols: 6 }));
+    }
+    // 两种图都给一份图例：饼图只靠悬停太隐蔽，方形图本身也不显示占比
+    card.appendChild(legendOf(items, cur.recorded));
+    return card;
+  }
+
+  /** 图例：色块 + 名称 + 时长 + 占比 */
+  function legendOf(items, total) {
+    var base = total || 1;
+    var box = el('div', { class: 'cp-legend' });
+    items.forEach(function (it) {
+      box.appendChild(el('div', { class: 'cp-legend-row' }, [
+        el('i', { style: { background: it.color } }),
+        el('span', { class: 'cp-legend-name', text: it.label }),
+        el('span', { class: 'cp-legend-val', text: hmText(it.value) }),
+        el('span', { class: 'cp-legend-pct', text: Math.round(it.value / base * 100) + '%' })
+      ]));
+    });
+    return box;
+  }
+
+  /* ==========================================================
+   * 对比明细表
+   * ========================================================== */
+  function compareTable(st) {
+    var keys = [
+      { k: 'sleep', n: '睡眠' }, { k: 'course', n: '上课' },
+      { k: 'event', n: '日程' }, { k: 'activity', n: '活动' }, { k: 'meal', n: '用餐' }
+    ];
+    var card = el('div', { class: 'card cp-chart-card' });
+    card.appendChild(el('div', { class: 'section-title' }, ['和上一周期比']));
+
+    var tbl = el('div', { class: 'cp-cmp-table' });
+    tbl.appendChild(el('div', { class: 'cp-cmp-tr cp-cmp-th' }, [
+      el('span', { text: '项目' }),
+      el('span', { text: '本期日均' }),
+      el('span', { text: '上期日均' }),
+      el('span', { text: '差' })
+    ]));
+    keys.forEach(function (o) {
+      var c = st.cmp[o.k];
+      if (!c) return;
+      var diff = c.diffPerDay;
+      var flat = Math.abs(diff) < 1;
+      tbl.appendChild(el('div', { class: 'cp-cmp-tr' }, [
+        el('span', { text: o.n }),
+        el('span', { text: hmText(c.curPerDay) }),
+        el('span', { class: 'is-dim', text: hmText(c.prevPerDay) }),
+        el('span', {
+          class: 'is-diff' + (flat ? ' is-flat' : (diff > 0 ? ' is-up' : ' is-down')),
+          text: flat ? '—' : (diff > 0 ? '+' : '−') + hmText(Math.abs(diff))
+        })
+      ]));
+    });
+    card.appendChild(tbl);
+    card.appendChild(el('div', {
+      class: 'cp-stats-note-inline',
+      text: '只比日均。两段天数不同（比如 2 月和 3 月），比总量会把「多了一天」误读成「花得更多」。'
+    }));
+    return card;
+  }
+
+  /**
+   * 热力等级 0–4。
+   * 用**绝对刻度**（按一天记满 16 小时算满格）而不是「本次最大值归一化」：
+   * 归一化的问题是各周都差不多时，全都会顶到最深一档，看着像「每周都记满了」。
+   * 绝对刻度下颜色本身就是「这天记录得多不多」的信息，跨周期也稳定。
+   */
+  function heatLevel(perDayMin) {
+    if (perDayMin <= 0) return 0;
+    var ratio = perDayMin / (16 * 60);
+    if (ratio < 0.2) return 1;
+    if (ratio < 0.4) return 2;
+    if (ratio < 0.65) return 3;
+    return 4;
+  }
+
+  /* ==========================================================
+   * 热力条
+   *   跨度够长（>=2 周）→ 按周分组，一格一周
+   *   跨度短（本周 / 今天）→ 按天分组，一格一天，否则只有一格没什么可看
+   * 颜色一律按**日均**着色：首尾的不满周如果按总量算会显得特别浅，误导。
+   * ========================================================== */
+  function heatCard(st) {
+    var card = el('div', { class: 'card cp-chart-card' });
+    var days = st.cur.daily;
+    var byWeek = days.length >= 14;
+
+    card.appendChild(el('div', { class: 'section-title' }, [
+      byWeek ? '每周记录了多少' : '每天记录了多少'
+    ]));
+
+    var groups = [];
+    if (byWeek) {
+      var curW = null;
+      days.forEach(function (d) {
+        var dow = DateUtil.isoDow(d.d);
+        if (!curW || dow === 1) { curW = { cells: [] }; groups.push(curW); }
+        curW.cells.push(d);
+      });
+      if (groups.length && groups[0].cells.length < 7) groups[0].partial = true;
+      if (groups.length > 1 && groups[groups.length - 1].cells.length < 7) {
+        groups[groups.length - 1].partial = true;
+      }
+    } else {
+      days.forEach(function (d) { groups.push({ cells: [d], partial: false }); });
+    }
+
+    groups.forEach(function (g) {
+      var sum = g.cells.reduce(function (a, b) { return a + b.recorded; }, 0);
+      g.perDay = sum / g.cells.length;
+    });
+
+    var strip = el('div', { class: 'cp-heat' + (byWeek ? '' : ' cp-is-daily') });
+    groups.forEach(function (g, i) {
+      var level = heatLevel(g.perDay);
+      var label = byWeek ? '第 ' + (i + 1) + ' 周' : md(g.cells[0].date);
+      var tip = label + '：日均 ' + hmText(g.perDay) +
+        (g.partial ? '（不完整周，只有 ' + g.cells.length + ' 天）' : '');
+      strip.appendChild(el('div', {
+        class: 'cp-heat-week cp-lv-' + level + (g.partial ? ' cp-is-partial' : ''),
+        title: tip
+      }, [
+        el('b', { text: g.perDay > 0 ? Math.round(g.perDay / 60 * 10) / 10 + 'h' : '—' }),
+        el('span', { text: byWeek ? g.cells.length + '天' : String(g.cells[0].d.getDate()) })
+      ]));
+    });
+    card.appendChild(strip);
+
+    // 一格代表什么，说清楚
+    card.appendChild(el('div', {
+      class: 'cp-stats-note-inline',
+      text: byWeek
+        ? '一格一周，颜色深浅按这一周的每天平均记录量算，刻度固定（一天记满 16 小时为最深）。' +
+          '首尾两周天数不满 7 天，用虚线框标出来。'
+        : '一格一天，颜色深浅按当天的记录量算，刻度固定（记满 16 小时为最深）。' +
+          '跨度短的时候按周分组只剩一两格，看不出趋势，所以改成逐日。'
+    }));
+
+    if (byWeek && groups.length > 1 && groups[0].partial && groups[groups.length - 1].partial) {
+      card.appendChild(el('div', {
+        class: 'cp-stats-note-inline',
+        text: '这段区间跨了 ' + groups.length + ' 个自然周，头尾都不满 7 天，中间几周才是完整的。'
+      }));
+    }
+    return card;
+  }
+
+  /* ==========================================================
+   * 每日记录量柱状
+   * ========================================================== */
+  function dailyCard(cur) {
+    var card = el('div', { class: 'card cp-chart-card' });
+    card.appendChild(el('div', { class: 'section-title' }, ['逐日记录量']));
+    var daily = cur.daily.map(function (d) {
+      return { date: d.date, d: d.d, value: Math.round(d.recorded / 60 * 10) / 10 };
+    });
+    card.appendChild(V.chartDaily(daily, {
+      color: 'var(--primary)',
+      activeDate: DateUtil.toStr(DateUtil.today()),
+      fmt: function (v) { return v + 'h'; }
+    }));
+    return card;
+  }
+
+  /* ==========================================================
+   * 入口：从别处调用（象限页「看统计」）
+   * ========================================================== */
+  global.heatLevel = heatLevel;
+
+  global.openStats = function (key) {
+    if (key && RANGES[key]) curRange = key;
+    App.go('stats');
+  };
+
+  (window.VIEWS = window.VIEWS || []).push(view);
+})(window);
 
 </script>
 <script>
@@ -16340,7 +17158,7 @@ window.AK_OPS = [
   var V = UI;
   var el = V.el;
 
-  /** 统计范围：day / week / month / season */
+  /** 统计范围：day / week / month / recent30（见 store.js 的 LEDGER_RANGES） */
   var curRange = 'month';
   /** 构成统计维度：cat 分类 / tag 标签 */
   var dim = 'cat';
@@ -16394,7 +17212,7 @@ window.AK_OPS = [
       /* ---------- 概览（随范围） ---------- */
       root.appendChild(el('div', { class: 'task-summary three' }, [
         V.statCard(money(st.expense),
-          curRange === 'day' ? '今日支出' : '近' + RANGES[curRange].name + '支出', 'var(--red)'),
+          RANGES[curRange].name + '支出', 'var(--red)'),
         V.statCard(money(st.income), '收入', 'var(--green)'),
         V.statCard(money(st.balance), '结余', st.balance < 0 ? 'var(--red)' : 'var(--primary)', 'is-big')
       ]));
@@ -16405,7 +17223,7 @@ window.AK_OPS = [
           el('span', { text: RANGES[curRange].name + '账单' }),
           el('small', { text: r.from.slice(5) + ' – ' + r.to.slice(5) + ' · ' + all.length + ' 笔' })
         ]),
-        V.rangeTabs(curRange, function (k) { curRange = k; tagSel = ''; view.render(); })
+        V.rangeTabs(curRange, function (k) { curRange = k; tagSel = ''; view.render(); }, LEDGER_RANGES)
       ]);
       root.appendChild(bar);
 
@@ -16703,7 +17521,7 @@ window.AK_OPS = [
               Store.addLedger(d);
               // 若记录的日期不在当前范围内，自动切到能覆盖它的范围
               var rr = rangeDates(curRange);
-              if (d.date < rr.from || d.date > rr.to) curRange = 'season';
+              if (d.date < rr.from || d.date > rr.to) curRange = 'recent30';
             }
             m.close();
             UI.toast(isEdit ? '已更新' : '已记一笔');

@@ -9,7 +9,7 @@
   var V = UI;
   var el = V.el;
 
-  /** 统计范围：day / week / month / season */
+  /** 统计范围：day / week / month / recent30（见 store.js 的 LEDGER_RANGES） */
   var curRange = 'month';
   /** 构成统计维度：cat 分类 / tag 标签 */
   var dim = 'cat';
@@ -63,7 +63,7 @@
       /* ---------- 概览（随范围） ---------- */
       root.appendChild(el('div', { class: 'task-summary three' }, [
         V.statCard(money(st.expense),
-          curRange === 'day' ? '今日支出' : '近' + RANGES[curRange].name + '支出', 'var(--red)'),
+          RANGES[curRange].name + '支出', 'var(--red)'),
         V.statCard(money(st.income), '收入', 'var(--green)'),
         V.statCard(money(st.balance), '结余', st.balance < 0 ? 'var(--red)' : 'var(--primary)', 'is-big')
       ]));
@@ -74,7 +74,7 @@
           el('span', { text: RANGES[curRange].name + '账单' }),
           el('small', { text: r.from.slice(5) + ' – ' + r.to.slice(5) + ' · ' + all.length + ' 笔' })
         ]),
-        V.rangeTabs(curRange, function (k) { curRange = k; tagSel = ''; view.render(); })
+        V.rangeTabs(curRange, function (k) { curRange = k; tagSel = ''; view.render(); }, LEDGER_RANGES)
       ]);
       root.appendChild(bar);
 
@@ -372,7 +372,7 @@
               Store.addLedger(d);
               // 若记录的日期不在当前范围内，自动切到能覆盖它的范围
               var rr = rangeDates(curRange);
-              if (d.date < rr.from || d.date > rr.to) curRange = 'season';
+              if (d.date < rr.from || d.date > rr.to) curRange = 'recent30';
             }
             m.close();
             UI.toast(isEdit ? '已更新' : '已记一笔');

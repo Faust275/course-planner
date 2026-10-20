@@ -455,6 +455,22 @@
   var listeners = [];
   var state = null;
 
+  /**
+   * 数据版本号：每次写操作 +1。
+   * 统计结果都按它做缓存键，写一次就整体失效，省得在每个写函数里手动清缓存
+   * （手动清必然漏，漏了就会出现「改了课表，统计还是旧的」）。
+   */
+  var rev = 0;
+  /** 单日统计缓存：{ '2025-01-01': { rev, val } } */
+  var dayStatCache = {};
+  /** 区间统计缓存：{ 'from|to': { rev, val } } */
+  var rangeStatCache = {};
+
+  function touch() {
+    rev++;
+    return rev;
+  }
+
   function uid(prefix) {
     return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
@@ -466,6 +482,36 @@
     var a = TimeUtil.toMin(start), b = TimeUtil.toMin(end);
     if (b <= a) return [[a, 1440], [0, b]];
     return [[a, b]];
+  }
+
+  /**
+   * 某一天「实际睡了多少分钟」。
+   * 睡眠记录挂在入睡那天（date），所以一天真正睡着的时间由两段拼成：
+   *   1. 昨晚（date-1）睡下、跨过午夜、今天早上醒来 —— 取 [00:00, end]
+   *   2. 今晚（date）睡下、可能跨到明天 —— 取 [start, 24:00]
+   * 这样「1/1 睡 23:00–7:00」不会在 1/1 记 8 小时、1/2 记 0 小时，
+   * 而是 1/1 记 1 小时、1/2 记 7 小时，日内分布才和现实一致。
+   * 同一夜的多段记录先合并，避免两段重叠被重复计时。
+   * @param {string} _next 保留位（旧调用方传了次日日期），目前不使用
+   */
+  function sleepByNight(sleeps, dateStr, _next) {
+    var d = DateUtil.parse(dateStr);
+    if (!d) return 0;
+    var prev = DateUtil.toStr(DateUtil.addDays(d, -1));
+    var ranges = [];
+    sleeps.forEach(function (r) {
+      if (!r || !r.start || !r.end) return;
+      var a = TimeUtil.toMin(r.start), b = TimeUtil.toMin(r.end);
+      var overnight = b <= a;
+      if (r.date === dateStr) {
+        // 今晚这一段：只取今天之内能落下的部分
+        ranges.push([a, overnight ? 1440 : b]);
+      } else if (r.date === prev && overnight) {
+        // 昨晚跨过来：只取今天早上那半截
+        ranges.push([0, b]);
+      }
+    });
+    return mergeTotal(ranges);
   }
 
   /** 合并重叠区间后返回总分钟数（避免重复计时） */
@@ -495,19 +541,116 @@
   };
 
   /* ===== 统计范围 ===== */
+  /**
+   * 两种口径：
+   *   cal  —— 自然日历（今天 / 本周一起算 / 本月 1 号起算 / 本学期），用于统计与复盘
+   *   win  —— 滑动窗口（最近 N 天，含今天），用于记账这种「近 30 天花了多少」的场景
+   * days 只在 win 口径下有意义；cal 口径的实际天数由日历决定，见 rangeDates()。
+   */
   var RANGES = {
-    day:   { key: 'day',   name: '今天', days: 1 },
-    week:  { key: 'week',  name: '一周', days: 7 },
-    month: { key: 'month', name: '一月', days: 30 },
-    season:{ key: 'season',name: '一季', days: 90 }
+    day:   { key: 'day',   name: '今天', mode: 'cal', days: 1 },
+    week:  { key: 'week',  name: '本周', mode: 'cal', days: 7 },
+    month: { key: 'month', name: '本月', mode: 'cal', days: 30 },
+    term:  { key: 'term',  name: '本学期', mode: 'cal', days: 120 },
+    recent7:  { key: 'recent7',  name: '最近 7 天',  mode: 'win', days: 7 },
+    recent30: { key: 'recent30', name: '最近 30 天', mode: 'win', days: 30 }
   };
 
-  /** 日期区间 [from, to]（含两端） */
-  function rangeDates(key) {
-    var n = (RANGES[key] || RANGES.week).days;
-    var to = DateUtil.today();
-    var from = DateUtil.addDays(to, -(n - 1));
-    return { from: DateUtil.toStr(from), to: DateUtil.toStr(to), days: n, key: key };
+  /** 记账页用的四档（自然口径为主，末档保留滑动窗口） */
+  var LEDGER_RANGES = ['day', 'week', 'month', 'recent30'];
+
+  /** 自然周 / 自然月的起止（周一为一周之始） */
+  function weekBounds(d) {
+    d = d || DateUtil.today();
+    var s = DateUtil.weekStart(d);
+    return { from: s, to: DateUtil.addDays(s, 6) };
+  }
+  function monthBounds(d) {
+    d = d || DateUtil.today();
+    var s = new Date(d.getFullYear(), d.getMonth(), 1);
+    var e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return { from: s, to: e };
+  }
+
+  /**
+   * 日期区间（含两端）。
+   * 「今天 / 本周 / 本月」的 to 一律截到今天——统计不该把未来的空白天算进分母。
+   * @param {string} key RANGES 的 key
+   * @param {object} [sem] 学期对象，默认当前学期（term 口径用）
+   */
+  function rangeDates(key, sem) {
+    var R = RANGES[key] || RANGES.week;
+    var today = DateUtil.today();
+
+    if (R.mode === 'win') {
+      var wf = DateUtil.addDays(today, -(R.days - 1));
+      return { from: DateUtil.toStr(wf), to: DateUtil.toStr(today), days: R.days, key: R.key, mode: 'win' };
+    }
+
+    var from = today, to = today;
+    if (R.key === 'day') {
+      from = today; to = today;
+    } else if (R.key === 'week') {
+      var wb = weekBounds(today);
+      from = wb.from; to = to < wb.to ? today : wb.to;
+    } else if (R.key === 'month') {
+      var mb = monthBounds(today);
+      from = mb.from; to = today < mb.to ? today : mb.to;
+    } else if (R.key === 'term') {
+      var s = sem || (state && Store.currentSemester ? Store.currentSemester() : null);
+      var start = (s && DateUtil.parse(s.startDate)) || DateUtil.weekStart(today);
+      var weeks = (s && s.weeks) || 20;
+      var end = DateUtil.addDays(start, weeks * 7 - 1);
+      from = start;
+      // 学期还没开学：空区间，由调用方显示提示
+      if (today < start) { from = today; to = today; }
+      else to = today < end ? today : end;
+    }
+    var n = DateUtil.diffDays(to, from) + 1;
+    return { from: DateUtil.toStr(from), to: DateUtil.toStr(to), days: Math.max(1, n), key: R.key, mode: 'cal' };
+  }
+
+  /**
+   * 参照区间：拿同样的口径往前挪一个周期，用来做「比上次」。
+   * 今天 → 昨天；本周 → 上周；本月 → 上月；本学期 → 无（返回 null）；
+   * 滑动窗口 → 等长的上一段，保证天数一致，可以直接比总量。
+   * 自然口径的上月天数可能与本月不同，比较时请统一换成日均。
+   */
+  function compareRange(key, r) {
+    r = r || rangeDates(key);
+    var from = DateUtil.parse(r.from), to = DateUtil.parse(r.to);
+    if (!from || !to) return null;
+    if (r.key === 'day') {
+      var y = DateUtil.addDays(from, -1);
+      return { from: DateUtil.toStr(y), to: DateUtil.toStr(y), days: 1, key: 'day', mode: 'cal' };
+    }
+    if (r.key === 'week') {
+      var pw = weekBounds(DateUtil.addDays(from, -1));
+      return { from: DateUtil.toStr(pw.from), to: DateUtil.toStr(pw.to), days: 7, key: 'week', mode: 'cal' };
+    }
+    if (r.key === 'month') {
+      var pm = monthBounds(DateUtil.addDays(from, -1));
+      // 参照月同样截到「同一天数」，避免月末几天没得比
+      var span = DateUtil.diffDays(to, from);
+      var pmTo = DateUtil.addDays(pm.from, span);
+      if (pmTo > pm.to) pmTo = pm.to;
+      return {
+        from: DateUtil.toStr(pm.from), to: DateUtil.toStr(pmTo),
+        days: DateUtil.diffDays(pmTo, pm.from) + 1, key: 'month', mode: 'cal'
+      };
+    }
+    if (r.key === 'term') return null;   // 没有「上一学期」的可靠数据，不做比较
+    // 滑动窗口：紧邻的等长区间
+    var n = r.days;
+    var pf = DateUtil.addDays(from, -n);
+    var pt = DateUtil.addDays(from, -1);
+    return { from: DateUtil.toStr(pf), to: DateUtil.toStr(pt), days: n, key: r.key, mode: 'win' };
+  }
+
+  /** 日均（保留一位小数），供跨长度区间比较 */
+  function perDay(total, days) {
+    if (!days) return 0;
+    return Math.round(total / days * 10) / 10;
   }
 
   /** 区间内每天的日期字符串 */
@@ -1435,6 +1578,7 @@
     },
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () {
+      touch();          // 统计缓存随写操作整体失效
       this.save();
       // 桌面小组件：把快照推给原生桥。仅当运行在安卓壳（存在 window.AndroidBridge）时生效，
       // Web 版 / 普通浏览器里 AndroidBridge 不存在，整段被 try/catch 安全跳过，零副作用。
@@ -2702,10 +2846,11 @@
         .sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
     },
 
+    /** 睡眠总分钟（按实际时刻归属：跨午夜的部分算到后一天） */
     sleepMinutes: function (dateStr) {
-      return mergeTotal(this.sleepsOf(dateStr).reduce(function (acc, r) {
-        return acc.concat(expandRange(r.start, r.end));
-      }, []));
+      var d = DateUtil.parse(dateStr) || DateUtil.today();
+      var next = DateUtil.toStr(DateUtil.addDays(d, 1));
+      return sleepByNight(state.sleeps, dateStr, next);
     },
 
   /* ===== 番茄钟 / 积分 / 养树 ===== */
@@ -3374,8 +3519,19 @@
       return { running: running, finished: finished, todayPending: todayPending, total: state.plans.length };
     },
 
-    /** 区间内的时间去向汇总 */
+    /** 区间内的时间去向汇总（按 from|to 缓存，整学期的重复渲染不再逐天重算） */
     rangeStat: function (from, to) {
+      var ck = from + '|' + to;
+      var hit = rangeStatCache[ck];
+      if (hit && hit.rev === rev) return hit.val;
+      var val = this._rangeStat(from, to);
+      // 简单上限：翻很多年后缓存会涨，超过 64 组就清空重来
+      if (Object.keys(rangeStatCache).length > 64) rangeStatCache = {};
+      rangeStatCache[ck] = { rev: rev, val: val };
+      return val;
+    },
+
+    _rangeStat: function (from, to) {
       var dates = eachDate(from, to);
       var keys = ['sleep', 'course', 'event', 'activity', 'meal', 'idle'];
       var sum = {}, daily = [];
@@ -3389,7 +3545,7 @@
           sum[seg.key] += seg.minutes;
           if (seg.key !== 'idle') per += seg.minutes;
         });
-        daily.push({ date: ds, d: DateUtil.parse(ds), recorded: per, idle: sum.idle });
+        daily.push({ date: ds, d: DateUtil.parse(ds), recorded: per, idle: Math.max(0, 1440 - per) });
       }, this);
 
       var labels = { sleep: '睡眠', course: '上课', event: '日程', activity: '活动', meal: '用餐', idle: '未记录' };
@@ -3407,6 +3563,45 @@
         pct: total ? Math.round(recorded / total * 100) : 0,
         days: dates.length
       };
+    },
+
+    /**
+     * 带参照的区间统计：拿同口径的上一个周期做对比。
+     * 两段天数可能不等（2 月和 3 月），所以只输出**日均**，不输出总量差值——
+     * 「本月比上月多花了 300」可能只是因为多了一天。
+     */
+    compareStat: function (key, r) {
+      r = r || rangeDates(key);
+      var cur = this.rangeStat(r.from, r.to);
+      var pr = compareRange(key, r);
+      if (!pr) return { cur: cur, prev: null, cmp: null, range: r, prevRange: null };
+      var prev = this.rangeStat(pr.from, pr.to);
+      var keys = ['sleep', 'course', 'event', 'activity', 'meal'];
+      var cmp = {};
+      keys.forEach(function (k) {
+        var a = 0, b = 0;
+        cur.segments.forEach(function (s) { if (s.key === k) a = s.minutes; });
+        prev.segments.forEach(function (s) { if (s.key === k) b = s.minutes; });
+        var da = perDay(a, cur.days), db = perDay(b, prev.days);
+        cmp[k] = {
+          cur: a, prev: b,
+          curPerDay: da, prevPerDay: db,
+          diffPerDay: Math.round((da - db) * 10) / 10,
+          // 相对变化：参照期为 0 时不算百分比，返回 null 让界面显示「新增」
+          pct: db > 0 ? Math.round((da - db) / db * 100) : null
+        };
+      });
+      cmp.recorded = {
+        cur: cur.recorded, prev: prev.recorded,
+        curPerDay: perDay(cur.recorded, cur.days),
+        prevPerDay: perDay(prev.recorded, prev.days),
+        diffPerDay: Math.round((perDay(cur.recorded, cur.days) - perDay(prev.recorded, prev.days)) * 10) / 10,
+        pct: prev.recorded > 0
+          ? Math.round((perDay(cur.recorded, cur.days) - perDay(prev.recorded, prev.days)) /
+                       perDay(prev.recorded, prev.days) * 100)
+          : null
+      };
+      return { cur: cur, prev: prev, cmp: cmp, range: r, prevRange: pr };
     },
 
     /** 区间内的账目汇总 */
@@ -3819,8 +4014,19 @@
     /**
      * 某天的时间分配
      * @returns {segments:[{key,label,minutes,color}], idle, courses, events}
+     * 结果按「日期 + 数据版本号」缓存：一天算一次，翻看整学期也不会重复算 140 遍。
+     * 任何写操作都会让版本号 +1（见 touch()），缓存自然失效，不用逐处清缓存。
      */
     dayStat: function (dateStr) {
+      dateStr = dateStr || DateUtil.toStr(DateUtil.today());
+      var hit = dayStatCache[dateStr];
+      if (hit && hit.rev === rev) return hit.val;
+      var val = this._dayStat(dateStr);
+      dayStatCache[dateStr] = { rev: rev, val: val };
+      return val;
+    },
+
+    _dayStat: function (dateStr) {
       var d = DateUtil.parse(dateStr) || DateUtil.today();
       var dow = DateUtil.isoDow(d);
       var weekNo = this.weekOf(d);
@@ -3984,7 +4190,13 @@
   global.POMO = POMO;
   global.LEDGER_CATS = LEDGER_CATS;
   global.RANGES = RANGES;
+  global.LEDGER_RANGES = LEDGER_RANGES;
   global.rangeDates = rangeDates;
+  global.compareRange = compareRange;
+  global.perDay = perDay;
+  global.weekBounds = weekBounds;
+  global.monthBounds = monthBounds;
+  global.sleepByNight = sleepByNight;
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;

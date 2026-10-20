@@ -138,6 +138,31 @@ const DEFAULT_OPTSSrc = (() => {
 })();
 
 // 12) 子任务（store.js）
+// 统计口径：RANGES / rangeDates / compareRange / perDay / weekBounds / monthBounds / sleepByNight / heatLevel
+const STATS_ANCHOR = sliceFrom('var RANGES = {');
+const RANGESSrc = (() => {
+  const i = sliceFrom('var RANGES = {');
+  return 'var RANGES = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+})();
+const LEDGER_RANGESSrc = (() => {
+  const i = sliceFrom('var LEDGER_RANGES = [');
+  const open = html.indexOf('[', i);
+  let depth = 0, j = open;
+  for (; j < html.length; j++) {
+    if (html[j] === '[') depth++;
+    else if (html[j] === ']') { depth--; if (depth === 0) break; }
+  }
+  return 'var LEDGER_RANGES = ' + html.slice(open, j + 1) + ';';
+})();
+const weekBoundsSrc = extractFnFrom('weekBounds', STATS_ANCHOR);
+const monthBoundsSrc = extractFnFrom('monthBounds', STATS_ANCHOR);
+const rangeDatesSrc = extractFnFrom('rangeDates', STATS_ANCHOR);
+const compareRangeSrc = extractFnFrom('compareRange', STATS_ANCHOR);
+const perDaySrc = extractFnFrom('perDay', STATS_ANCHOR);
+// sleepByNight 定义在 RANGES 之前（紧跟 expandRange），所以从头找
+const sleepByNightSrc = extractFnFrom('sleepByNight', 0);
+const heatLevelSrc = extractFnFrom('heatLevel', sliceFrom("id: 'stats'"));
+
 const SUBTASK_ANCHOR = sliceFrom('var SUBTASK_DEFAULTS = {');
 const SUBTASK_DEFAULTSSrc = (() => {
   const i = sliceFrom('var SUBTASK_DEFAULTS = {');
@@ -200,6 +225,25 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${hexToRgbSrc}
   ${tintSrc}
   ${roundRectSrc}
+  ${RANGESSrc}
+  ${LEDGER_RANGESSrc}
+  ${weekBoundsSrc}
+  ${monthBoundsSrc}
+  ${rangeDatesSrc}
+  ${compareRangeSrc}
+  ${perDaySrc}
+  ${sleepByNightSrc}
+  ${heatLevelSrc}
+  // rangeDates('term') 会读全局 state，这里给一个空壳，避免 ReferenceError
+  var state = { semesters: [{ id: 's1', startDate: '2026-08-24', weeks: 20 }], currentSemesterId: 's1' };
+  var Store = {
+    currentSemester: function () {
+      for (var i = 0; i < state.semesters.length; i++) {
+        if (state.semesters[i].id === state.currentSemesterId) return state.semesters[i];
+      }
+      return state.semesters[0];
+    }
+  };
   ${SUBTASK_DEFAULTSSrc}
   ${subOptsSrc}
   ${isChildSrc}
@@ -214,7 +258,9 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      hitsIn, describe, snippet, searchAll, groupResults,
                      nextDueDate, repeatExpired, sanitizeRepeat,
                      annivNext, wrapText, measure, hexToRgb, tint,
-                     subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS };
+                     subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
+                     RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
+                     weekBounds, monthBounds, sleepByNight, heatLevel };
 `;
 new Function('__LUNAR__', mod)(Lunar);
 const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
@@ -224,7 +270,9 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         hitsIn, describe, snippet, searchAll, groupResults,
         nextDueDate, repeatExpired, sanitizeRepeat,
         annivNext, wrapText, measure, hexToRgb, tint,
-        subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS } = globalThis.__T;
+        subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
+        RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
+        weekBounds, monthBounds, sleepByNight, heatLevel } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -1001,6 +1049,168 @@ console.log('子任务：isChild / childrenOf / subtaskProgress / childIds');
 
   eq('childIds 只收子任务', Object.keys(childIds(list)).sort(), ['c1', 'c2', 'c3', 'd1']);
   eq('childIds 不含父任务', childIds(list)['p'], undefined);
+}
+
+
+console.log('统计口径：RANGES / weekBounds / monthBounds / rangeDates');
+{
+  eq('今天口径是单日', RANGES.day.days, 1);
+  eq('本周是自然周（cal）', RANGES.week.mode, 'cal');
+  eq('本月是自然月（cal）', RANGES.month.mode, 'cal');
+  eq('本学期是 cal 口径', RANGES.term.mode, 'cal');
+  eq('最近 30 天是滑动窗口', RANGES.recent30.mode, 'win');
+  eq('记账四档', LEDGER_RANGES, ['day', 'week', 'month', 'recent30']);
+  eq('记账不再有 season', LEDGER_RANGES.indexOf('season'), -1);
+
+  // 2026-10-21 是周三
+  const wed = new Date(2026, 9, 21);
+  const wb = weekBounds(wed);
+  eq('自然周从周一开始', DateUtil.toStr(wb.from), '2026-10-19');
+  eq('自然周到周日结束', DateUtil.toStr(wb.to), '2026-10-25');
+
+  // 周日属于「本周」而不是下一周
+  const sun = new Date(2026, 9, 25);
+  eq('周日仍属本周', DateUtil.toStr(weekBounds(sun).from), '2026-10-19');
+
+  const mb = monthBounds(wed);
+  eq('自然月从 1 号开始', DateUtil.toStr(mb.from), '2026-10-01');
+  eq('自然月到月末', DateUtil.toStr(mb.to), '2026-10-31');
+
+  // 2 月闰年
+  eq('闰年 2 月 29 天', DateUtil.toStr(monthBounds(new Date(2028, 1, 10)).to), '2028-02-29');
+  eq('平年 2 月 28 天', DateUtil.toStr(monthBounds(new Date(2026, 1, 10)).to), '2026-02-28');
+}
+
+console.log('统计口径：rangeDates 的 to 截到今天，不把未来算进分母');
+{
+  // 今天 = 2026-10-21（周三），学期 8/24 开始
+  const rw = rangeDates('week');
+  eq('本周 from', rw.from, '2026-10-19');
+  eq('本周 to 今天（不是周日）', rw.to, '2026-10-21');
+  eq('本周天数 3', rw.days, 3);
+
+  const rm = rangeDates('month');
+  eq('本月 from 1 号', rm.from, '2026-10-01');
+  eq('本月 to 今天', rm.to, '2026-10-21');
+  eq('本月天数 21', rm.days, 21);
+
+  const rt = rangeDates('term');
+  eq('本学期 from 开学日', rt.from, '2026-08-24');
+  eq('本学期 to 今天', rt.to, '2026-10-21');
+
+  const r30 = rangeDates('recent30');
+  eq('最近 30 天含今天', r30.days, 30);
+  eq('最近 30 天 to', r30.to, '2026-10-21');
+  eq('最近 30 天 from', r30.from, '2026-09-22');
+
+  const rd = rangeDates('day');
+  eq('今天 from=to', rd.from, rd.to);
+
+  // 未知 key 回落 week，且不炸
+  eq('未知 key 回落本周', rangeDates('nope').key, 'week');
+}
+
+console.log('统计口径：compareRange 往前挪一个周期');
+{
+  const rw = rangeDates('week');
+  const pw = compareRange('week', rw);
+  eq('上周 from', pw.from, '2026-10-12');
+  eq('上周 to 周日（完整一周）', pw.to, '2026-10-18');
+  eq('上周 7 天', pw.days, 7);
+
+  const rd = compareRange('day');
+  eq('今天 → 昨天', [rd.from, rd.to, rd.days], ['2026-10-20', '2026-10-20', 1]);
+
+  // 本月只过了 21 天 → 上月也截到 21 天，否则「本月 vs 上月」永远输
+  const rm = rangeDates('month');
+  const pm = compareRange('month', rm);
+  eq('上月 from', pm.from, '2026-09-01');
+  eq('上月截到同样天数（21 天）', pm.to, '2026-09-21');
+  eq('上月比较段天数与本月一致', pm.days, rm.days);
+
+  // 1 月的上月是去年 12 月
+  const jan = { from: '2027-01-01', to: '2027-01-15', days: 15, key: 'month', mode: 'cal' };
+  const pjan = compareRange('month', jan);
+  eq('1 月的上月是去年 12 月', pjan.from, '2026-12-01');
+  eq('跨年上月截到 15 号', pjan.to, '2026-12-15');
+
+  // 本学期没有可比的上一段
+  eq('本学期不比较', compareRange('term', rangeDates('term')), null);
+
+  // 滑动窗口：紧邻的等长区间
+  const r30 = rangeDates('recent30');
+  const p30 = compareRange('recent30', r30);
+  eq('滑动窗口参照段等长', p30.days, 30);
+  eq('滑动窗口参照段紧邻前一段', p30.to, '2026-09-21');
+  eq('滑动窗口参照段 from', p30.from, '2026-08-23');
+}
+
+console.log('统计口径：perDay 日均');
+{
+  eq('0 天安全', perDay(100, 0), 0);
+  eq('7 天 700 分钟 = 100', perDay(700, 7), 100);
+  eq('保留一位小数', perDay(100, 3), 33.3);
+  eq('四舍五入到一位', perDay(100, 7), 14.3);
+  eq('结果为 0', perDay(0, 30), 0);
+}
+
+console.log('统计口径：sleepByNight 跨午夜按实际归属拆到两天');
+{
+  const sleeps = [
+    { id: 'a', date: '2026-10-20', start: '23:00', end: '07:00' }   // 1 号睡、2 号醒
+  ];
+  // 入睡当天只算 23:00–24:00 = 60 分钟
+  eq('入睡当晚算 60 分钟', sleepByNight(sleeps, '2026-10-20'), 60);
+  // 次日算 00:00–07:00 = 420 分钟
+  eq('次晨算 420 分钟', sleepByNight(sleeps, '2026-10-21'), 420);
+  // 第三天不该再有
+  eq('第三天归零', sleepByNight(sleeps, '2026-10-22'), 0);
+  // 两天合起来必须等于整觉 8 小时，不能多也不能少
+  eq('两段相加等于整觉', sleepByNight(sleeps, '2026-10-20') + sleepByNight(sleeps, '2026-10-21'), 480);
+
+  // 不跨午夜：当天全算
+  const day = [{ id: 'b', date: '2026-10-21', start: '13:00', end: '14:30' }];
+  eq('白天的午睡全算当天', sleepByNight(day, '2026-10-21'), 90);
+  eq('午睡不影响次日', sleepByNight(day, '2026-10-22'), 0);
+
+  // 两晚各一段，不能串
+  const two = [
+    { id: 'c', date: '2026-10-19', start: '23:30', end: '06:30' },  // 30 + 390
+    { id: 'd', date: '2026-10-20', start: '23:00', end: '07:00' }   // 60 + 420
+  ];
+  eq('连住两晚，第 2 天 = 前夜余下 390 + 当晚 60', sleepByNight(two, '2026-10-20'), 390 + 60);
+  eq('连住两晚，第 3 天 = 420', sleepByNight(two, '2026-10-21'), 420);
+
+  // 缺失 / 脏数据不炸
+  eq('空数组', sleepByNight([], '2026-10-20'), 0);
+  eq('缺 end 跳过', sleepByNight([{ date: '2026-10-20', start: '23:00' }], '2026-10-20'), 0);
+  eq('非法日期返回 0', sleepByNight(sleeps, 'xx'), 0);
+
+  // 同一晚两段重叠，合并后不重复计时
+  const dup = [
+    { id: 'e', date: '2026-10-20', start: '23:00', end: '07:00' },
+    { id: 'f', date: '2026-10-20', start: '23:30', end: '06:00' }
+  ];
+  eq('同晚重叠段只算一次', sleepByNight(dup, '2026-10-20'), 60);
+}
+
+console.log('统计口径：heatLevel 绝对刻度');
+{
+  eq('0 分钟 = 0 级', heatLevel(0), 0);
+  eq('负数也当 0 级', heatLevel(-10), 0);
+  eq('1 小时 = 1 级', heatLevel(60), 1);
+  eq('3 小时 = 1 级', heatLevel(180), 1);
+  eq('4 小时（<20% 的 16h）', heatLevel(4 * 60), 2);
+  // 分级阈值：16h 的 20% / 40% / 65% → 3.2h / 6.4h / 10.4h
+  eq('6.4 小时刚好进 3 级', heatLevel(6.4 * 60), 3);
+  eq('6.3 小时还在 2 级', heatLevel(6.3 * 60), 2);
+  eq('10.4 小时刚好满格', heatLevel(10.4 * 60), 4);
+  eq('10.3 小时还是 3 级', heatLevel(10.3 * 60), 3);
+  eq('16 小时满格', heatLevel(16 * 60), 4);
+  eq('超过 16 小时仍封顶 4 级', heatLevel(20 * 60), 4);
+  // 关键回归：各周都是 9.9 小时时，旧实现（按本次最大值归一化）会全部顶到最深一档
+  eq('9.9 小时不是满格', heatLevel(9.9 * 60), 3);
+  eq('两档有明显区分', heatLevel(9.9 * 60) < heatLevel(11.9 * 60), true);
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
