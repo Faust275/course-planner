@@ -1284,44 +1284,78 @@
     }
   }
 
+  /** 三档同步码的说明文案 */
+  var SYNC_SCOPES = [
+    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、笔记、成绩，换设备后其它模块是空的。' },
+    { key: 'standard', name: '标准', desc: '全部内容：课程、待办、计划、记账、笔记、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' },
+    { key: 'full',     name: '完整', desc: '全部内容 + 自定义背景图与桌宠素材。码会明显变长，图片多时建议改用「导出备份」传文件。' }
+  ];
+
   /** 生成并展示同步码 */
   function syncCodeDialog() {
-    packSync(Store.exportJSON()).then(function (code) {
-      var kb = (code.length / 1024).toFixed(1);
-      var ta = V.textarea({ class: 'textarea sync-code', rows: 5, readonly: 'readonly' });
-      ta.value = code;
-      var big = code.length > 80000;
-      var m = V.modal({
-        title: '同步码',
-        width: '480px',
-        body: [
-          el('p', {
-            class: 'ocr-hint',
-            text: '把这段码发到另一台设备（微信「文件传输助手」、备忘录都行），' +
-                  '在那台设备打开「设置 → 数据管理 → 粘贴同步码」就同步完成了。'
-          }),
-          ta,
-          el('div', {
-            class: 'ocr-hint',
-            text: '大小约 ' + kb + ' KB' +
-                  (big ? '（偏大，多半来自自定义背景图，这种情况建议改用「导出备份」传文件）' : '')
-          })
-        ],
-        footer: el('div', { class: 'modal-foot' }, [
-          el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
-          el('button', {
-            class: 'btn btn-primary', text: '复制同步码',
-            onclick: function () { copyToClipboard(code, ta); }
-          })
-        ])
-      });
-      // 打开就先尝试复制一次，省一步
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(code).then(function () { UI.toast('同步码已复制'); }, function () {});
-      }
-    }).catch(function (e) {
-      UI.toast('生成失败：' + e.message, 'err');
+    var scope = 'standard';          // 默认推荐标准档
+    var code = '';
+    var ta = V.textarea({ class: 'textarea sync-code', rows: 5, readonly: 'readonly' });
+    var sizeTip = el('div', { class: 'ocr-hint', text: '' });
+    var scopeTip = el('p', { class: 'ocr-hint', text: '' });
+    var chipBar = el('div', { class: 'tag-bar' });
+    var m = V.modal({
+      title: '同步码',
+      width: '520px',
+      body: [
+        el('p', {
+          class: 'ocr-hint',
+          text: '把这段码发到另一台设备（微信「文件传输助手」、备忘录都行），' +
+                '在那台设备打开「设置 → 数据管理 → 粘贴同步码」就同步完成了。'
+        }),
+        el('div', { class: 'section-title', text: '带哪些内容' }),
+        chipBar,
+        scopeTip,
+        ta,
+        sizeTip
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '复制同步码',
+          onclick: function () { if (code) copyToClipboard(code, ta); }
+        })
+      ])
     });
+
+    function renderChips() {
+      chipBar.innerHTML = '';
+      SYNC_SCOPES.forEach(function (s) {
+        var active = s.key === scope;
+        var chip = el('button', {
+          class: 'tag-chip' + (active ? ' active' : ''),
+          text: s.name,
+          onclick: function () { if (scope !== s.key) { scope = s.key; renderChips(); refresh(); } }
+        });
+        chipBar.appendChild(chip);
+      });
+      var cur = SYNC_SCOPES.filter(function (x) { return x.key === scope; })[0];
+      scopeTip.textContent = cur ? cur.desc : '';
+    }
+
+    function refresh() {
+      sizeTip.textContent = '正在生成…';
+      ta.value = '';
+      packSync(Store.exportJSON(scope)).then(function (c) {
+        code = c;
+        ta.value = c;
+        var kb = (c.length / 1024).toFixed(1);
+        var big = c.length > 80000;
+        sizeTip.textContent = '大小约 ' + kb + ' KB（' + c.length + ' 字符）' +
+          (big ? '，偏大，建议改用「导出备份」传文件' : '');
+      }).catch(function (e) {
+        code = '';
+        sizeTip.textContent = '生成失败：' + e.message;
+      });
+    }
+
+    renderChips();
+    refresh();
   }
 
   /** 粘贴同步码 */

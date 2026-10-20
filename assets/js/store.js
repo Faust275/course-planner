@@ -3381,7 +3381,53 @@
     },
 
     /* ===== 导入导出 ===== */
-    exportJSON: function () { return JSON.stringify(state, null, 2); },
+    /**
+     * 导出为 JSON 字符串。
+     * @param {string} [scope='full'] 导出档位：
+     *   - 'lite'     : 只带课表相关（学期 / 课程 / 时段），用于「只搬课表」的最小同步码
+     *   - 'standard' : 全部文本数据，但剥离自定义图片（背景图、桌宠精灵图）
+     *   - 'full'     : 原样导出，含图片
+     * 不传参数时行为与旧版一致（full），保证老代码 / 老备份兼容。
+     */
+    exportJSON: function (scope) {
+      var s = scope || 'full';
+      if (s === 'full') return JSON.stringify(state, null, 2);
+
+      var out = JSON.parse(JSON.stringify(state));
+
+      // 两档都不带自定义图片：图片 base64 会撑爆同步码，且换设备本就要重选图
+      if (out.settings) {
+        if (out.settings.background) out.settings.background.dataUrl = '';
+        if (out.settings.pet) out.settings.pet.src = '';
+        // 密钥属于本机凭据，不随同步码外传
+        if (out.settings.asr) { out.settings.asr.appId = ''; out.settings.asr.apiKey = ''; out.settings.asr.apiSecret = ''; }
+        if (out.settings.ocr) { out.settings.ocr.apiKey = ''; }
+      }
+
+      if (s === 'standard') {
+        out.exportScope = 'standard';
+        return JSON.stringify(out, null, 2);
+      }
+
+      // lite：只留课表骨架，其余清空（保留空结构，方便导入端直接覆盖）
+      var empty = defaultState();
+      out.tasks = [];      out.taskSeq = {};
+      out.plans = [];      out.ledger = [];      out.notes = [];
+      out.events = [];     out.activities = [];  out.meals = [];   out.sleeps = [];
+      out.grades = {};
+      out.achievements = { done: {} };
+      out.usage = {};
+      out.pomodoro = empty.pomodoro;
+      // 设置只保留影响课表展示的项
+      var keep = ['theme', 'customColor', 'nav', 'navOrder', 'background'];
+      var ns = {};
+      keep.forEach(function (k) { if (out.settings && out.settings[k] !== undefined) ns[k] = out.settings[k]; });
+      out.settings = Object.assign({}, empty.settings, ns);
+      if (out.settings.background) out.settings.background.dataUrl = '';
+      if (out.settings.pet) out.settings.pet.src = '';
+      out.exportScope = 'lite';
+      return JSON.stringify(out, null, 2);
+    },
 
     importJSON: function (text) {
       var obj = JSON.parse(text);
