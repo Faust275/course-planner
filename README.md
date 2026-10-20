@@ -44,8 +44,9 @@ course-planner-web/
 ├── verify_search.mjs         全局搜索：结果分组、关键词高亮、跳转定位
 ├── verify_repeat.mjs         重复任务：展开生成、过期锚定、until 截止
 ├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
+├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（287 条）
+└── tests/run.mjs             纯函数单测（309 条）
 ```
 
 ## 构建
@@ -84,6 +85,7 @@ node verify_ics.mjs          # .ics 导出内容 + 页面内提醒
 node verify_search.mjs       # 全局搜索 + 高亮 + 跳转定位
 node verify_repeat.mjs       # 重复任务展开生成
 node verify_anniv.mjs        # 倒数纪念日（含农历）
+node verify_export.mjs       # 课表导出图片
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。

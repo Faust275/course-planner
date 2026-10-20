@@ -125,6 +125,18 @@ const annivNextSrc = (() => {
   return 'function annivNext(ev, todayStr) ' + extractBalanced(html, o);
 })();
 
+// 11) 课表导出图片的纯函数（schedule-export.js）
+const expAnchor = sliceFrom('function wrapText(');
+const wrapTextSrc = extractFnFrom('wrapText', expAnchor);
+const measureSrc = extractFnFrom('measure', expAnchor);
+const hexToRgbSrc = extractFnFrom('hexToRgb', expAnchor);
+const tintSrc = extractFnFrom('tint', expAnchor);
+const roundRectSrc = extractFnFrom('roundRect', expAnchor);
+const DEFAULT_OPTSSrc = (() => {
+  const i = sliceFrom('var DEFAULT_OPTS = {');
+  return 'var DEFAULT_OPTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+})();
+
 // 在隔离作用域里求值并导出
 const mod = `var TimeUtil = ${TimeUtilSrc};
   ${DateUtilSrc}
@@ -170,6 +182,12 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${clampDayOfMonthSrc}
   ${clampFeb29Src}
   ${annivNextSrc}
+  ${DEFAULT_OPTSSrc}
+  ${wrapTextSrc}
+  ${measureSrc}
+  ${hexToRgbSrc}
+  ${tintSrc}
+  ${roundRectSrc}
   var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
@@ -177,7 +195,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
                      hitsIn, describe, snippet, searchAll, groupResults,
                      nextDueDate, repeatExpired, sanitizeRepeat,
-                     annivNext };
+                     annivNext, wrapText, measure, hexToRgb, tint };
 `;
 new Function('__LUNAR__', mod)(Lunar);
 const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
@@ -186,7 +204,7 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
         hitsIn, describe, snippet, searchAll, groupResults,
         nextDueDate, repeatExpired, sanitizeRepeat,
-        annivNext } = globalThis.__T;
+        annivNext, wrapText, measure, hexToRgb, tint } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -858,6 +876,59 @@ eq('每月：末日夹紧 11 月无 31 日', annivNext({ date: '2024-01-31', rep
 eq('daysLeft 计算', annivNext({ date: '2000-10-25', repeat: 'yearly' }, T).daysLeft, 4);
 eq('农历生日：今年已过 -> 明年', annivNext({ date: '1990-06-15', repeat: 'yearly', lunar: true, lunarMonth: 8, lunarDay: 15 }, T).next, '2027-09-15');
 eq('农历生日：今年未到 -> 今年', annivNext({ date: '1990-06-15', repeat: 'yearly', lunar: true, lunarMonth: 8, lunarDay: 15 }, '2026-01-01').next, '2026-09-25');
+
+console.log('课表导出：measure');
+{
+  const m = measure(7, 10, {});
+  // pad22*2 + timeW62 + cellW132*7 = 44+62+924 = 1030
+  eq('宽度 7 天 10 节', m.w, 1030);
+  // pad22*2 + 标题46 + 表头62 + 行高68*10 = 44+46+62+680 = 832
+  eq('高度 7 天 10 节', m.h, 832);
+  const m2 = measure(7, 10, { title: false });
+  eq('关标题少 46', m2.h, 832 - 46);
+  const m3 = measure(5, 4, { cellW: 100, rowH: 50, pad: 10, timeW: 40, headH: 30, title: false });
+  eq('自定义尺寸', [m3.w, m3.h], [10 * 2 + 40 + 100 * 5, 10 * 2 + 30 + 50 * 4]);
+}
+
+console.log('课表导出：hexToRgb / tint');
+eq('hex 6 位', hexToRgb('#4f46e5'), [79, 70, 229]);
+eq('hex 3 位', hexToRgb('#fff'), [255, 255, 255]);
+eq('非法退回主色', hexToRgb('nope'), [79, 70, 229]);
+eq('空值退回主色', hexToRgb(''), [79, 70, 229]);
+eq('tint 11% 到白', tint('#4f46e5', 0.11, [255, 255, 255]), 'rgb(236,235,252)');
+eq('tint 50% 到白', tint('#000000', 0.5, [255, 255, 255]), 'rgb(128,128,128)');
+eq('tint 100% 保持原色', tint('#4f46e5', 1, [255, 255, 255]), 'rgb(79,70,229)');
+
+console.log('课表导出：wrapText');
+{
+  // 假 ctx：每个字宽 10px，宽度 100 时每行正好 10 个字
+  const ctx = { measureText: s => ({ width: s.length * 10 }) };
+
+  eq('空字符串', wrapText(ctx, '', 100, 2), []);
+  eq('短文本一行', wrapText(ctx, '高等数学', 100, 2), ['高等数学']);
+  eq('刚好放下一行', wrapText(ctx, '十个字刚好放一行啊啊', 100, 2), ['十个字刚好放一行啊啊']);
+  eq('超出则换行', wrapText(ctx, '十一个字刚好放一行的了', 100, 2), ['十一个字刚好放一行的', '了']);
+
+  const long = '这是一门名字特别长的课程用于测试换行逻辑是否正常工作';
+  const r = wrapText(ctx, long, 100, 2);
+  eq('最多 2 行', r.length, 2);
+  eq('末行有省略号', r[1].slice(-1), '…');
+  eq('每行不超宽', r.every(l => l.length * 10 <= 100), true);
+
+  const r3 = wrapText(ctx, long, 100, 3);
+  eq('最多 3 行', r3.length, 3);
+
+  // 不超 1 行时不该加省略号
+  const exact = wrapText(ctx, '正好十个字啊啊啊啊', 100, 1);
+  eq('恰好放满不加省略号', exact[0].slice(-1), '啊');
+
+  // 换行符按硬换行处理
+  eq('\\n 强制换行', wrapText(ctx, '第一行\n第二行', 200, 3), ['第一行', '第二行']);
+
+  // maxLines 截断后末行收缩
+  const tight = wrapText(ctx, '一二三四五六七八九十一二三四五六七八九十', 55, 2);
+  eq('截断后仍不超宽', tight.every(l => l.length * 10 <= 55), true);
+}
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

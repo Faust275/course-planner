@@ -524,6 +524,98 @@
     ]);
   }
 
+  /* ==========================================================
+   * 课表布局计算
+   *
+   * 把「哪门课画在哪个格子、跨几行」算成一份指令表，渲染和导出图片共用。
+   * 抽出来是为了避免两处各写一套、改了一边忘了另一边。
+   *
+   * 指令只有四种：
+   *   { type:'block', span:n, item }  从当前行起连续占 n 行（合并连堂）
+   *   { type:'covered' }              被上面的 block 覆盖，不单独画
+   *   { type:'stack', items:[...] }   同一格撞了多门课，纵向堆叠
+   *   （没有键 = 空格子）
+   * ========================================================== */
+  var ScheduleLayout = {
+    /**
+     * @param {number} weekNo 第几周
+     * @returns {Object<string, object>} 键为 'day|rowIdx'（day 0-6，rowIdx 0-based）
+     */
+    build: function (weekNo) {
+      var sid = Store.semester ? Store.semester.id : null;
+      var periods = Store.periods || [];
+      var grid = {};
+
+      // 1) 汇总每格课程（一门课的多时段在此展开为多条伪记录）
+      Store.courses.forEach(function (c) {
+        if (c.semesterId && c.semesterId !== sid) return;
+        if (!Store.courseInWeek(c, weekNo)) return;
+        Store.expandCourse(c).forEach(function (p) {
+          var first = -1, last = -1;
+          if (p.timeMode === 'custom') {
+            if (!p.startTime) return;
+            var ce = p.endTime || p.startTime;
+            periods.forEach(function (pp, i) {
+              // 与节次有交集就算占这一节
+              if (TimeUtil.toMin(pp.start) < TimeUtil.toMin(ce) &&
+                  TimeUtil.toMin(p.startTime) < TimeUtil.toMin(pp.end)) {
+                if (first < 0) first = i;
+                last = i;
+              }
+            });
+          } else {
+            var pi = Store.periodIndex(p.periodId);
+            if (pi >= 0) { first = last = pi; }
+          }
+          if (first < 0) return;
+          for (var r = first; r <= last; r++) {
+            var key = p.day + '|' + r;
+            (grid[key] = grid[key] || []).push(p);
+          }
+        });
+      });
+
+      // 2) 生成指令：有冲突 -> 同格堆叠；无冲突 -> 合并连续同门课
+      var out = {};
+      for (var dayX = 1; dayX <= 7; dayX++) {
+        var rowList = {};
+        periods.forEach(function (pp, ri) {
+          if (grid[dayX + '|' + ri]) rowList[ri] = grid[dayX + '|' + ri];
+        });
+
+        var hasOverlap = Object.keys(rowList).some(function (r) { return rowList[r].length > 1; });
+        if (hasOverlap) {
+          Object.keys(rowList).forEach(function (r) {
+            out[dayX + '|' + r] = { type: 'stack', items: rowList[r] };
+          });
+          continue;
+        }
+
+        var r0 = 0;
+        while (r0 < periods.length) {
+          var items = rowList[r0];
+          if (!items || !items.length) { r0++; continue; }
+          var it = items[0];
+          var endR = r0;
+          while (endR + 1 < periods.length) {
+            var nx = rowList[endR + 1];
+            if (!nx || nx.length !== 1) break;
+            var nxIt = nx[0];
+            // 同一个 slot 的连堂，或同一门课相邻两节，都算"该合并"
+            var same = (nxIt._slot && it._slot && nxIt._slot === it._slot) ||
+                       (nxIt.courseId === it.courseId && nxIt.timeMode !== 'custom' && it.timeMode !== 'custom');
+            if (!same) break;
+            endR++;
+          }
+          out[dayX + '|' + r0] = { type: 'block', span: endR - r0 + 1, item: it };
+          for (var rr = r0 + 1; rr <= endR; rr++) out[dayX + '|' + rr] = { type: 'covered' };
+          r0 = endR + 1;
+        }
+      }
+      return out;
+    }
+  };
+
   var view = {
     id: 'schedule',
     name: '课程表',
@@ -577,6 +669,12 @@
           class: 'btn',
           onclick: function () { if (global.Remind) Remind.exportDialog(); }
         }, [V.svg(V.icons.clock, 16), '导出日历'])
+      );
+      host.appendChild(
+        el('button', {
+          class: 'btn',
+          onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); }
+        }, [V.svg(V.icons.download || V.icons.upload, 16), '导出图片'])
       );
       host.appendChild(
         el('button', {
@@ -692,65 +790,9 @@
       var todayStr = DateUtil.toStr(DateUtil.today());
       var sid = Store.semester.id;
 
-      // 汇总每格课程（一门课的多时段在此展开为多条伪记录）
-      var grid = {};   // 'day|rowIdx' -> [伪记录]
-      Store.courses.forEach(function (c) {
-        if (c.semesterId && c.semesterId !== sid) return;
-        if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) {
-          var first = -1, last = -1;
-          if (p.timeMode === 'custom') {
-            if (!p.startTime) return;
-            var ce = p.endTime || p.startTime;
-            Store.periods.forEach(function (pp, i) {
-              if (TimeUtil.toMin(pp.start) < TimeUtil.toMin(ce) &&
-                  TimeUtil.toMin(p.startTime) < TimeUtil.toMin(pp.end)) {
-                if (first < 0) first = i;
-                last = i;
-              }
-            });
-          } else {
-            var pi = Store.periodIndex(p.periodId);
-            if (pi >= 0) { first = last = pi; }
-          }
-          if (first < 0) return;
-          for (var r = first; r <= last; r++) {
-            var key = p.day + '|' + r;
-            (grid[key] = grid[key] || []).push(p);
-          }
-        });
-      });
+      // 布局指令统一由 ScheduleLayout 计算，导出图片时复用同一套规则
+      var renderAt = ScheduleLayout.build(weekNo);
 
-      // 渲染指令：无冲突时合并连续同门课；有冲突时同格纵向堆叠
-      var renderAt = {};
-      for (var dayX = 1; dayX <= 7; dayX++) {
-        var rowList = {};
-        Store.periods.forEach(function (pp, ri) { if (grid[dayX + '|' + ri]) rowList[ri] = grid[dayX + '|' + ri]; });
-        var hasOverlap = Object.keys(rowList).some(function (r) { return rowList[r].length > 1; });
-        if (hasOverlap) {
-          Object.keys(rowList).forEach(function (r) { renderAt[dayX + '|' + r] = { type: 'stack', items: rowList[r] }; });
-          continue;
-        }
-        var r0 = 0;
-        while (r0 < Store.periods.length) {
-          var items = rowList[r0];
-          if (!items || !items.length) { r0++; continue; }
-          var it = items[0];
-          var endR = r0;
-          while (endR + 1 < Store.periods.length) {
-            var nx = rowList[endR + 1];
-            if (!nx || nx.length !== 1) break;
-            var nxIt = nx[0];
-            var same = (nxIt._slot && it._slot && nxIt._slot === it._slot) ||
-                       (nxIt.courseId === it.courseId && nxIt.timeMode !== 'custom' && it.timeMode !== 'custom');
-            if (!same) break;
-            endR++;
-          }
-          renderAt[dayX + '|' + r0] = { type: 'block', span: endR - r0 + 1, item: it };
-          for (var rr = r0 + 1; rr <= endR; rr++) renderAt[dayX + '|' + rr] = { type: 'covered' };
-          r0 = endR + 1;
-        }
-      }
 
       var thead = el('thead', { class: 'tt-head' });
       var trh = el('tr');
@@ -1500,6 +1542,7 @@
 
   global.__CourseDialog = CourseDialog;
   global.__SampleData = Sample;
+  global.ScheduleLayout = ScheduleLayout;
 
   // 一门课有多个时段时格子上会有多个块，定位到第一个即可
   view.focusRecord = function (type, id) {
