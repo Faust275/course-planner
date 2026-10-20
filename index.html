@@ -2347,6 +2347,25 @@ input[type="range"]::-moz-range-thumb {
 .cp-exam-row b { font-size: 13px; font-weight: 600; }
 .cp-exam-row span { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
 
+/* 时间冲突提示（课表页顶部 + 全部冲突弹窗 + 批量导入预览） */
+.cp-conflict-card {
+  padding: 10px 14px; margin-bottom: 12px; border-radius: 12px;
+  background: var(--amber-weak); border: 1px solid #fedf89;
+}
+.cp-conflict-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.cp-conflict-title b { font-size: 12.5px; font-weight: 650; color: #b54708; }
+.cp-conflict-title span { font-size: 11.5px; color: var(--text-3); }
+.cp-conflict-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+.cp-conflict-row b { font-size: 13px; font-weight: 600; }
+.cp-conflict-row span { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.cp-conflict-more {
+  margin-top: 4px; padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: #b54708;
+}
+.cp-batch-warn {
+  margin: 3px 0 6px; font-size: 11.5px; line-height: 1.5; color: #b54708;
+}
+
 .cp-cb-marks {
   position: absolute; right: 3px; top: 3px;
   display: flex; flex-direction: column; align-items: flex-end; gap: 2px; z-index: 1;
@@ -8296,6 +8315,195 @@ window.AK_OPS = [
     return { rows: rows, skipped: skipped, cols: cols };
   }
 
+  /* ==========================================================
+   * 时间冲突检测
+   * ----------------------------------------------------------
+   * 两门课在同一天同一节（或自定义时段相互重叠），且周次区间有交集，就算冲突。
+   * 这里全是纯函数、不依赖 Store，方便单测；UI 侧自己把当前学期的课程传进来。
+   * ========================================================== */
+
+  /** 课程在第 w 周是否上课（courseInWeek 的纯函数版） */
+  function inWeekOf(c, w, totalWeeks) {
+    var s = c.startWeek == null ? 1 : (+c.startWeek || 1);
+    var e = c.endWeek == null ? totalWeeks : (+c.endWeek || totalWeeks);
+    if (w < s || w > e) return false;
+    if (c.weekType === 'odd') return w % 2 === 1;
+    if (c.weekType === 'even') return w % 2 === 0;
+    return true;
+  }
+
+  /** 两门课的周次区间是否有交集；返回第一个共同周次，0 表示不重叠 */
+  function weekOverlap(a, b, totalWeeks) {
+    for (var w = 1; w <= totalWeeks; w++) {
+      if (inWeekOf(a, w, totalWeeks) && inWeekOf(b, w, totalWeeks)) return w;
+    }
+    return 0;
+  }
+
+  /** 两个自定义时段是否时间重叠（半开区间，首尾相接不算重叠） */
+  function timeOverlap(a, b) {
+    var as = TimeUtil.toMin(a.startTime || '00:00');
+    var ae = TimeUtil.toMin(a.endTime || a.startTime || '00:00');
+    var bs = TimeUtil.toMin(b.startTime || '00:00');
+    var be = TimeUtil.toMin(b.endTime || b.startTime || '00:00');
+    return as < be && bs < ae;
+  }
+
+  /**
+   * 找出整个学期里互相撞时间的课程。
+   * 返回 [{day, periodId, ids:[], names:[], week}]，按 星期→节次 排序。
+   * 同一门课自己的多个时段不算冲突；单双周不同也不算。
+   */
+  function findConflicts(courses, totalWeeks) {
+    var list = (courses || []).filter(function (c) { return c && c.id; });
+    var pb = {};   // 'day|periodId' -> [{c,s}]  按节次排的
+    var cb = {};   // day -> [{c,s}]             自定义时段的，要逐对比时间
+    list.forEach(function (c) {
+      (c.slots || []).forEach(function (s) {
+        if (!s || !s.day) return;
+        var d = +s.day;
+        if (s.timeMode === 'custom') (cb[d] = cb[d] || []).push({ c: c, s: s });
+        else if (s.periodId) (pb[d + '|' + s.periodId] = pb[d + '|' + s.periodId] || []).push({ c: c, s: s });
+      });
+    });
+
+    var groups = {};
+    function hit(x, y, day, periodId) {
+      if (x.c.id === y.c.id) return;                 // 同一门课不算冲突
+      var w = weekOverlap(x.c, y.c, totalWeeks);
+      if (!w) return;                                // 周次错开，不算
+      var k = day + '|' + periodId;
+      var g = groups[k] || (groups[k] = { day: day, periodId: periodId, ids: [], names: [], week: w });
+      [[x.c, 0], [y.c, 1]].forEach(function (pair) {
+        if (g.ids.indexOf(pair[0].id) < 0) { g.ids.push(pair[0].id); g.names.push(pair[0].name || '未命名课程'); }
+      });
+      if (w < g.week) g.week = w;
+    }
+    function pairs(arr, day, periodId, needTimeCheck) {
+      for (var i = 0; i < arr.length; i++) {
+        for (var j = i + 1; j < arr.length; j++) {
+          if (needTimeCheck && !timeOverlap(arr[i].s, arr[j].s)) continue;
+          hit(arr[i], arr[j], day, periodId);
+        }
+      }
+    }
+    Object.keys(pb).forEach(function (k) {
+      var seg = k.split('|');
+      pairs(pb[k], +seg[0], seg[1], false);
+    });
+    Object.keys(cb).forEach(function (d) { pairs(cb[d], +d, '', true); });
+
+    return Object.keys(groups).map(function (k) { return groups[k]; })
+      .sort(function (x, y) {
+        return (x.day - y.day) || String(x.periodId).localeCompare(String(y.periodId));
+      });
+  }
+
+  /** 当前学期的课程（冲突检测只在同学期内比，跨学期没有可比性） */
+  function semesterCourses() {
+    var sid = Store.semester.id;
+    return Store.courses.filter(function (c) { return !c.semesterId || c.semesterId === sid; });
+  }
+
+  /** 冲突条目的人类可读时间：「周一 第1节 · 第3周起」 */
+  function conflictWhen(g) {
+    var p = g.periodId ? Store.getPeriod(g.periodId) : null;
+    var seg = '周' + '一二三四五六日'.charAt(g.day - 1) +
+              (p ? (' 第' + (Store.periodIndex(g.periodId) + 1) + '节') : ' 自定义时段');
+    return seg + ' · 第' + g.week + '周起';
+  }
+
+  /**
+   * 批量导入预览用：拿待导入的行去和已有课程比，看哪些行会撞。
+   * 返回 { 行下标: [撞到的课程名] }；没撞的行不出现在结果里。
+   */
+  function batchConflicts(rows) {
+    var totalWeeks = Store.semester.weeks;
+    var periods = Store.periods || [];
+    var pseudo = rows.map(function (r, i) {
+      return {
+        id: '__new' + i,
+        name: r.name || ('第' + (i + 1) + '行'),
+        startWeek: r.weeks ? r.weeks.start : 1,
+        endWeek: r.weeks ? r.weeks.end : totalWeeks,
+        weekType: 'all',
+        slots: (r.periods || []).map(function (n) {
+          var p = periods[n - 1];
+          return p ? { day: r.day, timeMode: 'period', periodId: p.id } : null;
+        }).filter(Boolean)
+      };
+    });
+    var out = {};
+    findConflicts(semesterCourses().concat(pseudo), totalWeeks).forEach(function (g) {
+      g.ids.forEach(function (id, k) {
+        if (String(id).indexOf('__new') !== 0) return;
+        var i = +String(id).slice(5);
+        var box = out[i] || (out[i] = []);
+        g.names.forEach(function (nm, k2) {
+          if (k2 !== k && box.indexOf(nm) < 0) box.push(nm);
+        });
+      });
+    });
+    return out;
+  }
+
+  /** 冲突里的一行（提示卡和弹窗共用） */
+  function conflictRow(g, onPick) {
+    return el('div', {
+      class: 'conflict-row',
+      onclick: function () { onPick(g); }
+    }, [
+      el('b', { text: g.names.join(' / ') }),
+      el('span', { text: conflictWhen(g) })
+    ]);
+  }
+
+  /** 课表页顶部的冲突提示卡 */
+  function conflictCard(conflicts) {
+    var n = conflicts.length;
+    var m = null;
+    function openCourse(g) {
+      if (m) m.close();
+      setTimeout(function () { CourseDialog.detail(g.ids[0]); }, 160);
+    }
+    return el('div', { class: 'conflict-card' }, [
+      el('div', { class: 'conflict-title' }, [
+        el('b', { text: '检测到 ' + n + ' 处时间冲突' }),
+        el('span', { text: '同一时段排了多门课，点一下直接改' })
+      ]),
+      el('div', {}, conflicts.slice(0, 3).map(function (g) { return conflictRow(g, openCourse); })),
+      n > 3 ? el('button', {
+        class: 'conflict-more', text: '查看全部 ' + n + ' 处',
+        onclick: function () { m = conflictListDialog(conflicts); }
+      }) : null
+    ]);
+  }
+
+  /** 全部冲突的弹窗 */
+  function conflictListDialog(conflicts) {
+    var m = V.modal({
+      title: '时间冲突（' + conflicts.length + ' 处）',
+      width: '520px',
+      body: [
+        el('p', {
+          class: 'ocr-hint',
+          text: '同一时段排了多门课。单双周错开、或周次不重叠的不会算冲突。'
+        }),
+        el('div', { style: { maxHeight: '360px', overflow: 'auto' } },
+          conflicts.map(function (g) {
+            return conflictRow(g, function (x) {
+              m.close();
+              setTimeout(function () { CourseDialog.detail(x.ids[0]); }, 160);
+            });
+          }))
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '知道了', onclick: function () { m.close(); } })
+      ])
+    });
+    return m;
+  }
+
   /** 批量导入弹窗：粘贴 → 预览 → 确认 */
   function batchImportDialog() {
     var ta = V.textarea({
@@ -8345,13 +8553,20 @@ window.AK_OPS = [
         return;
       }
 
+      // 冲突检测：把待导入的行当成临时课程，和已有课程（以及彼此）一起比一次
+      var hitMap = batchConflicts(res.rows);
+      var hitCount = Object.keys(hitMap).length;
+
       host.appendChild(el('div', { class: 'section-title' },
-        ['认出 ' + res.rows.length + ' 门课' + (res.skipped.length ? '（跳过 ' + res.skipped.length + ' 行）' : '')]));
+        ['认出 ' + res.rows.length + ' 门课' +
+         (res.skipped.length ? '（跳过 ' + res.skipped.length + ' 行）' : '') +
+         (hitCount ? ('，' + hitCount + ' 门撞时间') : '')]));
 
       var list = el('div', { style: { maxHeight: '260px', overflow: 'auto' } });
-      res.rows.forEach(function (r) {
+      res.rows.forEach(function (r, i) {
         var dayName = '周' + '一二三四五六日'.charAt(r.day - 1);
-        list.appendChild(el('div', {
+        var box = el('div', {});
+        box.appendChild(el('div', {
           class: 'setting-row',
           style: { display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }
         }, [
@@ -8381,6 +8596,13 @@ window.AK_OPS = [
             oninput: function (e) { r.location = e.target.value; }
           })
         ]));
+        if (hitMap[i]) {
+          box.appendChild(el('div', {
+            class: 'batch-warn',
+            text: '⚠ 与已排的 ' + hitMap[i].join('、') + ' 撞时间，导入后可在课表上改'
+          }));
+        }
+        list.appendChild(box);
       });
       host.appendChild(list);
 
@@ -8462,6 +8684,11 @@ window.AK_OPS = [
 
     root: null,
     week: null,
+
+    /** 当前学期的时间冲突列表（渲染提示卡与批量导入预览都用它） */
+    conflicts: function () {
+      return findConflicts(semesterCourses(), Store.semester.weeks);
+    },
 
     /** 顶栏右侧操作按钮（由 App.go 每次切页时调用） */
     actions: function (host) {
@@ -8599,6 +8826,10 @@ window.AK_OPS = [
           })
         ]));
       }
+
+      /* ---- 时间冲突提示 ---- */
+      var conflicts = self.conflicts();
+      if (conflicts.length) root.appendChild(conflictCard(conflicts));
 
       /* ---- 表格 ---- */
       var matrix = Store.weekMatrix(weekNo);

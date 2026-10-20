@@ -38,6 +38,7 @@ course-planner-web/
 ├── verify_parts.mjs          同步码分片切分验证
 ├── verify_parts2.mjs         分片乱序 / 噪音 / 缺片拼回验证
 ├── verify_batch.mjs          课表批量导入端到端验证
+├── verify_conflict.mjs       课表时间冲突检测验证
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
 └── tests/run.mjs             纯函数单测（72 条）
 ```
@@ -71,6 +72,7 @@ node verify_backup.mjs       # 自动备份
 node verify_sync_scope.mjs   # 同步码三档
 node verify_parts2.mjs       # 同步码分片
 node verify_batch.mjs        # 课表批量导入
+node verify_conflict.mjs     # 课表时间冲突
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
