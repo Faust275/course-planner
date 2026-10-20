@@ -199,7 +199,8 @@
       ]);
       var bodyText = el('p', {
         text: opts.message || '',
-        style: { fontSize: '13.5px', color: 'var(--text-2)', lineHeight: '1.65' }
+        // message 里带换行时按段落显示（子任务说明、多行影响提示都要用）
+        style: { fontSize: '13.5px', color: 'var(--text-2)', lineHeight: '1.65', whiteSpace: 'pre-wrap' }
       });
       m = modal({
         title: opts.title || '确认操作',

@@ -179,8 +179,8 @@
       ]));
       card.appendChild(durRow);
 
-      // 选择待办
-      var pending = Store.pendingTasks();
+      // 选择待办（只列顶层任务，子任务进父任务里做）
+      var pending = Store.rootPending();
       if (pending.length) {
         var opts = [{ value: '', label: '不关联待办' }].concat(pending.map(function (t) {
           return { value: t.id, label: t.title };

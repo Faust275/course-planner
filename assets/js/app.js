@@ -162,7 +162,8 @@
     var cw = Store.currentWeek();
     var inTerm = cw >= 1 && cw <= s.weeks;
     var total = Store.courses.length;
-    var pendingTasks = Store.tasks.filter(function (t) { return t.status !== 'done'; }).length;
+    // 角标只数顶层任务：子任务是父任务的一部分，否则「1 件事 3 步」会显示成 4
+    var pendingTasks = Store.rootPending().length;
     var start = Store.weekStartDate(1);
     var end = DateUtil.addDays(Store.weekStartDate(s.weeks), 6);
 
@@ -199,7 +200,7 @@
 
     Store.subscribe(function () {
       renderTermCard();
-      badge('tasks', Store.pendingTasks().length);
+      badge('tasks', Store.rootPending().length);
       if (App.current && App.current.render && !App.current.noAutoRender) App.current.render();
       App.views.forEach(function (v) { if (v.onDataChange) v.onDataChange(); });
     });
@@ -230,7 +231,7 @@
     }
 
     renderTermCard();
-    badge('tasks', Store.pendingTasks().length);
+    badge('tasks', Store.rootPending().length);
     var first = App.views[0] ? App.views[0].id : null;
     if (first) go(first);
 

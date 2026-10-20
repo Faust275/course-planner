@@ -52,8 +52,9 @@
       var weekNo = Store.currentWeek();
       var inTerm = weekNo >= 1 && weekNo <= Store.semester.weeks;
       var courses = Store.coursesOnDay(dow, weekNo);
-      var todayTasks = Store.todayTasks();
-      var overdue = Store.overdueTasks();
+      // 「今日」只看顶层任务：子任务在父任务里展开看，避免同一件事刷两遍
+      var todayTasks = Store.todayTasks().filter(function (t) { return !t.parentId; });
+      var overdue = Store.overdueTasks().filter(function (t) { return !t.parentId; });
 
       /* ---------- 问候卡 ---------- */
       var hour = now.getHours();
@@ -129,7 +130,7 @@
         var todayStr = DateUtil.toStr(today);
         var items = [];
         Store.tasks.forEach(function (t) {
-          if (!t.important || t.status === 'done') return;
+          if (!t.important || t.status === 'done' || t.parentId) return;
           var d = t.dueDate || todayStr;
           items.push({ kind: 'task', title: t.title, date: d, time: t.dueTime || '23:59' });
         });
@@ -364,7 +365,7 @@
       }
 
       /* ---------- 即将到来 ---------- */
-      var upcoming = Store.pendingTasks().filter(function (t) {
+      var upcoming = Store.rootPending().filter(function (t) {
         var left = t.dueDate ? DateUtil.daysLeft(t.dueDate) : 999;
         return left > 0 && left <= 7;
       }).slice(0, 4);

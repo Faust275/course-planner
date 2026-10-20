@@ -22,6 +22,7 @@
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
+    subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
     speech: { name: '语音识别', desc: '待办的语音输入方式与讯飞配置' },
     ocr: { name: '图片识别', desc: '导入课表的识别方式与云端接口' },
@@ -126,6 +127,8 @@
       ]));
 
             if (SUB === 'pet') { this.renderPet(root); return; }
+
+            if (SUB === 'subtask') { renderSubtaskPage(root); return; }
 
             if (SUB === 'look') {
   /* ===================== 外观 ===================== */
@@ -1018,6 +1021,8 @@
             el('li', { text: '· 标签支持二级：写成「学习/高数」，就能按一级或二级分别统计。' }),
             el('li', { text: '· 标签自带图标和颜色：常用标签（学习、生活、运动…）自动配上，也能在「设置 → 标签」里换图标、改颜色、改名。' }),
             el('li', { text: '· 「待办」可关联课程，设置截止日期后，到期会出现在「今日」页。' }),
+            el('li', { text: '· 展开一个待办，点「添加子任务」就能把一件事拆成几步；只做一层，父任务上显示 2/4 进度。' }),
+            el('li', { text: '· 子任务的默认行为是「各算各的」：子任务全完成不自动完成父任务，勾父任务也不连带子任务；删除父任务时子任务会保留并提升为顶层。这四条都能在「设置 → 子任务」里改。' }),
             el('li', { text: '· 灵感已并入「待办」：切到顶部的「灵感」分页就能随手记，点「转为待办」一键搬过去。' }),
             el('li', { text: '· 每日一句 / 每日一词可以单独关掉（模块显示 → 首页卡片）；喜欢的话点星标收藏，在「收藏的词句」里回看。' }),
             el('li', { text: '· 外观可换 9 套配色或自选颜色，也能传一张图做背景。' }),
@@ -1048,6 +1053,7 @@
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
+    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
     { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438' },
@@ -2547,6 +2553,123 @@
 
     drawRatioHint();
     drawEst();
+  }
+
+  /* ==========================================================
+   * 二级页：子任务行为
+   * 前三项互相影响（能形成「勾了 A 就等于勾了 B」的闭环），
+   * 所以每一项都写明「当前组合下会发生什么」，并对冲突组合给出警告。
+   * ========================================================== */
+  function renderSubtaskPage(root) {
+    var cur = Store.subtaskOpts();
+
+    function save(patch) {
+      Store.updateSettings({ subtask: Object.assign({}, Store.subtaskOpts(), patch) });
+      view.render();
+    }
+
+    /* ---- 说明 ---- */
+    var intro = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    intro.appendChild(el('div', { class: 'section-title' }, ['子任务怎么用']));
+    intro.appendChild(el('ul', {
+      style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.9', margin: '0', paddingLeft: '18px' }
+    }, [
+      el('li', { text: '在「待办」里展开一个父任务，点最下面的「添加子任务」，就能把一件事拆成几步。' }),
+      el('li', { text: '子任务默认折叠，父任务右边显示 2/4 的进度徽章。' }),
+      el('li', { text: '只支持一层：子任务下面不能再挂子任务。想再细，说明这件事该拆成两个父任务。' }),
+      el('li', { text: '「今日」、四象限、导航角标只算顶层任务，不会因为拆了子任务就把数字放大。' })
+    ]));
+    root.appendChild(intro);
+
+    /* ---- 逐项开关 ---- */
+    var card = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['行为设置']));
+
+    function row(label, hint, key, onText, offText) {
+      var node = el('button', {
+        class: 'switch' + (cur[key] ? ' on' : ''),
+        title: cur[key] ? '点击关闭' : '点击开启',
+        onclick: function () {
+          var patch = {};
+          patch[key] = !cur[key];
+          save(patch);
+        }
+      }, [el('i')]);
+      // 开关和文字之间不要拉太开：限一个宽度，右侧留白比中间开洞好看
+      return el('div', { class: 'subtask-set-row' }, [
+        el('div', { class: 'subtask-set-text' }, [
+          el('b', { text: label }),
+          el('span', { class: 'subtask-set-hint', text: hint }),
+          el('span', {
+            class: 'subtask-state' + (cur[key] ? ' is-on' : ''),
+            text: '当前：' + (cur[key] ? onText : offText)
+          })
+        ]),
+        node
+      ]);
+    }
+
+    card.appendChild(row(
+      '子任务全部完成时，自动完成父任务',
+      '关掉的话父任务要自己点完成，只靠 2/4 的徽章看进度。',
+      'autoDoneParent', '子任务勾完 → 父任务自动变成已完成', '父任务保持未完成，只更新进度'
+    ));
+    card.appendChild(row(
+      '父任务完成时，把未完成的子任务一并完成',
+      '适合「父任务只是个分组」的用法；如果你会先完成任务条目、再回头补细节，建议关掉。',
+      'cascadeDone', '勾父任务 → 子任务全部被勾上', '子任务保持原样，不会被改动'
+    ));
+    card.appendChild(row(
+      '删除父任务时保留子任务',
+      '开启 = 子任务留下来、提升为顶层待办；关闭 = 连子任务一起删掉。删除前都会再确认一次。',
+      'orphanKeep', '子任务保留并提升为顶层', '子任务随父任务一起删除'
+    ));
+    card.appendChild(row(
+      '父任务上显示 2/4 进度徽章',
+      '关掉后父任务行更清爽，但看不出还有几步没做。',
+      'showProgress', '显示进度徽章', '不显示徽章'
+    ));
+    root.appendChild(card);
+
+    /* ---- 组合影响提示 ---- */
+    var warn = [];
+    if (cur.autoDoneParent && cur.cascadeDone) {
+      warn.push('「自动完成父任务」和「一并完成子任务」同时开着：勾完最后一个子任务，父任务会被自动勾上，' +
+                '父任务一勾又反过来把其余子任务全勾上——实际上只要完成任意一个子任务，整组就会全绿。' +
+                '如果你不想要这个效果，关掉其中一项。');
+    }
+    if (!cur.autoDoneParent && cur.cascadeDone) {
+      warn.push('当前是「父完成任务时子任务一并完成，但子任务全完成不会自动完成父任务」：' +
+                '方向是单向的，从子任务往上不会触发任何联动。');
+    }
+    if (cur.autoDoneParent && !cur.cascadeDone) {
+      warn.push('当前是「子任务全完成 → 父任务自动完成」：父任务的完成状态由子任务决定，' +
+                '手动点父任务完成时子任务不会被改动，所以可以出现「父任务已完成、子任务还没完成」。');
+    }
+
+    var tipCard = el('div', { class: 'card', style: { padding: '16px 18px' } });
+    tipCard.appendChild(el('div', { class: 'section-title' }, ['当前组合的效果']));
+    if (!warn.length) {
+      tipCard.appendChild(el('p', {
+        class: 'ocr-hint',
+        text: '父任务和子任务完全独立：勾谁只影响谁。这是最不容易误操作的一档。'
+      }));
+    } else {
+      tipCard.appendChild(el('div', { class: 'subtask-warn' }, warn.map(function (w) {
+        return el('p', { style: { margin: '0 0 8px', fontSize: '12.5px', lineHeight: '1.75' }, text: '· ' + w });
+      })));
+    }
+    tipCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } }, [
+      el('button', {
+        class: 'btn btn-sm', text: '恢复默认',
+        onclick: function () {
+          Store.updateSettings({ subtask: Object.assign({}, global.SUBTASK_DEFAULTS) });
+          UI.toast('已恢复默认的子任务行为');
+          view.render();
+        }
+      })
+    ]));
+    root.appendChild(tipCard);
   }
 
   /** 供其它页面直接跳到某个设置子页 */

@@ -3017,6 +3017,97 @@ mark.cp-hit {
 .cp-anniv-lunar-preview { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
 .cp-anniv-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
 
+/* ==========================================================
+ * 子任务
+ * ========================================================== */
+/* 父任务行：给展开箭头留位置 */
+.cp-task-row.has-kids { align-items: center; }
+.cp-task-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cp-task-title-row .cp-task-title { min-width: 0; }
+
+/* 2/4 进度徽章 */
+.cp-subtask-prog {
+  flex: 0 0 auto; font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line);
+}
+.cp-subtask-prog.is-done { background: var(--green-weak); color: var(--green); border-color: transparent; }
+
+/* 展开/收起箭头 */
+.cp-subtask-toggle {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-3); background: transparent; border: none; cursor: pointer;
+  transition: transform .18s, background .18s, color .18s;
+}
+.cp-subtask-toggle:hover { background: var(--surface-2); color: var(--text); }
+.cp-subtask-toggle.open { transform: rotate(180deg); }
+
+/* 子任务容器：左侧一条细线表示从属关系 */
+.cp-subtask-box {
+  margin: -2px 0 6px 22px; padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line);
+  display: flex; flex-direction: column;
+}
+.cp-task-row.is-child { padding-left: 4px; }
+.cp-task-row.is-child .cp-task-title { font-size: 13px; }
+
+/* 「添加子任务」 */
+.cp-subtask-add {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;
+  margin: 4px 0 2px; padding: 4px 8px; border-radius: 8px;
+  font-size: 12px; color: var(--text-3); background: transparent; border: 1px dashed var(--line-strong);
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+}
+.cp-subtask-add:hover { color: var(--primary); border-color: var(--primary-light); background: var(--primary-tint); }
+
+/* 弹窗里的「所属父任务」条 */
+.cp-subtask-parent-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px; margin-bottom: 12px; border-radius: 10px;
+  background: var(--primary-tint); font-size: 12.5px;
+}
+.cp-subtask-parent-label { color: var(--text-3); flex: 0 0 auto; }
+.cp-subtask-parent-name {
+  flex: 1; min-width: 0; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 弹窗里的子任务清单 */
+.cp-subtask-inline-list {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px;
+}
+.cp-subtask-inline-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.cp-subtask-inline-title { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-subtask-inline-row.done .cp-subtask-inline-title { color: var(--text-3); text-decoration: line-through; }
+
+/* 设置页：当前组合提示 */
+.cp-subtask-warn {
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--amber-weak); color: var(--text-2);
+  border-left: 3px solid var(--amber);
+}
+.cp-subtask-warn p:last-child { margin-bottom: 0 !important; }
+.cp-subtask-set-row {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 13px 0; border-top: 1px solid var(--line);
+}
+.cp-subtask-set-text {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  max-width: 480px;
+}
+.cp-subtask-set-text b { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+.cp-subtask-set-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+.cp-subtask-state {
+  font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+.cp-subtask-state.is-on { color: var(--primary); }
+@media (max-width: 560px) {
+  .cp-subtask-set-row { gap: 10px; }
+  .cp-subtask-set-text b { font-size: 13px; }
+}
+
 </style>
 <script>
 
@@ -3938,6 +4029,14 @@ window.AK_OPS = [
         asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' },
         ocr: { prefer: 'auto', provider: '', apiKey: '', endpoint: '', model: '' },
         background: { dataUrl: '', mask: 0.5 },
+        // 子任务行为（详见「设置 → 子任务」）。前三项会互相影响，设置页有互斥提示
+        subtask: {
+          autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
+          cascadeDone: false,      // 父任务完成 → 未完成子任务一并完成
+          orphanKeep: true,        // 删除父任务时子任务保留（提升为顶层）；false = 一起删
+          showProgress: true       // 父任务显示 2/4 进度徽章
+        },
+        subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
         pet: {
           enabled: false,        // 开发者/自用开关：默认关闭
           src: '',               // 本地精灵图 base64（不随源码分发）
@@ -4682,8 +4781,64 @@ window.AK_OPS = [
     copy.doneAt = '';
     copy.createdAt = new Date().toISOString();
     copy.repeatFrom = task.id;
-    copy.occurrence = (task.occurrence || 0) + 1;
-    return copy;
+      copy.occurrence = (task.occurrence || 0) + 1;
+      return copy;
+  }
+
+  /* ==========================================================
+   * 子任务（只做一层：parentId 要么为空，要么指向顶层任务）
+   * ========================================================== */
+
+  /** 子任务行为的默认值；settings.subtask 缺字段时逐项回退到这里 */
+  var SUBTASK_DEFAULTS = {
+    autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
+    cascadeDone: false,      // 父任务完成 → 未完成子任务一并完成
+    orphanKeep: true,        // 删除父任务：true = 子任务保留（提升为顶层），false = 一起删
+    showProgress: true       // 父任务显示 2/4 进度徽章
+  };
+
+  /** 读设置里的子任务行为，缺省/脏值一律回落到默认 */
+  function subOpts(settings) {
+    var raw = (settings && settings.subtask) || {};
+    var out = {};
+    Object.keys(SUBTASK_DEFAULTS).forEach(function (k) {
+      out[k] = typeof raw[k] === 'boolean' ? raw[k] : SUBTASK_DEFAULTS[k];
+    });
+    return out;
+  }
+
+  /** 是否子任务 */
+  function isChild(t) {
+    return !!(t && t.parentId);
+  }
+
+  /** 从一组任务里取直属子任务（保持原顺序） */
+  function childrenOf(list, id) {
+    return list.filter(function (t) { return t.parentId === id; });
+  }
+
+  /**
+   * 父任务的子任务进度
+   * @returns {{ total: number, done: number, pct: number, allDone: boolean }}
+   */
+  function subtaskProgress(list, id) {
+    var ch = childrenOf(list, id);
+    var done = 0;
+    ch.forEach(function (t) { if (t.status === 'done') done++; });
+    return {
+      total: ch.length,
+      done: done,
+      // 向下取整：2/3 显示 66% 而不是 67%，别让进度条看着快做完了
+      pct: ch.length ? Math.floor(done / ch.length * 100) : 0,
+      allDone: ch.length > 0 && done === ch.length
+    };
+  }
+
+  /** 所有子任务的 id 集合（列表里判断「这条要不要藏起来」用） */
+  function childIds(list) {
+    var out = {};
+    list.forEach(function (t) { if (t.parentId) out[t.id] = 1; });
+    return out;
   }
 
   var Store = {
@@ -4834,6 +4989,7 @@ window.AK_OPS = [
       if (!state.settings.background) state.settings.background = { dataUrl: '', mask: 0.5 };
       if (state.settings.background.mask == null) state.settings.background.mask = 0.5;
       if (!state.settings.pet) state.settings.pet = ds.settings.pet;
+      state.settings.subtask = subOpts(state.settings);   // 逐项补默认值，顺带丢掉脏值
       if (!state.pomodoro) state.pomodoro = ds.pomodoro;
       if (!state.pomodoro.trees) state.pomodoro.trees = [];
       if (!state.pomodoro.timer) state.pomodoro.timer = ds.pomodoro.timer;
@@ -5811,21 +5967,40 @@ window.AK_OPS = [
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         repeat: sanitizeRepeat(data.repeat),
+        parentId: this.validParentId(data.parentId),
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
       state.tasks.push(t);
+      // 新增子任务后，父任务的进度可能变了；若设置要求「全完成自动完成父」，这里也要生效
+      if (t.parentId) this.syncParent(t.parentId);
       this.emit();
       return t;
+    },
+
+    /**
+     * 校验父任务 id：父必须存在、且自己不能是子任务（只允许一层）
+     * @returns {string} 合法的父 id，或 '' 表示顶层任务
+     */
+    validParentId: function (pid, selfId) {
+      if (!pid || pid === selfId) return '';
+      var p = this.getTask(pid);
+      if (!p || p.parentId) return '';
+      return pid;
     },
 
     updateTask: function (id, data) {
       var t = this.getTask(id);
       if (!t) return null;
       var wasDone = t.status === 'done';
+      var wasParentId = t.parentId || '';
       Object.keys(data).forEach(function (k) {
         t[k] = typeof data[k] === 'string' ? data[k].trim() : data[k];
       });
+      // 父子关系单独校验：不允许挂到子任务下面（只做一层）
+      if (Object.prototype.hasOwnProperty.call(data, 'parentId')) {
+        t.parentId = this.validParentId(data.parentId, id);
+      }
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
         this.addPoints(POMO.TASK_DONE);
@@ -5838,13 +6013,94 @@ window.AK_OPS = [
       this.checkAchievements(true);
       if (t.status === 'done' && !t.doneAt) t.doneAt = new Date().toISOString();
       if (t.status !== 'done') t.doneAt = '';
+
+      /* ---- 子任务联动 ---- */
+      var o = subOpts(state.settings);
+      if (!wasDone && t.status === 'done') {
+        if (isChild(t)) {
+          // ① 子任务全完成 → 视设置决定是否自动完成父任务
+          if (wasParentId) this.syncParent(wasParentId);
+        } else if (o.cascadeDone) {
+          // ② 父任务完成 → 视设置决定是否连带勾选未完成的子任务
+          childrenOf(state.tasks, t.id).forEach(function (c) {
+            if (c.status !== 'done') {
+              c.status = 'done';
+              c.doneAt = new Date().toISOString();
+            }
+          });
+        }
+      }
+      // 父任务从「完成」改回未完成时，子任务不动（不做事后回滚，避免误伤手动改过的）
+      if (wasDone && t.status !== 'done' && isChild(t) && wasParentId) this.syncParent(wasParentId);
+
       this.emit();
       return t;
     },
 
+    /**
+     * 子任务变动后同步父任务状态。
+     * 只有在「子任务全部完成」且设置允许时才自动完成父任务；
+     * 不做反方向的「子任务没完成就把父任务退回」，否则改一个子任务会把父任务反复拉扯。
+     */
+    syncParent: function (pid) {
+      var p = this.getTask(pid);
+      if (!p) return;
+      var o = subOpts(state.settings);
+      var pr = subtaskProgress(state.tasks, pid);
+      if (!o.autoDoneParent) return;
+      if (pr.allDone && p.status !== 'done') {
+        p.status = 'done';
+        p.doneAt = new Date().toISOString();
+        this.addPoints(POMO.TASK_DONE);
+      }
+    },
+
+    /** 当前设置下的子任务行为（带默认值兜底） */
+    subtaskOpts: function () {
+      return subOpts(state.settings);
+    },
+
+    /** 某任务的直属子任务（按创建顺序） */
+    subtasksOf: function (id) {
+      return childrenOf(state.tasks, id);
+    },
+
+    /** 某任务的子任务进度 { total, done, pct, allDone } */
+    subtaskProgress: function (id) {
+      return subtaskProgress(state.tasks, id);
+    },
+
+    /**
+     * 删除待办。父任务按设置处理子任务：
+     *   orphanKeep = true  → 子任务保留，parentId 清空，变成顶层任务
+     *   orphanKeep = false → 子任务一并删除
+     * @returns {{ removed: number, kept: number }}
+     */
     removeTask: function (id) {
-      state.tasks = state.tasks.filter(function (t) { return t.id !== id; });
+      var t = this.getTask(id);
+      if (!t) return { removed: 0, kept: 0 };
+      var o = subOpts(state.settings);
+      var removed = 1, kept = 0;
+      var kill = {};
+      var isParent = !t.parentId;     // 必须在改动之前判断，下面会动 t.parentId 之外的记录
+      var parentId = t.parentId;
+
+      if (isParent) {
+        var kids = childrenOf(state.tasks, id);
+        if (kids.length) {
+          if (o.orphanKeep) {
+            kids.forEach(function (c) { c.parentId = ''; });
+            kept = kids.length;
+          } else {
+            kids.forEach(function (c) { kill[c.id] = 1; removed++; });
+          }
+        }
+      }
+
+      state.tasks = state.tasks.filter(function (x) { return x.id !== id && !kill[x.id]; });
+      if (parentId) this.syncParent(parentId);
       this.emit();
+      return { removed: removed, kept: kept };
     },
 
     getTask: function (id) {
@@ -5852,6 +6108,16 @@ window.AK_OPS = [
         if (state.tasks[i].id === id) return state.tasks[i];
       }
       return null;
+    },
+
+    /** 顶层任务（不含子任务）。「今日」、四象限、导航角标只看这些 */
+    rootTasks: function () {
+      return state.tasks.filter(function (t) { return !t.parentId; });
+    },
+
+    /** 顶层待完成任务，按截止时间升序 */
+    rootPending: function () {
+      return this.rootTasks().filter(function (t) { return t.status !== 'done'; }).sort(compareDue);
     },
 
     /** 任务状态循环：todo -> doing -> done -> todo */
@@ -7525,6 +7791,8 @@ window.AK_OPS = [
         sleeps: obj.sleeps || [],
         usage: obj.usage || {}
       };
+      // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
+      state.settings.subtask = Object.assign({}, ds.settings.subtask, state.settings.subtask || {});
       this.ensure();
       this.emit();
     },
@@ -7559,6 +7827,12 @@ window.AK_OPS = [
   global.TREE_SPECIES = TREE_SPECIES;
   global.speciesOf = speciesOf;
   global.treeStage = treeStage;
+  global.SUBTASK_DEFAULTS = SUBTASK_DEFAULTS;
+  global.subOpts = subOpts;
+  global.isChild = isChild;
+  global.childrenOf = childrenOf;
+  global.subtaskProgress = subtaskProgress;
+  global.childIds = childIds;
   global.Store = Store;
 })(window);
 
@@ -7767,7 +8041,8 @@ window.AK_OPS = [
       ]);
       var bodyText = el('p', {
         text: opts.message || '',
-        style: { fontSize: '13.5px', color: 'var(--text-2)', lineHeight: '1.65' }
+        // message 里带换行时按段落显示（子任务说明、多行影响提示都要用）
+        style: { fontSize: '13.5px', color: 'var(--text-2)', lineHeight: '1.65', whiteSpace: 'pre-wrap' }
       });
       m = modal({
         title: opts.title || '确认操作',
@@ -9234,7 +9509,9 @@ window.AK_OPS = [
     if (type === 'task') {
       return {
         title: r.title || '',
-        sub: [r.dueDate, r.courseName, tags].filter(Boolean).join(' · '),
+        // 子任务标注出来，否则搜到「第三章」这种子任务时看不出它属于哪件事
+        sub: [r.parentTitle ? '↳ ' + r.parentTitle : '', r.dueDate, r.courseName, tags]
+          .filter(Boolean).join(' · '),
         body: joinNonEmpty([r.note, tags], ' ')
       };
     }
@@ -9567,8 +9844,13 @@ window.AK_OPS = [
     var s = Store.state;
     var courseName = {};
     (s.courses || []).forEach(function (c) { courseName[c.id] = c.name; });
+    var titleOf = {};
+    (s.tasks || []).forEach(function (t) { titleOf[t.id] = t.title; });
     var tasks = (s.tasks || []).map(function (t) {
-      return Object.assign({}, t, { courseName: courseName[t.courseId] || '' });
+      return Object.assign({}, t, {
+        courseName: courseName[t.courseId] || '',
+        parentTitle: t.parentId ? (titleOf[t.parentId] || '') : ''
+      });
     });
     return {
       courses: s.courses || [],
@@ -11744,8 +12026,9 @@ window.AK_OPS = [
       var weekNo = Store.currentWeek();
       var inTerm = weekNo >= 1 && weekNo <= Store.semester.weeks;
       var courses = Store.coursesOnDay(dow, weekNo);
-      var todayTasks = Store.todayTasks();
-      var overdue = Store.overdueTasks();
+      // 「今日」只看顶层任务：子任务在父任务里展开看，避免同一件事刷两遍
+      var todayTasks = Store.todayTasks().filter(function (t) { return !t.parentId; });
+      var overdue = Store.overdueTasks().filter(function (t) { return !t.parentId; });
 
       /* ---------- 问候卡 ---------- */
       var hour = now.getHours();
@@ -11821,7 +12104,7 @@ window.AK_OPS = [
         var todayStr = DateUtil.toStr(today);
         var items = [];
         Store.tasks.forEach(function (t) {
-          if (!t.important || t.status === 'done') return;
+          if (!t.important || t.status === 'done' || t.parentId) return;
           var d = t.dueDate || todayStr;
           items.push({ kind: 'task', title: t.title, date: d, time: t.dueTime || '23:59' });
         });
@@ -12056,7 +12339,7 @@ window.AK_OPS = [
       }
 
       /* ---------- 即将到来 ---------- */
-      var upcoming = Store.pendingTasks().filter(function (t) {
+      var upcoming = Store.rootPending().filter(function (t) {
         var left = t.dueDate ? DateUtil.daysLeft(t.dueDate) : 999;
         return left > 0 && left <= 7;
       }).slice(0, 4);
@@ -14095,6 +14378,12 @@ window.AK_OPS = [
    * 任务行组件
    * ========================================================== */
   var TaskRow = {
+    /**
+     * 已展开子任务的父任务 id。只存在内存里——刷新后回到折叠态，
+     * 避免列表越用越长。
+     */
+    expanded: {},
+
     /** 状态圆点按钮 */
     check: function (t) {
       var cls = 'task-check ' + t.status;
@@ -14114,6 +14403,22 @@ window.AK_OPS = [
       if (t.status === 'doing') btn.appendChild(el('i'));
       if (t.status === 'done') btn.appendChild(V.svg('M4 12l5 5L20 6', 13));
       return btn;
+    },
+
+    /**
+     * 子任务进度徽章 2/4。
+     * 只在有子任务、且设置里开了 showProgress 时出现。
+     */
+    progBadge: function (t) {
+      if (!Store.subtaskOpts().showProgress) return null;
+      var pr = Store.subtaskProgress(t.id);
+      if (!pr.total) return null;
+      return el('span', {
+        class: 'chip subtask-prog' + (pr.allDone ? ' is-done' : ''),
+        style: { padding: '0 6px', fontSize: '10.5px' },
+        title: '子任务进度 ' + pr.done + '/' + pr.total,
+        text: pr.done + '/' + pr.total
+      });
     },
 
     dueChip: function (t) {
@@ -14137,6 +14442,9 @@ window.AK_OPS = [
     build: function (t, opts) {
       opts = opts || {};
       var course = t.courseId ? Store.getCourse(t.courseId) : null;
+      var kids = opts.noKids ? [] : Store.subtasksOf(t.id);
+      var open = !!TaskRow.expanded[t.id];
+      var pr = kids.length ? Store.subtaskProgress(t.id) : null;
 
       var meta = [];
       if (course) {
@@ -14149,15 +14457,19 @@ window.AK_OPS = [
       }
       if (opts.compact && t.dueDate) meta.push(document.createTextNode(DateUtil.human(t.dueDate)));
 
-      return el('div', {
-        class: 'task-row' + (t.status === 'done' ? ' done' : '') + (opts.compact ? ' compact' : ''),
+      var row = el('div', {
+        class: 'task-row' + (t.status === 'done' ? ' done' : '') + (opts.compact ? ' compact' : '') +
+               (kids.length ? ' has-kids' : '') + (t.parentId ? ' is-child' : ''),
         dataset: { rec: 'task:' + t.id },     // 全局搜索跳转后靠它定位
         onclick: function () { TaskDialog.open(t.id); }
       }, [
         TaskRow.check(t),
         el('div', { class: 'task-main' }, [
-          el('div', { class: 'task-title', text: t.title }),
-          (meta.length || t.note || (t.tags && t.tags.length)) ? el('div', { class: 'task-meta' }, [
+          el('div', { class: 'task-title-row' }, [
+            el('div', { class: 'task-title', text: t.title }),
+            pr ? TaskRow.progBadge(t) : null
+          ]),
+          (meta.length || t.note || (t.tags && t.tags.length) || TaskRow.repLabel(t)) ? el('div', { class: 'task-meta' }, [
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
             (t.repeat && t.repeat.type !== 'none') ? el('span', { class: 'chip', style: { padding: '0 6px', fontSize: '10.5px' }, text: '↻ ' + TaskRow.repLabel(t) }) : null,
@@ -14167,8 +14479,35 @@ window.AK_OPS = [
             t.note && !opts.compact ? el('span', { class: 'task-note', text: t.note }) : null
           ]) : null
         ]),
+        kids.length ? el('button', {
+          class: 'subtask-toggle' + (open ? ' open' : ''),
+          title: open ? '收起子任务' : '展开 ' + kids.length + ' 个子任务',
+          onclick: function (e) {
+            e.stopPropagation();
+            TaskRow.expanded[t.id] = !TaskRow.expanded[t.id];
+            if (opts.onToggle) opts.onToggle();
+          }
+        }, [V.svg(V.icons.down, 14)]) : null,
         opts.compact ? null : TaskRow.dueChip(t)
       ]);
+
+      if (!kids.length) return row;
+
+      // 子任务默认折叠：外面套一层容器，展开时把子行插到父行下面
+      var wrap = el('div', { class: 'subtask-wrap' }, [row]);
+      if (open) {
+        var box = el('div', { class: 'subtask-box' });
+        kids.forEach(function (c) { box.appendChild(TaskRow.build(c, { noKids: true })); });
+        box.appendChild(el('button', {
+          class: 'subtask-add',
+          onclick: function (e) {
+            e.stopPropagation();
+            TaskDialog.open(null, { parentId: t.id });
+          }
+        }, [V.svg(V.icons.plus, 13), '添加子任务']));
+        wrap.appendChild(box);
+      }
+      return wrap;
     }
   };
 
@@ -14177,12 +14516,19 @@ window.AK_OPS = [
    * ========================================================== */
   var TaskDialog = {
     open: function (taskId, preset) {
+      preset = preset || {};
       var isEdit = !!taskId;
       var t = taskId ? Store.getTask(taskId) : null;
       var data = {
         status: t ? t.status : 'todo',
         priority: t ? t.priority : 'normal'
       };
+
+      /* ---- 子任务关系 ---- */
+      var parent = t ? (t.parentId ? Store.getTask(t.parentId) : null)
+                     : (preset.parentId ? Store.getTask(preset.parentId) : null);
+      // 已有子任务的父任务不能再挂到别人下面（只允许一层）
+      var myKids = isEdit ? Store.subtasksOf(taskId) : [];
 
       var courseOpts = [{ value: '', label: '不关联课程' }].concat(
         Store.courses.map(function (c) { return { value: c.id, label: c.name }; })
@@ -14311,8 +14657,22 @@ window.AK_OPS = [
       var fRepeatUntil = V.input({ type: 'date', value: curRep.until || '' });
 
       var body = [
+        /* ---- 子任务关系提示：只读，改关系靠「转为子任务 / 提升为顶层」---- */
+        parent ? el('div', { class: 'subtask-parent-bar' }, [
+          el('span', { class: 'subtask-parent-label', text: '所属父任务' }),
+          el('b', { class: 'subtask-parent-name', text: parent.title }),
+          el('button', {
+            class: 'link-btn', text: '提升为顶层',
+            onclick: function () {
+              m.close();
+              Store.updateTask(taskId, { parentId: '' });
+              TaskRow.expanded[parent.id] = true;
+              UI.toast('已提升为顶层待办');
+            }
+          })
+        ]) : null,
         el('div', { class: 'field' }, [
-          el('label', { text: '待办内容' }),
+          el('label', { text: parent ? '子任务内容' : '待办内容' }),
           el('div', { class: 'input-mic' }, [fTitle, micBtn]),
           liveEl
         ]),
@@ -14332,7 +14692,18 @@ window.AK_OPS = [
         V.field('优先级', fPriority),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
-        V.field('备注', fNote)
+        V.field('备注', fNote),
+        /* ---- 已有子任务时的说明 ---- */
+        (isEdit && myKids.length) ? el('div', { class: 'field' }, [
+          el('label', { text: '子任务（' + myKids.filter(function (c) { return c.status === 'done'; }).length + '/' + myKids.length + '）' }),
+          el('div', { class: 'subtask-inline-list' }, myKids.map(function (c) {
+            return el('div', { class: 'subtask-inline-row' + (c.status === 'done' ? ' done' : '') }, [
+              TaskRow.check(c),
+              el('span', { class: 'subtask-inline-title', text: c.title })
+            ]);
+          })),
+          el('div', { class: 'ocr-hint', text: '子任务只能在父任务里添加，不支持多层嵌套。' })
+        ]) : null
       ];
 
       var m = V.modal({
@@ -14345,10 +14716,27 @@ window.AK_OPS = [
             onclick: function () {
               m.close();
               setTimeout(function () {
+                /* 删父任务要说清子任务会怎样——这是最容易后悔的操作 */
+                var o = Store.subtaskOpts();
+                var tips = [];
+                if (myKids.length) {
+                  tips.push(o.orphanKeep
+                    ? '它的 ' + myKids.length + ' 个子任务会保留，并提升为顶层待办。'
+                    : '它的 ' + myKids.length + ' 个子任务也会一起删除。');
+                  tips.push(o.orphanKeep
+                    ? '（想连子任务一起删，可先到「设置 → 子任务」改这一项）'
+                    : '（想保留子任务，可先到「设置 → 子任务」改这一项）');
+                }
                 V.confirm({
-                  title: '删除待办', message: '确定删除「' + t.title + '」吗？',
+                  title: myKids.length ? '删除待办及其子任务' : '删除待办',
+                  message: '确定删除「' + t.title + '」吗？' +
+                    (tips.length ? '\n\n' + tips.join('\n') : ''),
                   danger: true, okText: '删除'
-                }).then(function (ok) { if (ok) { Store.removeTask(taskId); UI.toast('已删除待办'); } });
+                }).then(function (ok) {
+                  if (!ok) return;
+                  var r = Store.removeTask(taskId);
+                  UI.toast(r.kept ? ('已删除，' + r.kept + ' 个子任务已提升为顶层') : '已删除待办');
+                });
               }, 220);
             }
           }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
@@ -14375,14 +14763,49 @@ window.AK_OPS = [
                 })()
               };
               if (!d.title.trim()) { UI.toast('请填写待办内容', 'err'); fTitle.focus(); return; }
-              if (isEdit) Store.updateTask(taskId, d);
-              else Store.addTask(d);
+              if (isEdit) {
+                Store.updateTask(taskId, d);
+              } else {
+                d.parentId = preset.parentId || '';
+                var nt = Store.addTask(d);
+                if (d.parentId) TaskRow.expanded[d.parentId] = true;   // 加了子任务就展开，让人看得见
+                if (nt) TaskDialog.hintIfFirstSubtask();
+              }
               m.close();
-              UI.toast(isEdit ? '待办已更新' : '待办已添加');
+              UI.toast(isEdit ? '待办已更新' : (d.parentId ? '子任务已添加' : '待办已添加'));
             }
           })
         ])
       });
+    },
+
+    /**
+     * 第一次创建子任务时弹一次说明，讲清「默认折叠 / 只一层 / 父任务不会自动完成」。
+     * 只弹一次，之后可在「设置 → 子任务」里改行为。
+     */
+    hintIfFirstSubtask: function () {
+      var st = Store.state.settings;
+      if (st.subtaskHinted) return;
+      Store.updateSettings({ subtaskHinted: true });
+      var o = Store.subtaskOpts();
+      setTimeout(function () {
+        V.confirm({
+          title: '子任务是这么工作的',
+          message: [
+            '· 子任务默认折叠，点父任务右边的箭头才展开',
+            '· 只支持一层，子任务下面不能再挂子任务',
+            '· 子任务全部完成时，父任务' + (o.autoDoneParent ? '会自动完成' : '不会自动完成，只显示进度') ,
+            '· 父任务完成时，未完成的子任务' + (o.cascadeDone ? '会一并完成' : '保持原样'),
+            '· 删除父任务时，子任务' + (o.orphanKeep ? '会保留并提升为顶层' : '会一起删除'),
+            '',
+            '这几条都能在「设置 → 子任务」里改。'
+          ].join('\n'),
+          okText: '知道了',
+          cancelText: '去设置'
+        }).then(function (ok) {
+          if (!ok && global.SettingsView) global.SettingsView.go('subtask');
+        });
+      }, 320);
     }
   };
 
@@ -14419,7 +14842,7 @@ window.AK_OPS = [
     onEnter: function () { this.render(); },
 
     onDataChange: function () {
-      if (App.currentId === 'tasks') App.badge('tasks', Store.pendingTasks().length);
+      if (App.currentId === 'tasks') App.badge('tasks', Store.rootPending().length);
     },
 
     /**
@@ -14435,6 +14858,11 @@ window.AK_OPS = [
       if (t && state.status !== 'all' && state.status !== t.status) { state.status = 'all'; dirty = true; }
       if (t && state.course !== 'all' && state.course !== (t.courseId || '')) { state.course = 'all'; dirty = true; }
       if (state.q) { state.q = ''; dirty = true; }
+      // 命中的是子任务：先把父任务展开，否则它在折叠状态里根本看不见
+      if (t && t.parentId) {
+        TaskRow.expanded[t.parentId] = true;
+        dirty = true;
+      }
       if (dirty) this.render();
       return Search.flash(Search.findRec(type, id));
     },
@@ -14463,8 +14891,10 @@ window.AK_OPS = [
         return;
       }
 
-      var all = Store.tasks.slice();
+      /* 列表只展示顶层任务，子任务在父任务里展开看，避免同一件事出现两次 */
+      var all = Store.rootTasks();
       var pending = all.filter(function (t) { return t.status !== 'done'; });
+      var pendingAll = Store.tasks.filter(function (t) { return t.status !== 'done'; }).length;
 
       /* ---- 概览 ---- */
       var summary = el('div', { class: 'task-summary' }, [
@@ -14535,12 +14965,18 @@ window.AK_OPS = [
       /* ---- 过滤 ---- */
       var kw = (state.q || '').trim().toLowerCase();
       var list = all.filter(function (t) {
-        if (state.status !== 'all' && t.status !== state.status) return false;
+        if (state.status !== 'all' && t.status !== state.status) {
+          // 父任务未完成、但子任务命中了筛选条件时也留下，否则「未开始」会把父任务筛没
+          if (!(state.status === 'todo' && Store.subtasksOf(t.id).some(function (c) { return c.status === 'todo'; }))) return false;
+        }
         if (state.course !== 'all' && t.courseId !== state.course) return false;
         if (state.tag && !hasTag(t.tags, state.tag)) return false;
         if (kw) {
-          var hay = [t.title, t.note, (t.tags || []).join(' ')].join(' ').toLowerCase();
-          if (hay.indexOf(kw) < 0) return false;
+          // 父任务自己没命中时，再看它的子任务里有没有命中的
+          function hit(x) {
+            return [x.title, x.note, (x.tags || []).join(' ')].join(' ').toLowerCase().indexOf(kw) >= 0;
+          }
+          if (!hit(t) && !Store.subtasksOf(t.id).some(hit)) return false;
         }
         return true;
       }).sort(function (a, b) {
@@ -14569,7 +15005,10 @@ window.AK_OPS = [
           el('span', { class: 'group-count', text: String(g.items.length) })
         ]);
         var box = el('div', { class: 'card', style: { padding: '6px 8px', marginBottom: '14px' } });
-        g.items.forEach(function (t) { box.appendChild(TaskRow.build(t)); });
+        g.items.forEach(function (t) {
+          // onToggle：展开/收起后不整页重绘，只重建这一组，保住滚动位置
+          box.appendChild(TaskRow.build(t, { onToggle: function () { view.render(); } }));
+        });
         root.appendChild(head);
         root.appendChild(box);
       });
@@ -16924,8 +17363,8 @@ window.AK_OPS = [
       ]));
       card.appendChild(durRow);
 
-      // 选择待办
-      var pending = Store.pendingTasks();
+      // 选择待办（只列顶层任务，子任务进父任务里做）
+      var pending = Store.rootPending();
       if (pending.length) {
         var opts = [{ value: '', label: '不关联待办' }].concat(pending.map(function (t) {
           return { value: t.id, label: t.title };
@@ -18443,6 +18882,7 @@ window.AK_OPS = [
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
+    subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
     speech: { name: '语音识别', desc: '待办的语音输入方式与讯飞配置' },
     ocr: { name: '图片识别', desc: '导入课表的识别方式与云端接口' },
@@ -18547,6 +18987,8 @@ window.AK_OPS = [
       ]));
 
             if (SUB === 'pet') { this.renderPet(root); return; }
+
+            if (SUB === 'subtask') { renderSubtaskPage(root); return; }
 
             if (SUB === 'look') {
   /* ===================== 外观 ===================== */
@@ -19439,6 +19881,8 @@ window.AK_OPS = [
             el('li', { text: '· 标签支持二级：写成「学习/高数」，就能按一级或二级分别统计。' }),
             el('li', { text: '· 标签自带图标和颜色：常用标签（学习、生活、运动…）自动配上，也能在「设置 → 标签」里换图标、改颜色、改名。' }),
             el('li', { text: '· 「待办」可关联课程，设置截止日期后，到期会出现在「今日」页。' }),
+            el('li', { text: '· 展开一个待办，点「添加子任务」就能把一件事拆成几步；只做一层，父任务上显示 2/4 进度。' }),
+            el('li', { text: '· 子任务的默认行为是「各算各的」：子任务全完成不自动完成父任务，勾父任务也不连带子任务；删除父任务时子任务会保留并提升为顶层。这四条都能在「设置 → 子任务」里改。' }),
             el('li', { text: '· 灵感已并入「待办」：切到顶部的「灵感」分页就能随手记，点「转为待办」一键搬过去。' }),
             el('li', { text: '· 每日一句 / 每日一词可以单独关掉（模块显示 → 首页卡片）；喜欢的话点星标收藏，在「收藏的词句」里回看。' }),
             el('li', { text: '· 外观可换 9 套配色或自选颜色，也能传一张图做背景。' }),
@@ -19469,6 +19913,7 @@ window.AK_OPS = [
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
+    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
     { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438' },
@@ -20968,6 +21413,123 @@ window.AK_OPS = [
 
     drawRatioHint();
     drawEst();
+  }
+
+  /* ==========================================================
+   * 二级页：子任务行为
+   * 前三项互相影响（能形成「勾了 A 就等于勾了 B」的闭环），
+   * 所以每一项都写明「当前组合下会发生什么」，并对冲突组合给出警告。
+   * ========================================================== */
+  function renderSubtaskPage(root) {
+    var cur = Store.subtaskOpts();
+
+    function save(patch) {
+      Store.updateSettings({ subtask: Object.assign({}, Store.subtaskOpts(), patch) });
+      view.render();
+    }
+
+    /* ---- 说明 ---- */
+    var intro = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    intro.appendChild(el('div', { class: 'section-title' }, ['子任务怎么用']));
+    intro.appendChild(el('ul', {
+      style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.9', margin: '0', paddingLeft: '18px' }
+    }, [
+      el('li', { text: '在「待办」里展开一个父任务，点最下面的「添加子任务」，就能把一件事拆成几步。' }),
+      el('li', { text: '子任务默认折叠，父任务右边显示 2/4 的进度徽章。' }),
+      el('li', { text: '只支持一层：子任务下面不能再挂子任务。想再细，说明这件事该拆成两个父任务。' }),
+      el('li', { text: '「今日」、四象限、导航角标只算顶层任务，不会因为拆了子任务就把数字放大。' })
+    ]));
+    root.appendChild(intro);
+
+    /* ---- 逐项开关 ---- */
+    var card = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['行为设置']));
+
+    function row(label, hint, key, onText, offText) {
+      var node = el('button', {
+        class: 'switch' + (cur[key] ? ' on' : ''),
+        title: cur[key] ? '点击关闭' : '点击开启',
+        onclick: function () {
+          var patch = {};
+          patch[key] = !cur[key];
+          save(patch);
+        }
+      }, [el('i')]);
+      // 开关和文字之间不要拉太开：限一个宽度，右侧留白比中间开洞好看
+      return el('div', { class: 'subtask-set-row' }, [
+        el('div', { class: 'subtask-set-text' }, [
+          el('b', { text: label }),
+          el('span', { class: 'subtask-set-hint', text: hint }),
+          el('span', {
+            class: 'subtask-state' + (cur[key] ? ' is-on' : ''),
+            text: '当前：' + (cur[key] ? onText : offText)
+          })
+        ]),
+        node
+      ]);
+    }
+
+    card.appendChild(row(
+      '子任务全部完成时，自动完成父任务',
+      '关掉的话父任务要自己点完成，只靠 2/4 的徽章看进度。',
+      'autoDoneParent', '子任务勾完 → 父任务自动变成已完成', '父任务保持未完成，只更新进度'
+    ));
+    card.appendChild(row(
+      '父任务完成时，把未完成的子任务一并完成',
+      '适合「父任务只是个分组」的用法；如果你会先完成任务条目、再回头补细节，建议关掉。',
+      'cascadeDone', '勾父任务 → 子任务全部被勾上', '子任务保持原样，不会被改动'
+    ));
+    card.appendChild(row(
+      '删除父任务时保留子任务',
+      '开启 = 子任务留下来、提升为顶层待办；关闭 = 连子任务一起删掉。删除前都会再确认一次。',
+      'orphanKeep', '子任务保留并提升为顶层', '子任务随父任务一起删除'
+    ));
+    card.appendChild(row(
+      '父任务上显示 2/4 进度徽章',
+      '关掉后父任务行更清爽，但看不出还有几步没做。',
+      'showProgress', '显示进度徽章', '不显示徽章'
+    ));
+    root.appendChild(card);
+
+    /* ---- 组合影响提示 ---- */
+    var warn = [];
+    if (cur.autoDoneParent && cur.cascadeDone) {
+      warn.push('「自动完成父任务」和「一并完成子任务」同时开着：勾完最后一个子任务，父任务会被自动勾上，' +
+                '父任务一勾又反过来把其余子任务全勾上——实际上只要完成任意一个子任务，整组就会全绿。' +
+                '如果你不想要这个效果，关掉其中一项。');
+    }
+    if (!cur.autoDoneParent && cur.cascadeDone) {
+      warn.push('当前是「父完成任务时子任务一并完成，但子任务全完成不会自动完成父任务」：' +
+                '方向是单向的，从子任务往上不会触发任何联动。');
+    }
+    if (cur.autoDoneParent && !cur.cascadeDone) {
+      warn.push('当前是「子任务全完成 → 父任务自动完成」：父任务的完成状态由子任务决定，' +
+                '手动点父任务完成时子任务不会被改动，所以可以出现「父任务已完成、子任务还没完成」。');
+    }
+
+    var tipCard = el('div', { class: 'card', style: { padding: '16px 18px' } });
+    tipCard.appendChild(el('div', { class: 'section-title' }, ['当前组合的效果']));
+    if (!warn.length) {
+      tipCard.appendChild(el('p', {
+        class: 'ocr-hint',
+        text: '父任务和子任务完全独立：勾谁只影响谁。这是最不容易误操作的一档。'
+      }));
+    } else {
+      tipCard.appendChild(el('div', { class: 'subtask-warn' }, warn.map(function (w) {
+        return el('p', { style: { margin: '0 0 8px', fontSize: '12.5px', lineHeight: '1.75' }, text: '· ' + w });
+      })));
+    }
+    tipCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' } }, [
+      el('button', {
+        class: 'btn btn-sm', text: '恢复默认',
+        onclick: function () {
+          Store.updateSettings({ subtask: Object.assign({}, global.SUBTASK_DEFAULTS) });
+          UI.toast('已恢复默认的子任务行为');
+          view.render();
+        }
+      })
+    ]));
+    root.appendChild(tipCard);
   }
 
   /** 供其它页面直接跳到某个设置子页 */
@@ -29060,6 +29622,16 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       ]
     },
     {
+      view: 'tasks', icon: I.flag, title: '一件事拆成几步',
+      desc: '像「期末复习」这样的事，展开后点「添加子任务」，就能拆成几个小步骤，父任务上会显示 2/4 这样的进度。',
+      tips: [
+        '子任务默认折叠，点父任务右边的箭头才展开，所以列表不会一下子变很长',
+        '只做一层：子任务下面不能再挂子任务',
+        '默认是「各算各的」——子任务全部做完，父任务不会自己变成完成，只显示进度；勾了父任务也不会把子任务一起勾掉',
+        '这些都能改：在「设置 → 子任务」里逐项开关，页面会实时告诉你当前组合会有什么效果'
+      ]
+    },
+    {
       view: 'pomodoro', icon: I.tomato, title: '番茄钟',
       desc: '专心做一件事的计时器，时长可以自己定，也能关联一条待办。',
       tips: [
@@ -29585,7 +30157,8 @@ window.Pet = (function () {
     var cw = Store.currentWeek();
     var inTerm = cw >= 1 && cw <= s.weeks;
     var total = Store.courses.length;
-    var pendingTasks = Store.tasks.filter(function (t) { return t.status !== 'done'; }).length;
+    // 角标只数顶层任务：子任务是父任务的一部分，否则「1 件事 3 步」会显示成 4
+    var pendingTasks = Store.rootPending().length;
     var start = Store.weekStartDate(1);
     var end = DateUtil.addDays(Store.weekStartDate(s.weeks), 6);
 
@@ -29622,7 +30195,7 @@ window.Pet = (function () {
 
     Store.subscribe(function () {
       renderTermCard();
-      badge('tasks', Store.pendingTasks().length);
+      badge('tasks', Store.rootPending().length);
       if (App.current && App.current.render && !App.current.noAutoRender) App.current.render();
       App.views.forEach(function (v) { if (v.onDataChange) v.onDataChange(); });
     });
@@ -29653,7 +30226,7 @@ window.Pet = (function () {
     }
 
     renderTermCard();
-    badge('tasks', Store.pendingTasks().length);
+    badge('tasks', Store.rootPending().length);
     var first = App.views[0] ? App.views[0].id : null;
     if (first) go(first);
 

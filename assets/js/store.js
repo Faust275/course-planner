@@ -201,6 +201,14 @@
         asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' },
         ocr: { prefer: 'auto', provider: '', apiKey: '', endpoint: '', model: '' },
         background: { dataUrl: '', mask: 0.5 },
+        // 子任务行为（详见「设置 → 子任务」）。前三项会互相影响，设置页有互斥提示
+        subtask: {
+          autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
+          cascadeDone: false,      // 父任务完成 → 未完成子任务一并完成
+          orphanKeep: true,        // 删除父任务时子任务保留（提升为顶层）；false = 一起删
+          showProgress: true       // 父任务显示 2/4 进度徽章
+        },
+        subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
         pet: {
           enabled: false,        // 开发者/自用开关：默认关闭
           src: '',               // 本地精灵图 base64（不随源码分发）
@@ -945,8 +953,64 @@
     copy.doneAt = '';
     copy.createdAt = new Date().toISOString();
     copy.repeatFrom = task.id;
-    copy.occurrence = (task.occurrence || 0) + 1;
-    return copy;
+      copy.occurrence = (task.occurrence || 0) + 1;
+      return copy;
+  }
+
+  /* ==========================================================
+   * 子任务（只做一层：parentId 要么为空，要么指向顶层任务）
+   * ========================================================== */
+
+  /** 子任务行为的默认值；settings.subtask 缺字段时逐项回退到这里 */
+  var SUBTASK_DEFAULTS = {
+    autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
+    cascadeDone: false,      // 父任务完成 → 未完成子任务一并完成
+    orphanKeep: true,        // 删除父任务：true = 子任务保留（提升为顶层），false = 一起删
+    showProgress: true       // 父任务显示 2/4 进度徽章
+  };
+
+  /** 读设置里的子任务行为，缺省/脏值一律回落到默认 */
+  function subOpts(settings) {
+    var raw = (settings && settings.subtask) || {};
+    var out = {};
+    Object.keys(SUBTASK_DEFAULTS).forEach(function (k) {
+      out[k] = typeof raw[k] === 'boolean' ? raw[k] : SUBTASK_DEFAULTS[k];
+    });
+    return out;
+  }
+
+  /** 是否子任务 */
+  function isChild(t) {
+    return !!(t && t.parentId);
+  }
+
+  /** 从一组任务里取直属子任务（保持原顺序） */
+  function childrenOf(list, id) {
+    return list.filter(function (t) { return t.parentId === id; });
+  }
+
+  /**
+   * 父任务的子任务进度
+   * @returns {{ total: number, done: number, pct: number, allDone: boolean }}
+   */
+  function subtaskProgress(list, id) {
+    var ch = childrenOf(list, id);
+    var done = 0;
+    ch.forEach(function (t) { if (t.status === 'done') done++; });
+    return {
+      total: ch.length,
+      done: done,
+      // 向下取整：2/3 显示 66% 而不是 67%，别让进度条看着快做完了
+      pct: ch.length ? Math.floor(done / ch.length * 100) : 0,
+      allDone: ch.length > 0 && done === ch.length
+    };
+  }
+
+  /** 所有子任务的 id 集合（列表里判断「这条要不要藏起来」用） */
+  function childIds(list) {
+    var out = {};
+    list.forEach(function (t) { if (t.parentId) out[t.id] = 1; });
+    return out;
   }
 
   var Store = {
@@ -1097,6 +1161,7 @@
       if (!state.settings.background) state.settings.background = { dataUrl: '', mask: 0.5 };
       if (state.settings.background.mask == null) state.settings.background.mask = 0.5;
       if (!state.settings.pet) state.settings.pet = ds.settings.pet;
+      state.settings.subtask = subOpts(state.settings);   // 逐项补默认值，顺带丢掉脏值
       if (!state.pomodoro) state.pomodoro = ds.pomodoro;
       if (!state.pomodoro.trees) state.pomodoro.trees = [];
       if (!state.pomodoro.timer) state.pomodoro.timer = ds.pomodoro.timer;
@@ -2074,21 +2139,40 @@
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         repeat: sanitizeRepeat(data.repeat),
+        parentId: this.validParentId(data.parentId),
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
       state.tasks.push(t);
+      // 新增子任务后，父任务的进度可能变了；若设置要求「全完成自动完成父」，这里也要生效
+      if (t.parentId) this.syncParent(t.parentId);
       this.emit();
       return t;
+    },
+
+    /**
+     * 校验父任务 id：父必须存在、且自己不能是子任务（只允许一层）
+     * @returns {string} 合法的父 id，或 '' 表示顶层任务
+     */
+    validParentId: function (pid, selfId) {
+      if (!pid || pid === selfId) return '';
+      var p = this.getTask(pid);
+      if (!p || p.parentId) return '';
+      return pid;
     },
 
     updateTask: function (id, data) {
       var t = this.getTask(id);
       if (!t) return null;
       var wasDone = t.status === 'done';
+      var wasParentId = t.parentId || '';
       Object.keys(data).forEach(function (k) {
         t[k] = typeof data[k] === 'string' ? data[k].trim() : data[k];
       });
+      // 父子关系单独校验：不允许挂到子任务下面（只做一层）
+      if (Object.prototype.hasOwnProperty.call(data, 'parentId')) {
+        t.parentId = this.validParentId(data.parentId, id);
+      }
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
         this.addPoints(POMO.TASK_DONE);
@@ -2101,13 +2185,94 @@
       this.checkAchievements(true);
       if (t.status === 'done' && !t.doneAt) t.doneAt = new Date().toISOString();
       if (t.status !== 'done') t.doneAt = '';
+
+      /* ---- 子任务联动 ---- */
+      var o = subOpts(state.settings);
+      if (!wasDone && t.status === 'done') {
+        if (isChild(t)) {
+          // ① 子任务全完成 → 视设置决定是否自动完成父任务
+          if (wasParentId) this.syncParent(wasParentId);
+        } else if (o.cascadeDone) {
+          // ② 父任务完成 → 视设置决定是否连带勾选未完成的子任务
+          childrenOf(state.tasks, t.id).forEach(function (c) {
+            if (c.status !== 'done') {
+              c.status = 'done';
+              c.doneAt = new Date().toISOString();
+            }
+          });
+        }
+      }
+      // 父任务从「完成」改回未完成时，子任务不动（不做事后回滚，避免误伤手动改过的）
+      if (wasDone && t.status !== 'done' && isChild(t) && wasParentId) this.syncParent(wasParentId);
+
       this.emit();
       return t;
     },
 
+    /**
+     * 子任务变动后同步父任务状态。
+     * 只有在「子任务全部完成」且设置允许时才自动完成父任务；
+     * 不做反方向的「子任务没完成就把父任务退回」，否则改一个子任务会把父任务反复拉扯。
+     */
+    syncParent: function (pid) {
+      var p = this.getTask(pid);
+      if (!p) return;
+      var o = subOpts(state.settings);
+      var pr = subtaskProgress(state.tasks, pid);
+      if (!o.autoDoneParent) return;
+      if (pr.allDone && p.status !== 'done') {
+        p.status = 'done';
+        p.doneAt = new Date().toISOString();
+        this.addPoints(POMO.TASK_DONE);
+      }
+    },
+
+    /** 当前设置下的子任务行为（带默认值兜底） */
+    subtaskOpts: function () {
+      return subOpts(state.settings);
+    },
+
+    /** 某任务的直属子任务（按创建顺序） */
+    subtasksOf: function (id) {
+      return childrenOf(state.tasks, id);
+    },
+
+    /** 某任务的子任务进度 { total, done, pct, allDone } */
+    subtaskProgress: function (id) {
+      return subtaskProgress(state.tasks, id);
+    },
+
+    /**
+     * 删除待办。父任务按设置处理子任务：
+     *   orphanKeep = true  → 子任务保留，parentId 清空，变成顶层任务
+     *   orphanKeep = false → 子任务一并删除
+     * @returns {{ removed: number, kept: number }}
+     */
     removeTask: function (id) {
-      state.tasks = state.tasks.filter(function (t) { return t.id !== id; });
+      var t = this.getTask(id);
+      if (!t) return { removed: 0, kept: 0 };
+      var o = subOpts(state.settings);
+      var removed = 1, kept = 0;
+      var kill = {};
+      var isParent = !t.parentId;     // 必须在改动之前判断，下面会动 t.parentId 之外的记录
+      var parentId = t.parentId;
+
+      if (isParent) {
+        var kids = childrenOf(state.tasks, id);
+        if (kids.length) {
+          if (o.orphanKeep) {
+            kids.forEach(function (c) { c.parentId = ''; });
+            kept = kids.length;
+          } else {
+            kids.forEach(function (c) { kill[c.id] = 1; removed++; });
+          }
+        }
+      }
+
+      state.tasks = state.tasks.filter(function (x) { return x.id !== id && !kill[x.id]; });
+      if (parentId) this.syncParent(parentId);
       this.emit();
+      return { removed: removed, kept: kept };
     },
 
     getTask: function (id) {
@@ -2115,6 +2280,16 @@
         if (state.tasks[i].id === id) return state.tasks[i];
       }
       return null;
+    },
+
+    /** 顶层任务（不含子任务）。「今日」、四象限、导航角标只看这些 */
+    rootTasks: function () {
+      return state.tasks.filter(function (t) { return !t.parentId; });
+    },
+
+    /** 顶层待完成任务，按截止时间升序 */
+    rootPending: function () {
+      return this.rootTasks().filter(function (t) { return t.status !== 'done'; }).sort(compareDue);
     },
 
     /** 任务状态循环：todo -> doing -> done -> todo */
@@ -3788,6 +3963,8 @@
         sleeps: obj.sleeps || [],
         usage: obj.usage || {}
       };
+      // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
+      state.settings.subtask = Object.assign({}, ds.settings.subtask, state.settings.subtask || {});
       this.ensure();
       this.emit();
     },
@@ -3822,6 +3999,12 @@
   global.TREE_SPECIES = TREE_SPECIES;
   global.speciesOf = speciesOf;
   global.treeStage = treeStage;
+  global.SUBTASK_DEFAULTS = SUBTASK_DEFAULTS;
+  global.subOpts = subOpts;
+  global.isChild = isChild;
+  global.childrenOf = childrenOf;
+  global.subtaskProgress = subtaskProgress;
+  global.childIds = childIds;
   global.Store = Store;
 })(window);
 

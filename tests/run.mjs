@@ -137,6 +137,18 @@ const DEFAULT_OPTSSrc = (() => {
   return 'var DEFAULT_OPTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
 })();
 
+// 12) 子任务（store.js）
+const SUBTASK_ANCHOR = sliceFrom('var SUBTASK_DEFAULTS = {');
+const SUBTASK_DEFAULTSSrc = (() => {
+  const i = sliceFrom('var SUBTASK_DEFAULTS = {');
+  return 'var SUBTASK_DEFAULTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+})();
+const subOptsSrc = extractFnFrom('subOpts', SUBTASK_ANCHOR);
+const isChildSrc = extractFnFrom('isChild', SUBTASK_ANCHOR);
+const childrenOfSrc = extractFnFrom('childrenOf', SUBTASK_ANCHOR);
+const subtaskProgressSrc = extractFnFrom('subtaskProgress', SUBTASK_ANCHOR);
+const childIdsSrc = extractFnFrom('childIds', SUBTASK_ANCHOR);
+
 // 在隔离作用域里求值并导出
 const mod = `var TimeUtil = ${TimeUtilSrc};
   ${DateUtilSrc}
@@ -188,6 +200,12 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${hexToRgbSrc}
   ${tintSrc}
   ${roundRectSrc}
+  ${SUBTASK_DEFAULTSSrc}
+  ${subOptsSrc}
+  ${isChildSrc}
+  ${childrenOfSrc}
+  ${subtaskProgressSrc}
+  ${childIdsSrc}
   var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
@@ -195,7 +213,8 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
                      hitsIn, describe, snippet, searchAll, groupResults,
                      nextDueDate, repeatExpired, sanitizeRepeat,
-                     annivNext, wrapText, measure, hexToRgb, tint };
+                     annivNext, wrapText, measure, hexToRgb, tint,
+                     subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS };
 `;
 new Function('__LUNAR__', mod)(Lunar);
 const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
@@ -204,7 +223,8 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
         hitsIn, describe, snippet, searchAll, groupResults,
         nextDueDate, repeatExpired, sanitizeRepeat,
-        annivNext, wrapText, measure, hexToRgb, tint } = globalThis.__T;
+        annivNext, wrapText, measure, hexToRgb, tint,
+        subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -928,6 +948,59 @@ console.log('课表导出：wrapText');
   // maxLines 截断后末行收缩
   const tight = wrapText(ctx, '一二三四五六七八九十一二三四五六七八九十', 55, 2);
   eq('截断后仍不超宽', tight.every(l => l.length * 10 <= 55), true);
+}
+
+
+console.log('子任务：subOpts 默认值与兜底');
+{
+  eq('默认值', SUBTASK_DEFAULTS, { autoDoneParent: false, cascadeDone: false, orphanKeep: true, showProgress: true });
+
+  eq('空设置回落默认', subOpts({}), SUBTASK_DEFAULTS);
+  eq('settings 为 undefined 也安全', subOpts(undefined), SUBTASK_DEFAULTS);
+  eq('subtask 为 undefined', subOpts({ subtask: undefined }), SUBTASK_DEFAULTS);
+
+  // 缺字段逐项补，不能整块被覆盖
+  eq('只给一项，其余补默认', subOpts({ subtask: { cascadeDone: true } }),
+    { autoDoneParent: false, cascadeDone: true, orphanKeep: true, showProgress: true });
+
+  // 脏值一律回落到默认（默认不是 false 的项要特别验）
+  eq('字符串 true 不算布尔', subOpts({ subtask: { orphanKeep: 'false' } }).orphanKeep, true);
+  eq('数字 1 不算布尔', subOpts({ subtask: { orphanKeep: 1 } }).orphanKeep, true);
+  eq('null 回落默认', subOpts({ subtask: { orphanKeep: null } }).orphanKeep, true);
+  eq('显式 false 生效', subOpts({ subtask: { orphanKeep: false } }).orphanKeep, false);
+  eq('多给字段被丢掉', Object.keys(subOpts({ subtask: { foo: 1, orphanKeep: false } })).sort(),
+    ['autoDoneParent', 'cascadeDone', 'orphanKeep', 'showProgress']);
+}
+
+console.log('子任务：isChild / childrenOf / subtaskProgress / childIds');
+{
+  eq('无 parentId 不是子任务', isChild({ id: 'a' }), false);
+  eq('空字符串 parentId 不是子任务', isChild({ id: 'a', parentId: '' }), false);
+  eq('有 parentId 是子任务', isChild({ id: 'a', parentId: 'p' }), true);
+  eq('null 安全', isChild(null), false);
+
+  const list = [
+    { id: 'p', title: '期末复习' },
+    { id: 'c1', parentId: 'p', status: 'done' },
+    { id: 'c2', parentId: 'p', status: 'todo' },
+    { id: 'c3', parentId: 'p', status: 'doing' },
+    { id: 'q', title: '另一件事' },
+    { id: 'd1', parentId: 'q', status: 'done' }
+  ];
+  eq('childrenOf 保持顺序', childrenOf(list, 'p').map(t => t.id), ['c1', 'c2', 'c3']);
+  eq('childrenOf 无子任务返回空', childrenOf(list, 'zzz'), []);
+
+  eq('进度 1/4 的 done 计数', subtaskProgress(list, 'p'), { total: 3, done: 1, pct: 33, allDone: false });
+  eq('全完成 pct=100', subtaskProgress(list, 'q'), { total: 1, done: 1, pct: 100, allDone: true });
+  eq('无子任务不算 allDone', subtaskProgress(list, 'zzz'), { total: 0, done: 0, pct: 0, allDone: false });
+
+  // pct 向下取整：2/3 -> 66，不是 67
+  const l2 = [{ id: 'p' }, { id: 'a', parentId: 'p', status: 'done' },
+              { id: 'b', parentId: 'p', status: 'done' }, { id: 'c', parentId: 'p', status: 'todo' }];
+  eq('2/3 取整为 66', subtaskProgress(l2, 'p').pct, 66);
+
+  eq('childIds 只收子任务', Object.keys(childIds(list)).sort(), ['c1', 'c2', 'c3', 'd1']);
+  eq('childIds 不含父任务', childIds(list)['p'], undefined);
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

@@ -45,8 +45,9 @@ course-planner-web/
 ├── verify_repeat.mjs         重复任务：展开生成、过期锚定、until 截止
 ├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
 ├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
+├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（309 条）
+└── tests/run.mjs             纯函数单测（331 条）
 ```
 
 ## 构建
@@ -86,6 +87,7 @@ node verify_search.mjs       # 全局搜索 + 高亮 + 跳转定位
 node verify_repeat.mjs       # 重复任务展开生成
 node verify_anniv.mjs        # 倒数纪念日（含农历）
 node verify_export.mjs       # 课表导出图片
+node verify_subtask.mjs      # 子任务（含设置页联动开关）
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。

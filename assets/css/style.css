@@ -2945,3 +2945,94 @@ mark.cp-hit {
 .cp-anniv-days.near b { color: var(--primary); }
 .cp-anniv-lunar-preview { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
 .cp-anniv-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+
+/* ==========================================================
+ * 子任务
+ * ========================================================== */
+/* 父任务行：给展开箭头留位置 */
+.cp-task-row.has-kids { align-items: center; }
+.cp-task-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cp-task-title-row .cp-task-title { min-width: 0; }
+
+/* 2/4 进度徽章 */
+.cp-subtask-prog {
+  flex: 0 0 auto; font-variant-numeric: tabular-nums;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line);
+}
+.cp-subtask-prog.is-done { background: var(--green-weak); color: var(--green); border-color: transparent; }
+
+/* 展开/收起箭头 */
+.cp-subtask-toggle {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-3); background: transparent; border: none; cursor: pointer;
+  transition: transform .18s, background .18s, color .18s;
+}
+.cp-subtask-toggle:hover { background: var(--surface-2); color: var(--text); }
+.cp-subtask-toggle.open { transform: rotate(180deg); }
+
+/* 子任务容器：左侧一条细线表示从属关系 */
+.cp-subtask-box {
+  margin: -2px 0 6px 22px; padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line);
+  display: flex; flex-direction: column;
+}
+.cp-task-row.is-child { padding-left: 4px; }
+.cp-task-row.is-child .cp-task-title { font-size: 13px; }
+
+/* 「添加子任务」 */
+.cp-subtask-add {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;
+  margin: 4px 0 2px; padding: 4px 8px; border-radius: 8px;
+  font-size: 12px; color: var(--text-3); background: transparent; border: 1px dashed var(--line-strong);
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+}
+.cp-subtask-add:hover { color: var(--primary); border-color: var(--primary-light); background: var(--primary-tint); }
+
+/* 弹窗里的「所属父任务」条 */
+.cp-subtask-parent-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px; margin-bottom: 12px; border-radius: 10px;
+  background: var(--primary-tint); font-size: 12.5px;
+}
+.cp-subtask-parent-label { color: var(--text-3); flex: 0 0 auto; }
+.cp-subtask-parent-name {
+  flex: 1; min-width: 0; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 弹窗里的子任务清单 */
+.cp-subtask-inline-list {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px;
+}
+.cp-subtask-inline-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.cp-subtask-inline-title { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-subtask-inline-row.done .cp-subtask-inline-title { color: var(--text-3); text-decoration: line-through; }
+
+/* 设置页：当前组合提示 */
+.cp-subtask-warn {
+  padding: 10px 12px; border-radius: 10px;
+  background: var(--amber-weak); color: var(--text-2);
+  border-left: 3px solid var(--amber);
+}
+.cp-subtask-warn p:last-child { margin-bottom: 0 !important; }
+.cp-subtask-set-row {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 13px 0; border-top: 1px solid var(--line);
+}
+.cp-subtask-set-text {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  max-width: 480px;
+}
+.cp-subtask-set-text b { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+.cp-subtask-set-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+.cp-subtask-state {
+  font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+.cp-subtask-state.is-on { color: var(--primary); }
+@media (max-width: 560px) {
+  .cp-subtask-set-row { gap: 10px; }
+  .cp-subtask-set-text b { font-size: 13px; }
+}

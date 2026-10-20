@@ -70,7 +70,9 @@
     if (type === 'task') {
       return {
         title: r.title || '',
-        sub: [r.dueDate, r.courseName, tags].filter(Boolean).join(' · '),
+        // 子任务标注出来，否则搜到「第三章」这种子任务时看不出它属于哪件事
+        sub: [r.parentTitle ? '↳ ' + r.parentTitle : '', r.dueDate, r.courseName, tags]
+          .filter(Boolean).join(' · '),
         body: joinNonEmpty([r.note, tags], ' ')
       };
     }
@@ -403,8 +405,13 @@
     var s = Store.state;
     var courseName = {};
     (s.courses || []).forEach(function (c) { courseName[c.id] = c.name; });
+    var titleOf = {};
+    (s.tasks || []).forEach(function (t) { titleOf[t.id] = t.title; });
     var tasks = (s.tasks || []).map(function (t) {
-      return Object.assign({}, t, { courseName: courseName[t.courseId] || '' });
+      return Object.assign({}, t, {
+        courseName: courseName[t.courseId] || '',
+        parentTitle: t.parentId ? (titleOf[t.parentId] || '') : ''
+      });
     });
     return {
       courses: s.courses || [],
