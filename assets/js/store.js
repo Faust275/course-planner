@@ -209,6 +209,11 @@
           showProgress: true       // 父任务显示 2/4 进度徽章
         },
         subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
+        // 日记（详见「设置 → 日记」）
+        diary: {
+          askDateAtNight: true,    // 0–4 点保存时询问归属「昨天 / 今天」
+          showMoodStats: true      // 心情统计总开关（样本 < 7 天仍单独提示，不显示统计）
+        },
         pet: {
           enabled: false,        // 开发者/自用开关：默认关闭
           src: '',               // 本地精灵图 base64（不随源码分发）
@@ -238,6 +243,7 @@
       plans: [],       // 计划（打卡 / 进度）
       ledger: [],      // 记账流水
       notes: [],       // 灵感速记
+      diaries: [],     // 日记（一天一篇，key 为 YYYY-MM-DD）
       events: [],      // 一次性日程
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
@@ -1101,6 +1107,140 @@
   }
 
   /* ==========================================================
+   * 日记：一天一篇 + 心情标签
+   * ========================================================== */
+
+  /**
+   * 心情枚举。**固定五档**，不允许自定义文案：
+   *   - 自定义文字做不了统计（每个人写的都不一样，没法归类）
+   *   - 固定枚举才能给每档配一个稳定颜色，日历上才认得出
+   * 颜色按冷暖分布：越靠上越"热"（高涨），越靠下越"冷"（低落），
+   * 中间「平静」用绿色过渡，这样一眼扫过去能看出整月情绪偏向哪一侧。
+   */
+  var MOODS = [
+    { key: 'great',  name: '很好', emoji: '😄', color: '#f59e0b', tone: 'warm' },
+    { key: 'good',   name: '还行', emoji: '😊', color: '#10b981', tone: 'neutral' },
+    { key: 'meh',    name: '一般', emoji: '😐', color: '#94a3b8', tone: 'neutral' },
+    { key: 'tired',  name: '疲惫', emoji: '😴', color: '#6366f1', tone: 'cold' },
+    { key: 'low',    name: '低落', emoji: '😔', color: '#8b5cf6', tone: 'cold' }
+  ];
+
+  /** 心情统计的最少样本天数：少于这个数不给统计，避免"3 天数据看出人生规律" */
+  var MOOD_MIN_DAYS = 7;
+  /** 心情 × 时间去向的交叉分析门槛，比单心情统计更严 */
+  var MOOD_CROSS_MIN_DAYS = 14;
+
+  function moodOf(key) {
+    for (var i = 0; i < MOODS.length; i++) if (MOODS[i].key === key) return MOODS[i];
+    return null;
+  }
+
+  /** 归类心情到「偏暖 / 中性 / 偏冷」，用于粗粒度统计（样本少时比五档更稳） */
+  function moodTone(key) {
+    var m = moodOf(key);
+    return m ? m.tone : '';
+  }
+
+  /**
+   * 凌晨写作的日期归属。
+   * 数据只存 date（YYYY-MM-DD），所以这里只做判断，真正选哪一天由用户决定。
+   *
+   * @param {number} hour 当前小时 0–23
+   * @param {string} todayStr 今天的日期串
+   * @param {string} [diaryDate] 已经打开/保存过的日记日期
+   * @returns {{ask:boolean, suggest:string, other:string}}
+   *   ask      — 是否需要问用户
+   *   suggest  — 默认建议的归属日（凌晨则建议「昨天」）
+   *   other    — 另一个可选项（与 suggest 必然不同）
+   *
+   * 规则：只有 0:00–3:59 才问。再晚就算"早起"而不是"熬夜"，
+   * 而且白天写日记时问"算昨天还是今天"会让人觉得莫名其妙。
+   */
+  function diaryDatePrompt(hour, todayStr, diaryDate) {
+    var isSmallHour = hour >= 0 && hour < 4;
+    if (!isSmallHour) {
+      return { ask: false, suggest: todayStr, other: todayStr };
+    }
+    var today = DateUtil.parse(todayStr) || DateUtil.today();
+    var yest = DateUtil.toStr(DateUtil.addDays(today, -1));
+    // 已经在写「昨天」那篇：默认继续昨天，另一个选项是今天
+    if (diaryDate === yest) return { ask: true, suggest: yest, other: todayStr };
+    // 其余情况（新建 / 已在写今天）：默认今天，另一个选项是昨天
+    return { ask: true, suggest: todayStr, other: yest };
+  }
+
+  /**
+   * 心情统计：分布 + 平均分 + 样本是否够。
+   * 平均分把五档映射成 1–5（great=5 … low=1），比"哪种心情最多"更能反映整体。
+   * @param {Array} diaries 日记数组
+   * @param {string} from 起始日期串（含）
+   * @param {string} to 结束日期串（含）
+   */
+  function moodStats(diaries, from, to) {
+    var order = {};
+    MOODS.forEach(function (m, i) { order[m.key] = 5 - i; });   // great=5 … low=1
+
+    var inRange = (diaries || []).filter(function (d) {
+      return d && d.date && d.date >= from && d.date <= to;
+    });
+    var days = inRange.length;
+    var counts = {};
+    MOODS.forEach(function (m) { counts[m.key] = 0; });
+    var sum = 0, rated = 0, withText = 0;
+
+    inRange.forEach(function (d) {
+      if (d.content && d.content.trim()) withText++;
+      var k = d.mood;
+      if (!k || counts[k] == null) return;     // 心情选填，没填的不参与
+      counts[k]++;
+      sum += order[k];
+      rated++;
+    });
+
+    var tones = { warm: 0, neutral: 0, cold: 0 };
+    MOODS.forEach(function (m) {
+      if (counts[m.key]) tones[m.tone] += counts[m.key];
+    });
+
+    return {
+      days: days,                 // 这段时间写了几天
+      rated: rated,               // 其中标了心情的天数
+      withText: withText,
+      counts: counts,
+      tones: tones,
+      avg: rated ? Math.round(sum / rated * 100) / 100 : 0,
+      eligible: rated >= MOOD_MIN_DAYS,     // 够不够给统计
+      need: Math.max(0, MOOD_MIN_DAYS - rated),
+      // 最常出现的那一档（并列时取顺序靠前的，保证结果稳定）
+      top: (function () {
+        var best = '', bestN = 0;
+        MOODS.forEach(function (m) {
+          if (counts[m.key] > bestN) { best = m.key; bestN = counts[m.key]; }
+        });
+        return best;
+      })()
+    };
+  }
+
+  /**
+   * 按日期找日记（一天一篇）。
+   * @returns {object|null}
+   */
+  function diaryOn(diaries, dateStr) {
+    for (var i = 0; i < (diaries || []).length; i++) {
+      if (diaries[i] && diaries[i].date === dateStr) return diaries[i];
+    }
+    return null;
+  }
+
+  /** 按日期倒序排（最新在前），不改原数组 */
+  function diariesSorted(diaries) {
+    return (diaries || []).slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+  }
+
+  /* ==========================================================
    * 子任务（只做一层：parentId 要么为空，要么指向顶层任务）
    * ========================================================== */
 
@@ -1305,6 +1445,12 @@
       if (state.settings.background.mask == null) state.settings.background.mask = 0.5;
       if (!state.settings.pet) state.settings.pet = ds.settings.pet;
       state.settings.subtask = subOpts(state.settings);   // 逐项补默认值，顺带丢掉脏值
+      // 日记设置同样逐项补，不让旧的 settings 整块覆盖掉新字段
+      var dopt = state.settings.diary || {};
+      state.settings.diary = {
+        askDateAtNight: typeof dopt.askDateAtNight === 'boolean' ? dopt.askDateAtNight : true,
+        showMoodStats: typeof dopt.showMoodStats === 'boolean' ? dopt.showMoodStats : true
+      };
       if (!state.pomodoro) state.pomodoro = ds.pomodoro;
       if (!state.pomodoro.trees) state.pomodoro.trees = [];
       if (!state.pomodoro.timer) state.pomodoro.timer = ds.pomodoro.timer;
@@ -1327,6 +1473,7 @@
       if (!state.plans) state.plans = [];
       if (!state.ledger) state.ledger = [];
       if (!state.notes) state.notes = [];
+      if (!Array.isArray(state.diaries)) state.diaries = [];
       if (!state.events) state.events = [];
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
@@ -3709,6 +3856,83 @@
     return null;
   },
 
+  /* ===== 日记（一天一篇） ===== */
+  /**
+   * 写入某天的日记。已有则更新，没有则新建 —— 一天只可能有一条。
+   * @param {object} data { date, content, mood, sourceNoteId }
+   * @returns {object} 日记对象
+   */
+  saveDiary: function (data) {
+    var date = (data.date || '').trim() || DateUtil.toStr(DateUtil.today());
+    var exist = this.diaryOf(date);
+    var content = typeof data.content === 'string' ? data.content : '';
+    var mood = data.mood && moodOf(data.mood) ? data.mood : '';
+
+    if (exist) {
+      exist.content = content;
+      exist.mood = mood;
+      exist.updatedAt = new Date().toISOString();
+      // sourceNoteId 只记录"最初从哪条灵感来的"，后续编辑不清空
+      if (data.sourceNoteId) exist.sourceNoteId = data.sourceNoteId;
+      this.emit();
+      return exist;
+    }
+
+    var d = {
+      id: uid('d'),
+      date: date,
+      content: content,
+      mood: mood,                     // 选填，空串表示没标
+      sourceNoteId: data.sourceNoteId || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    state.diaries.unshift(d);
+    this.bumpUsage('diary');
+    this.emit();
+    return d;
+  },
+
+  /** 只改心情（日历上快速标记用） */
+  setDiaryMood: function (date, mood) {
+    var d = this.diaryOf(date);
+    if (!d) return null;
+    d.mood = mood && moodOf(mood) ? mood : '';
+    d.updatedAt = new Date().toISOString();
+    this.emit();
+    return d;
+  },
+
+  removeDiary: function (id) {
+    state.diaries = state.diaries.filter(function (d) { return d.id !== id; });
+    this.emit();
+  },
+
+  getDiary: function (id) {
+    for (var i = 0; i < state.diaries.length; i++) {
+      if (state.diaries[i].id === id) return state.diaries[i];
+    }
+    return null;
+  },
+
+  /** 某天的日记（一天一篇） */
+  diaryOf: function (dateStr) {
+    return diaryOn(state.diaries, dateStr);
+  },
+
+  /** 心情统计（把纯函数挂到 Store 上，界面层统一从 Store 取） */
+  moodStats: function (from, to) {
+    return moodStats(state.diaries, from, to);
+  },
+
+  /** 心情枚举 / 门槛，供界面层读取 */
+  MOODS: MOODS,
+  MOOD_MIN_DAYS: MOOD_MIN_DAYS,
+  MOOD_CROSS_MIN_DAYS: MOOD_CROSS_MIN_DAYS,
+  moodOf: moodOf,
+  diaryDatePrompt: diaryDatePrompt,
+  diariesSorted: function () { return diariesSorted(state.diaries); },
+
   /**
    * 全站标签（待办 / 灵感 / 活动 / 账目 / 专注 / 计划）
    * @returns [{ full, lv1, lv2, count, sources }]
@@ -4091,11 +4315,17 @@
     /* ===== 导入导出 ===== */
     /**
      * 导出为 JSON 字符串。
-     * @param {string} [scope='full'] 导出档位：
+     *
+     * 同步码只有**两档**，且两档都**不含日记**：
      *   - 'lite'     : 只带课表相关（学期 / 课程 / 时段），用于「只搬课表」的最小同步码
-     *   - 'standard' : 全部文本数据，但剥离自定义图片（背景图、桌宠精灵图）
-     *   - 'full'     : 原样导出，含图片
-     * 不传参数时行为与旧版一致（full），保证老代码 / 老备份兼容。
+     *   - 'standard' : 除日记与自定义图片外的全部数据
+     *
+     * 为什么日记不走同步码：
+     *   日记是最私密的内容，而同步码要经过剪贴板、聊天工具、备忘录来回搬运，
+     *   中途被谁看到无从控制。日记只走「文件备份 / 恢复」，那个通道本来就是你自己的文件。
+     *
+     * @param {string} [scope='full'] 导出档位。'full' 仅用于本地备份（含图片与日记），
+     *   不再作为同步码档位暴露给用户；老版本的 full 码仍能被 importJSON 识别。
      */
     exportJSON: function (scope) {
       var s = scope || 'full';
@@ -4111,6 +4341,9 @@
         if (out.settings.asr) { out.settings.asr.appId = ''; out.settings.asr.apiKey = ''; out.settings.asr.apiSecret = ''; }
         if (out.settings.ocr) { out.settings.ocr.apiKey = ''; }
       }
+      // 日记一律不进同步码。用 delete 而不是置空数组：
+      // 置空会在导入端被当成「对方没有日记」而覆盖掉本机已有的日记
+      delete out.diaries;
 
       if (s === 'standard') {
         out.exportScope = 'standard';
@@ -4141,7 +4374,7 @@
       var obj = JSON.parse(text);
       if (!obj || typeof obj !== 'object') throw new Error('数据格式不正确');
       if (!obj.courses && !obj.tasks && !obj.settings && !obj.plans && !obj.ledger &&
-          !obj.notes && !obj.events && !obj.activities) {
+          !obj.notes && !obj.diaries && !obj.events && !obj.activities) {
         throw new Error('没有找到可恢复的数据');
       }
       var ds = defaultState();
@@ -4163,6 +4396,10 @@
         achievements: obj.achievements || { done: {} },
         ledger: obj.ledger || [],
         notes: obj.notes || [],
+        // 日记特殊处理：同步码里根本没有 diaries 这个键。
+        // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
+        // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
+        diaries: Array.isArray(obj.diaries) ? obj.diaries : (state && state.diaries) || [],
         events: obj.events || [],
         activities: obj.activities || [],
         meals: obj.meals || [],
@@ -4171,6 +4408,8 @@
       };
       // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
       state.settings.subtask = Object.assign({}, ds.settings.subtask, state.settings.subtask || {});
+      // 日记同理：旧备份没有 diary 设置，逐项补，不整块覆盖
+      state.settings.diary = Object.assign({}, ds.settings.diary, state.settings.diary || {});
       this.ensure();
       this.emit();
     },
@@ -4197,6 +4436,15 @@
   global.weekBounds = weekBounds;
   global.monthBounds = monthBounds;
   global.sleepByNight = sleepByNight;
+  global.MOODS = MOODS;
+  global.MOOD_MIN_DAYS = MOOD_MIN_DAYS;
+  global.MOOD_CROSS_MIN_DAYS = MOOD_CROSS_MIN_DAYS;
+  global.moodOf = moodOf;
+  global.moodTone = moodTone;
+  global.diaryDatePrompt = diaryDatePrompt;
+  global.moodStats = moodStats;
+  global.diaryOn = diaryOn;
+  global.diariesSorted = diariesSorted;
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;

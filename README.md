@@ -28,12 +28,13 @@ course-planner-web/
 │   ├── remind.js              上课提醒：.ics 生成（纯函数）+ 页面内轮询提醒
 │   ├── foods.js / speech.js / ocr.js / theme.js / onboard.js
 │   └── views/*.js            各页面（课表、今日、日历、日程、象限、待办、计划、
-│                             笔记、记账、抽卡、专注、收集、成绩、设置、ocr-dialog）
+│                             笔记、日记、记账、抽卡、专注、收集、成绩、设置、
+│                             统计、ocr-dialog）
 ├── build.py                  构建：内联 CSS/JS → 单文件 index.html
 ├── sync_from_index.py        从任意历史单文件反向抽取模块
 ├── namespace_cp.py           批量加 cp- 类名前缀（一次性迁移脚本）
 ├── verify_build.mjs          Playwright 冒烟回归
-├── verify_sync_scope.mjs     同步码三档导出验证
+├── verify_sync_scope.mjs     同步码分档导出验证
 ├── verify_sync_ui.mjs        同步码弹窗交互验证
 ├── verify_backup.mjs         自动备份 / 恢复 / 裁剪验证
 ├── verify_parts.mjs          同步码分片切分验证
@@ -47,8 +48,9 @@ course-planner-web/
 ├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
 ├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径
 ├── verify_stats.mjs          统计复盘：自然口径、日均对比、热力条刻度、区间缓存失效
+├── verify_diary.mjs          日记：一天一篇、心情统计、凌晨归属、灵感互拷、同步码不含日记
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（401 条）
+└── tests/run.mjs             纯函数单测（461 条）
 ```
 
 ## 构建
@@ -73,7 +75,7 @@ python3 build.py
 node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析、
                              #             时间冲突、.ics 生成与折行、全局搜索、
                              #             重复任务顺延、农历换算、纪念日届数、
-                             #             统计口径与跨午夜睡眠归属）
+                             #             统计口径与跨午夜睡眠归属、心情统计与归宿判定）
 
 # UI 回归（需 playwright；先起本地静态服务）
 python3 -m http.server 8137 &
@@ -91,6 +93,7 @@ node verify_anniv.mjs        # 倒数纪念日（含农历）
 node verify_export.mjs       # 课表导出图片
 node verify_subtask.mjs      # 子任务（含设置页联动开关）
 node verify_stats.mjs       # 统计与复盘（自然口径、对比、热力条、缓存）
+node verify_diary.mjs       # 日记（一天一篇、心情、凌晨归属、互拷、同步码不含日记）
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
@@ -99,7 +102,9 @@ node verify_stats.mjs       # 统计与复盘（自然口径、对比、热力�
 
 - **CSS 类名统一 `cp-` 前缀**，避免全局冲突。`pet-` 用于桌宠，打印文档（成绩单窗口）自带独立样式，不加前缀。
 - 新增页面放 `assets/js/views/`，通用能力放 `assets/js/`，并在 `src/index.template.html` 里按依赖顺序引用。
-- 新功能的动态类名无需手动加前缀 —— `ui.js` 的 `el()` 会在运行时代为添加。
+- 用 `el()` 传 `class` 时不必手写前缀，运行时会补。但**自己拼字符串**（`cls += ' is-today'`、
+  `'cp-heat cp-lv-' + n`）时不会被补，必须写全 `cp-is-today`；CSS 侧也要跟着写全。
+  这类漏前缀不会报错，只会静默不生效。
 - 改完源码务必跑一次 `build.py`，并确认 `index.html` 同步更新。
 
 ## 联网依赖（可选功能）

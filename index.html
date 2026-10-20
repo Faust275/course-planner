@@ -3275,6 +3275,230 @@ mark.cp-hit {
 .cp-heat.cp-is-daily .cp-heat-week { min-width: 26px; padding: 7px 2px; }
 .cp-heat.cp-is-daily .cp-heat-week b { font-size: 10.5px; }
 
+/* ==========================================================
+ * 日记（并入「待办 → 日记」分页）
+ * ========================================================== */
+.cp-diary-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.7;
+  margin-top: 8px;
+}
+
+/* --- 心情概览 --- */
+.cp-diary-mood-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-mood-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.cp-mood-avg { display: flex; align-items: baseline; gap: 6px; }
+.cp-mood-avg b { font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+.cp-mood-avg span { font-size: 11.5px; color: var(--text-3); }
+.cp-mood-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.cp-mood-emoji { font-size: 16px; }
+
+.cp-mood-bars {
+  display: flex;
+  height: 22px;
+  border-radius: 7px;
+  overflow: hidden;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.cp-mood-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  font-size: 10px;
+  line-height: 1;
+  transition: flex .3s ease;
+}
+/* 彩色底上用白色描边压住：emoji 如果回退成单色字形（无彩色 emoji 字体的系统），
+   白色字形会直接消失在浅底上。text-shadow 让它无论单色还是彩色都看得见。 */
+.cp-mood-bar span {
+  opacity: .92;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, .9));
+}
+
+.cp-mood-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.cp-mood-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cp-mood-legend-row i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.cp-mood-legend-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cp-mood-legend-row.cp-is-empty { opacity: .45; }
+
+.cp-mood-tone {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.7;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* --- 月历 --- */
+.cp-diary-cal-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-cal-nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.cp-cal-title { font-size: 12.5px; color: var(--text-2); min-width: 84px; text-align: center; }
+
+.cp-diary-cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cp-dc-dow {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  padding-bottom: 2px;
+}
+.cp-dc-blank { aspect-ratio: 1 / 1; }
+.cp-dc-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  padding: 0;
+}
+.cp-dc-day:hover { border-color: var(--primary); }
+.cp-dc-day.cp-is-today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+.cp-dc-day.cp-is-future { opacity: .42; }
+.cp-dc-day.cp-has-diary { font-weight: 600; }
+.cp-dc-num { font-size: 12px; line-height: 1; }
+.cp-dc-dot { width: 5px; height: 5px; border-radius: 50%; }
+.cp-dc-dot.cp-is-plain { background: var(--text-3); }
+.cp-dc-mark {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* --- 列表 --- */
+.cp-diary-list-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-diary-row {
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cp-diary-row:hover { background: var(--surface-2); }
+.cp-diary-row + .cp-diary-row { border-top: 1px solid var(--line); border-radius: 0; }
+.cp-diary-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.cp-diary-row-date { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.cp-diary-mood-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.cp-diary-src {
+  font-size: 10.5px;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.cp-diary-row-body {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.65;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cp-diary-write-btn { margin-bottom: 20px; }
+
+/* --- 编辑器 --- */
+.cp-de-date-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cp-de-date { font-size: 14px; }
+.cp-de-label {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 12px 0 7px;
+}
+.cp-mood-pick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cp-mood-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.cp-mood-pick-btn:hover { border-color: var(--line-strong); }
+.cp-mood-pick-btn.cp-active { font-weight: 600; }
+.cp-mood-pick-btn.cp-is-none.cp-active { border-color: var(--text-3); background: var(--surface-2); }
+/* emoji 不吃父级 color：否则在设了 background 的选中态里会变成彩底白字 / 白底白字 */
+.cp-mood-pick-emoji { font-size: 14px; }
+.cp-mood-pick-btn.cp-active .cp-mood-pick-emoji { color: initial; }
+
+/* 同步码里的日记说明 */
+.sync-diary-tip {
+  border-left: 2px solid var(--primary);
+  padding-left: 9px;
+  margin: 10px 0 12px;
+}
+
+@media (max-width: 560px) {
+  .cp-diary-cal { gap: 3px; }
+  .cp-dc-num { font-size: 11px; }
+  .cp-mm-pick-btn, .cp-mood-pick-btn { padding: 5px 10px; font-size: 12px; }
+  .cp-mood-avg b { font-size: 21px; }
+}
+
 </style>
 <script>
 
@@ -4204,6 +4428,11 @@ window.AK_OPS = [
           showProgress: true       // 父任务显示 2/4 进度徽章
         },
         subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
+        // 日记（详见「设置 → 日记」）
+        diary: {
+          askDateAtNight: true,    // 0–4 点保存时询问归属「昨天 / 今天」
+          showMoodStats: true      // 心情统计总开关（样本 < 7 天仍单独提示，不显示统计）
+        },
         pet: {
           enabled: false,        // 开发者/自用开关：默认关闭
           src: '',               // 本地精灵图 base64（不随源码分发）
@@ -4233,6 +4462,7 @@ window.AK_OPS = [
       plans: [],       // 计划（打卡 / 进度）
       ledger: [],      // 记账流水
       notes: [],       // 灵感速记
+      diaries: [],     // 日记（一天一篇，key 为 YYYY-MM-DD）
       events: [],      // 一次性日程
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
@@ -5096,6 +5326,140 @@ window.AK_OPS = [
   }
 
   /* ==========================================================
+   * 日记：一天一篇 + 心情标签
+   * ========================================================== */
+
+  /**
+   * 心情枚举。**固定五档**，不允许自定义文案：
+   *   - 自定义文字做不了统计（每个人写的都不一样，没法归类）
+   *   - 固定枚举才能给每档配一个稳定颜色，日历上才认得出
+   * 颜色按冷暖分布：越靠上越"热"（高涨），越靠下越"冷"（低落），
+   * 中间「平静」用绿色过渡，这样一眼扫过去能看出整月情绪偏向哪一侧。
+   */
+  var MOODS = [
+    { key: 'great',  name: '很好', emoji: '😄', color: '#f59e0b', tone: 'warm' },
+    { key: 'good',   name: '还行', emoji: '😊', color: '#10b981', tone: 'neutral' },
+    { key: 'meh',    name: '一般', emoji: '😐', color: '#94a3b8', tone: 'neutral' },
+    { key: 'tired',  name: '疲惫', emoji: '😴', color: '#6366f1', tone: 'cold' },
+    { key: 'low',    name: '低落', emoji: '😔', color: '#8b5cf6', tone: 'cold' }
+  ];
+
+  /** 心情统计的最少样本天数：少于这个数不给统计，避免"3 天数据看出人生规律" */
+  var MOOD_MIN_DAYS = 7;
+  /** 心情 × 时间去向的交叉分析门槛，比单心情统计更严 */
+  var MOOD_CROSS_MIN_DAYS = 14;
+
+  function moodOf(key) {
+    for (var i = 0; i < MOODS.length; i++) if (MOODS[i].key === key) return MOODS[i];
+    return null;
+  }
+
+  /** 归类心情到「偏暖 / 中性 / 偏冷」，用于粗粒度统计（样本少时比五档更稳） */
+  function moodTone(key) {
+    var m = moodOf(key);
+    return m ? m.tone : '';
+  }
+
+  /**
+   * 凌晨写作的日期归属。
+   * 数据只存 date（YYYY-MM-DD），所以这里只做判断，真正选哪一天由用户决定。
+   *
+   * @param {number} hour 当前小时 0–23
+   * @param {string} todayStr 今天的日期串
+   * @param {string} [diaryDate] 已经打开/保存过的日记日期
+   * @returns {{ask:boolean, suggest:string, other:string}}
+   *   ask      — 是否需要问用户
+   *   suggest  — 默认建议的归属日（凌晨则建议「昨天」）
+   *   other    — 另一个可选项（与 suggest 必然不同）
+   *
+   * 规则：只有 0:00–3:59 才问。再晚就算"早起"而不是"熬夜"，
+   * 而且白天写日记时问"算昨天还是今天"会让人觉得莫名其妙。
+   */
+  function diaryDatePrompt(hour, todayStr, diaryDate) {
+    var isSmallHour = hour >= 0 && hour < 4;
+    if (!isSmallHour) {
+      return { ask: false, suggest: todayStr, other: todayStr };
+    }
+    var today = DateUtil.parse(todayStr) || DateUtil.today();
+    var yest = DateUtil.toStr(DateUtil.addDays(today, -1));
+    // 已经在写「昨天」那篇：默认继续昨天，另一个选项是今天
+    if (diaryDate === yest) return { ask: true, suggest: yest, other: todayStr };
+    // 其余情况（新建 / 已在写今天）：默认今天，另一个选项是昨天
+    return { ask: true, suggest: todayStr, other: yest };
+  }
+
+  /**
+   * 心情统计：分布 + 平均分 + 样本是否够。
+   * 平均分把五档映射成 1–5（great=5 … low=1），比"哪种心情最多"更能反映整体。
+   * @param {Array} diaries 日记数组
+   * @param {string} from 起始日期串（含）
+   * @param {string} to 结束日期串（含）
+   */
+  function moodStats(diaries, from, to) {
+    var order = {};
+    MOODS.forEach(function (m, i) { order[m.key] = 5 - i; });   // great=5 … low=1
+
+    var inRange = (diaries || []).filter(function (d) {
+      return d && d.date && d.date >= from && d.date <= to;
+    });
+    var days = inRange.length;
+    var counts = {};
+    MOODS.forEach(function (m) { counts[m.key] = 0; });
+    var sum = 0, rated = 0, withText = 0;
+
+    inRange.forEach(function (d) {
+      if (d.content && d.content.trim()) withText++;
+      var k = d.mood;
+      if (!k || counts[k] == null) return;     // 心情选填，没填的不参与
+      counts[k]++;
+      sum += order[k];
+      rated++;
+    });
+
+    var tones = { warm: 0, neutral: 0, cold: 0 };
+    MOODS.forEach(function (m) {
+      if (counts[m.key]) tones[m.tone] += counts[m.key];
+    });
+
+    return {
+      days: days,                 // 这段时间写了几天
+      rated: rated,               // 其中标了心情的天数
+      withText: withText,
+      counts: counts,
+      tones: tones,
+      avg: rated ? Math.round(sum / rated * 100) / 100 : 0,
+      eligible: rated >= MOOD_MIN_DAYS,     // 够不够给统计
+      need: Math.max(0, MOOD_MIN_DAYS - rated),
+      // 最常出现的那一档（并列时取顺序靠前的，保证结果稳定）
+      top: (function () {
+        var best = '', bestN = 0;
+        MOODS.forEach(function (m) {
+          if (counts[m.key] > bestN) { best = m.key; bestN = counts[m.key]; }
+        });
+        return best;
+      })()
+    };
+  }
+
+  /**
+   * 按日期找日记（一天一篇）。
+   * @returns {object|null}
+   */
+  function diaryOn(diaries, dateStr) {
+    for (var i = 0; i < (diaries || []).length; i++) {
+      if (diaries[i] && diaries[i].date === dateStr) return diaries[i];
+    }
+    return null;
+  }
+
+  /** 按日期倒序排（最新在前），不改原数组 */
+  function diariesSorted(diaries) {
+    return (diaries || []).slice().sort(function (a, b) {
+      return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+    });
+  }
+
+  /* ==========================================================
    * 子任务（只做一层：parentId 要么为空，要么指向顶层任务）
    * ========================================================== */
 
@@ -5300,6 +5664,12 @@ window.AK_OPS = [
       if (state.settings.background.mask == null) state.settings.background.mask = 0.5;
       if (!state.settings.pet) state.settings.pet = ds.settings.pet;
       state.settings.subtask = subOpts(state.settings);   // 逐项补默认值，顺带丢掉脏值
+      // 日记设置同样逐项补，不让旧的 settings 整块覆盖掉新字段
+      var dopt = state.settings.diary || {};
+      state.settings.diary = {
+        askDateAtNight: typeof dopt.askDateAtNight === 'boolean' ? dopt.askDateAtNight : true,
+        showMoodStats: typeof dopt.showMoodStats === 'boolean' ? dopt.showMoodStats : true
+      };
       if (!state.pomodoro) state.pomodoro = ds.pomodoro;
       if (!state.pomodoro.trees) state.pomodoro.trees = [];
       if (!state.pomodoro.timer) state.pomodoro.timer = ds.pomodoro.timer;
@@ -5322,6 +5692,7 @@ window.AK_OPS = [
       if (!state.plans) state.plans = [];
       if (!state.ledger) state.ledger = [];
       if (!state.notes) state.notes = [];
+      if (!Array.isArray(state.diaries)) state.diaries = [];
       if (!state.events) state.events = [];
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
@@ -7704,6 +8075,83 @@ window.AK_OPS = [
     return null;
   },
 
+  /* ===== 日记（一天一篇） ===== */
+  /**
+   * 写入某天的日记。已有则更新，没有则新建 —— 一天只可能有一条。
+   * @param {object} data { date, content, mood, sourceNoteId }
+   * @returns {object} 日记对象
+   */
+  saveDiary: function (data) {
+    var date = (data.date || '').trim() || DateUtil.toStr(DateUtil.today());
+    var exist = this.diaryOf(date);
+    var content = typeof data.content === 'string' ? data.content : '';
+    var mood = data.mood && moodOf(data.mood) ? data.mood : '';
+
+    if (exist) {
+      exist.content = content;
+      exist.mood = mood;
+      exist.updatedAt = new Date().toISOString();
+      // sourceNoteId 只记录"最初从哪条灵感来的"，后续编辑不清空
+      if (data.sourceNoteId) exist.sourceNoteId = data.sourceNoteId;
+      this.emit();
+      return exist;
+    }
+
+    var d = {
+      id: uid('d'),
+      date: date,
+      content: content,
+      mood: mood,                     // 选填，空串表示没标
+      sourceNoteId: data.sourceNoteId || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    state.diaries.unshift(d);
+    this.bumpUsage('diary');
+    this.emit();
+    return d;
+  },
+
+  /** 只改心情（日历上快速标记用） */
+  setDiaryMood: function (date, mood) {
+    var d = this.diaryOf(date);
+    if (!d) return null;
+    d.mood = mood && moodOf(mood) ? mood : '';
+    d.updatedAt = new Date().toISOString();
+    this.emit();
+    return d;
+  },
+
+  removeDiary: function (id) {
+    state.diaries = state.diaries.filter(function (d) { return d.id !== id; });
+    this.emit();
+  },
+
+  getDiary: function (id) {
+    for (var i = 0; i < state.diaries.length; i++) {
+      if (state.diaries[i].id === id) return state.diaries[i];
+    }
+    return null;
+  },
+
+  /** 某天的日记（一天一篇） */
+  diaryOf: function (dateStr) {
+    return diaryOn(state.diaries, dateStr);
+  },
+
+  /** 心情统计（把纯函数挂到 Store 上，界面层统一从 Store 取） */
+  moodStats: function (from, to) {
+    return moodStats(state.diaries, from, to);
+  },
+
+  /** 心情枚举 / 门槛，供界面层读取 */
+  MOODS: MOODS,
+  MOOD_MIN_DAYS: MOOD_MIN_DAYS,
+  MOOD_CROSS_MIN_DAYS: MOOD_CROSS_MIN_DAYS,
+  moodOf: moodOf,
+  diaryDatePrompt: diaryDatePrompt,
+  diariesSorted: function () { return diariesSorted(state.diaries); },
+
   /**
    * 全站标签（待办 / 灵感 / 活动 / 账目 / 专注 / 计划）
    * @returns [{ full, lv1, lv2, count, sources }]
@@ -8086,11 +8534,17 @@ window.AK_OPS = [
     /* ===== 导入导出 ===== */
     /**
      * 导出为 JSON 字符串。
-     * @param {string} [scope='full'] 导出档位：
+     *
+     * 同步码只有**两档**，且两档都**不含日记**：
      *   - 'lite'     : 只带课表相关（学期 / 课程 / 时段），用于「只搬课表」的最小同步码
-     *   - 'standard' : 全部文本数据，但剥离自定义图片（背景图、桌宠精灵图）
-     *   - 'full'     : 原样导出，含图片
-     * 不传参数时行为与旧版一致（full），保证老代码 / 老备份兼容。
+     *   - 'standard' : 除日记与自定义图片外的全部数据
+     *
+     * 为什么日记不走同步码：
+     *   日记是最私密的内容，而同步码要经过剪贴板、聊天工具、备忘录来回搬运，
+     *   中途被谁看到无从控制。日记只走「文件备份 / 恢复」，那个通道本来就是你自己的文件。
+     *
+     * @param {string} [scope='full'] 导出档位。'full' 仅用于本地备份（含图片与日记），
+     *   不再作为同步码档位暴露给用户；老版本的 full 码仍能被 importJSON 识别。
      */
     exportJSON: function (scope) {
       var s = scope || 'full';
@@ -8106,6 +8560,9 @@ window.AK_OPS = [
         if (out.settings.asr) { out.settings.asr.appId = ''; out.settings.asr.apiKey = ''; out.settings.asr.apiSecret = ''; }
         if (out.settings.ocr) { out.settings.ocr.apiKey = ''; }
       }
+      // 日记一律不进同步码。用 delete 而不是置空数组：
+      // 置空会在导入端被当成「对方没有日记」而覆盖掉本机已有的日记
+      delete out.diaries;
 
       if (s === 'standard') {
         out.exportScope = 'standard';
@@ -8136,7 +8593,7 @@ window.AK_OPS = [
       var obj = JSON.parse(text);
       if (!obj || typeof obj !== 'object') throw new Error('数据格式不正确');
       if (!obj.courses && !obj.tasks && !obj.settings && !obj.plans && !obj.ledger &&
-          !obj.notes && !obj.events && !obj.activities) {
+          !obj.notes && !obj.diaries && !obj.events && !obj.activities) {
         throw new Error('没有找到可恢复的数据');
       }
       var ds = defaultState();
@@ -8158,6 +8615,10 @@ window.AK_OPS = [
         achievements: obj.achievements || { done: {} },
         ledger: obj.ledger || [],
         notes: obj.notes || [],
+        // 日记特殊处理：同步码里根本没有 diaries 这个键。
+        // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
+        // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
+        diaries: Array.isArray(obj.diaries) ? obj.diaries : (state && state.diaries) || [],
         events: obj.events || [],
         activities: obj.activities || [],
         meals: obj.meals || [],
@@ -8166,6 +8627,8 @@ window.AK_OPS = [
       };
       // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
       state.settings.subtask = Object.assign({}, ds.settings.subtask, state.settings.subtask || {});
+      // 日记同理：旧备份没有 diary 设置，逐项补，不整块覆盖
+      state.settings.diary = Object.assign({}, ds.settings.diary, state.settings.diary || {});
       this.ensure();
       this.emit();
     },
@@ -8192,6 +8655,15 @@ window.AK_OPS = [
   global.weekBounds = weekBounds;
   global.monthBounds = monthBounds;
   global.sleepByNight = sleepByNight;
+  global.MOODS = MOODS;
+  global.MOOD_MIN_DAYS = MOOD_MIN_DAYS;
+  global.MOOD_CROSS_MIN_DAYS = MOOD_CROSS_MIN_DAYS;
+  global.moodOf = moodOf;
+  global.moodTone = moodTone;
+  global.diaryDatePrompt = diaryDatePrompt;
+  global.moodStats = moodStats;
+  global.diaryOn = diaryOn;
+  global.diariesSorted = diariesSorted;
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;
@@ -8247,6 +8719,10 @@ window.AK_OPS = [
           node.addEventListener(k.slice(2).toLowerCase(), v);
         } else if (k === 'dataset') {
           Object.keys(v).forEach(function (d) { node.dataset[d] = v[d]; });
+        } else if (k === 'value' && tag === 'textarea') {
+          // textarea 的 value 不是 HTML 属性：setAttribute('value') 不生效，
+          // 必须写进内容，否则「预填正文」会显示为空
+          node.value = v;
         } else node.setAttribute(k, v);
       });
     }
@@ -9855,7 +10331,8 @@ window.AK_OPS = [
     event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
     note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 5 },
-    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 6 }
+    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 6 },
+    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 7 }
   };
 
   var TYPES = Object.keys(TYPE_META);
@@ -9924,6 +10401,16 @@ window.AK_OPS = [
         title: c.split('\n')[0].slice(0, 40),
         sub: tags,
         body: c
+      };
+    }
+    if (type === 'diary') {
+      // 日记没有标题，用日期当选标题：搜出来一眼能认出是哪天
+      var dm = r.mood ? Store.moodOf(r.mood) : null;
+      var c2 = String(r.content || '');
+      return {
+        title: r.date + (dm ? ' · ' + dm.emoji + ' ' + dm.name : ''),
+        sub: r.date,
+        body: c2
       };
     }
     if (type === 'ledger') {
@@ -10247,6 +10734,7 @@ window.AK_OPS = [
       events: s.events || [],
       plans: s.plans || [],
       notes: s.notes || [],
+      diaries: s.diaries || [],
       ledger: s.ledger || []
     };
   }
@@ -15668,6 +16156,14 @@ window.AK_OPS = [
      * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
      * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
      */
+    /* 搜索跳转用：把分页切到指定 tab。
+       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
+       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
+    setTab: function (tab) {
+      state.tab = tab;
+      if (this.root) this.render();
+    },
+
     focusRecord: function (type, id) {
       if (type !== 'task' || !global.Search) return false;
       var dirty = false;
@@ -15685,27 +16181,40 @@ window.AK_OPS = [
       return Search.flash(Search.findRec(type, id));
     },
 
+    /* 搜索跳转用：把分页切到指定 tab。视图还没挂载时先记下，
+       等 render 时自然生效（否则 setTab 找不到 root 就静默失败） */
     render: function () {
       var root = this.root;
       root.innerHTML = '';
 
-      /* ---- 待办 / 灵感 分页 ---- */
+      /* ---- 待办 / 灵感 / 日记 分页 ---- */
       var nt = Store.notes.length;
+      var nd = Store.state.diaries.length;
       var paneBar = el('div', { class: 'pane-tabs' });
-      [{ v: 'tasks', l: '待办' }, { v: 'notes', l: nt ? '灵感 ' + nt : '灵感' }]
-        .forEach(function (x) {
-          paneBar.appendChild(el('button', {
-            class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
-            text: x.l,
-            onclick: function () { state.tab = x.v; view.render(); }
-          }));
-        });
+      [
+        { v: 'tasks', l: '待办' },
+        { v: 'notes', l: nt ? '灵感 ' + nt : '灵感' },
+        { v: 'diary', l: nd ? '日记 ' + nd : '日记' }
+      ].forEach(function (x) {
+        paneBar.appendChild(el('button', {
+          class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
+          text: x.l,
+          onclick: function () { state.tab = x.v; view.render(); }
+        }));
+      });
       root.appendChild(paneBar);
 
       if (state.tab === 'notes') {
         var noteHost = el('div', {});
         root.appendChild(noteHost);
         if (global.NotesPane) NotesPane.render(noteHost);
+        return;
+      }
+
+      if (state.tab === 'diary') {
+        var diaryHost = el('div', {});
+        root.appendChild(diaryHost);
+        if (global.DiaryPane) DiaryPane.render(diaryHost);
         return;
       }
 
@@ -17047,6 +17556,16 @@ window.AK_OPS = [
           }
         }, [V.svg(V.icons.check, 15), n.converted ? '再转一次' : '转为待办']),
         el('button', {
+          class: 'btn btn-sm',
+          title: '把这段内容放进今天的日记',
+          onclick: function (e) {
+            e.stopPropagation();
+            if (!global.DiaryPane) return;
+            // 两个方向都只是「拷贝」：灵感原文保留，日记里是独立的一份副本
+            DiaryPane.appendToDiary(n.content || '', DiaryPane.autoDate(), n.id, refresh);
+          }
+        }, [V.svg(V.icons.book, 15), '写进日记']),
+        el('button', {
           class: 'icon-btn', title: '删除',
           onclick: function (e) {
             e.stopPropagation();
@@ -17136,7 +17655,15 @@ window.AK_OPS = [
     render: function () { renderNotesInto(this.root); },
 
     focusRecord: function (type, id) {
-      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
+      if (!global.Search) return false;
+      // 日记和灵感同在「待办」的三个分页里，搜索跳过来时要先把分页切对。
+      // 注意不能只靠 tasks 视图自己的 focusRecord：它只处理 task 类型，
+      // 收到 diary / note 会直接返回 false，分页就切不过去了。
+      if (global.App && (type === 'diary' || type === 'note')) {
+        var tv = App.views.filter(function (x) { return x.id === 'tasks'; })[0];
+        if (tv && tv.setTab) tv.setTab(type === 'diary' ? 'diary' : 'notes');
+      }
+      return Search.flash(Search.findRec(type, id));
     }
   };
 
@@ -17144,6 +17671,508 @@ window.AK_OPS = [
 })(window);
 
 
+
+</script>
+<script>
+
+/* ==========================================================
+ * 日记（一天一篇，可与灵感双向拷贝）
+ * 渲染进「待办 → 日记」分页；数据层在 store.js（DiaryPane 只做界面）
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+
+  /** 界面态（只存内存，不进 localStorage） */
+  var ui = {
+    /** 当前查看的月份 'YYYY-MM' */
+    month: '',
+    /** 已打开过的「凌晨问日期」日期集：同一天只问一次 */
+    asked: {}
+  };
+
+  function moodOf(key) { return Store.moodOf(key); }
+
+  function todayStr() { return DateUtil.toStr(DateUtil.today()); }
+
+  function monthKeyOf(dateStr) {
+    return (dateStr || todayStr()).slice(0, 7);
+  }
+
+  function monthLabel(mk) {
+    var p = mk.split('-');
+    return p[0] + ' 年 ' + (+p[1]) + ' 月';
+  }
+
+  function shiftMonth(mk, delta) {
+    var p = mk.split('-');
+    var d = new Date(+p[0], (+p[1]) - 1 + delta, 1);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  }
+
+  /** 「10 月 21 日 周二」 */
+  function humanDate(dateStr) {
+    var d = DateUtil.parse(dateStr);
+    if (!d) return dateStr;
+    return (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日 · ' + DateUtil.weekdayCN(d);
+  }
+
+  /** 某个日期相对今天的说法 */
+  function dayWord(dateStr) {
+    var diff = DateUtil.diffDays(DateUtil.parse(dateStr), DateUtil.today());
+    if (diff === 0) return '今天';
+    if (diff === -1) return '昨天';
+    if (diff === -2) return '前天';
+    return '';
+  }
+
+  /* ==========================================================
+   * 入口：渲染整块日记面板
+   * ========================================================== */
+  function renderDiaryInto(host) {
+    host.innerHTML = '';
+    if (!ui.month) ui.month = monthKeyOf(todayStr());
+
+    // 本月的心情概览（够 7 天才显示）
+    host.appendChild(moodCard(ui.month));
+
+    // 月历
+    host.appendChild(calendarCard(host));
+
+    // 这个月的日记列表
+    host.appendChild(listCard(host));
+
+    // 右下角固定「写日记」——放在列表底部作为一个大按钮，不用悬空按钮
+    var write = el('button', {
+      class: 'btn btn-primary btn-block btn-lg diary-write-btn',
+      onclick: function () { openEditor(autoDate(), null, function () { renderDiaryInto(host); }); }
+    }, [V.svg(V.icons.book, 17), '写今天的日记']);
+    host.appendChild(write);
+  }
+
+  /** 打开编辑器时的默认日期：凌晨则按 diaryDatePrompt 的建议 */
+  function autoDate() {
+    var t = todayStr();
+    var p = Store.diaryDatePrompt(new Date().getHours(), t, '');
+    return p.ask ? p.suggest : t;
+  }
+
+  /* ==========================================================
+   * 心情概览
+   * ========================================================== */
+  function moodCard(mk) {
+    var from = mk + '-01';
+    var d = DateUtil.parse(from);
+    var last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    var to = DateUtil.toStr(last);
+
+    var st = Store.moodStats(from, to);
+    var card = el('div', { class: 'card diary-mood-card' });
+
+    card.appendChild(el('div', { class: 'section-title' }, [
+      V.svg(V.icons.sparkle, 16), '本月心情'
+    ]));
+
+    if (!Store.state.settings.diary.showMoodStats) {
+      card.appendChild(el('div', {
+        class: 'cp-diary-note',
+        text: '心情统计已在「设置 → 日记」里关掉。需要时再打开就行，日记本身不受影响。'
+      }));
+      return card;
+    }
+
+    if (!st.eligible) {
+      card.appendChild(el('div', {
+        class: 'cp-diary-note',
+        text: st.rated === 0
+          ? '这个月还没标过心情。写完日记顺手点一下心情，攒够 ' + Store.MOOD_MIN_DAYS + ' 天就能看到统计。'
+          : '已经标了 ' + st.rated + ' 天，再攒 ' + st.need + ' 天就能看到本月心情统计。' +
+            '样本太少得出的"规律"基本都是巧合，所以先不让它显示。'
+      }));
+      return card;
+    }
+
+    // 平均分 + 最常出现
+    var top = moodOf(st.top);
+    var head = el('div', { class: 'cp-mood-head' }, [
+      el('div', { class: 'cp-mood-avg' }, [
+        el('b', { text: st.avg.toFixed(2) }),
+        el('span', { text: '平均心情 / 5' })
+      ]),
+      top ? el('div', { class: 'cp-mood-top' }, [
+        el('span', { class: 'cp-mood-emoji', text: top.emoji }),
+        el('span', { text: '最常是「' + top.name + '」' })
+      ]) : null
+    ]);
+    card.appendChild(head);
+
+    // 五档分布条
+    var bar = el('div', { class: 'cp-mood-bars' });
+    Store.MOODS.forEach(function (m) {
+      var n = st.counts[m.key] || 0;
+      if (!n) return;
+      bar.appendChild(el('div', {
+        class: 'cp-mood-bar',
+        style: { flex: String(n), background: m.color },
+        title: m.name + ' ' + n + ' 天'
+      }, [el('span', { text: m.emoji })]));
+    });
+    card.appendChild(bar);
+
+    var legend = el('div', { class: 'cp-mood-legend' });
+    Store.MOODS.forEach(function (m) {
+      var n = st.counts[m.key] || 0;
+      legend.appendChild(el('div', { class: 'cp-mood-legend-row' + (n ? '' : ' is-empty') }, [
+        el('i', { style: { background: m.color } }),
+        el('span', { text: m.emoji + ' ' + m.name }),
+        el('b', { text: n ? n + ' 天' : '—' })
+      ]));
+    });
+    card.appendChild(legend);
+
+    // 冷暖倾向：只并列数字，不给因果结论
+    var t = st.tones;
+    var toneTotal = t.warm + t.neutral + t.cold;
+    if (toneTotal) {
+      var warmPct = Math.round(t.warm / toneTotal * 100);
+      var coldPct = Math.round(t.cold / toneTotal * 100);
+      card.appendChild(el('div', {
+        class: 'cp-mood-tone',
+        text: '其中偏暖 ' + warmPct + '%（' + t.warm + ' 天），中性 ' +
+              Math.round(t.neutral / toneTotal * 100) + '%（' + t.neutral + ' 天），偏冷 ' +
+              coldPct + '%（' + t.cold + ' 天）。'
+      }));
+    }
+
+    card.appendChild(el('div', {
+      class: 'cp-diary-note',
+      text: '本月写了 ' + st.days + ' 天，其中 ' + st.rated + ' 天标了心情。心情是你自己打的标签，' +
+            '这份统计只反映"你怎么记录"，不等于"你过得怎么样"。'
+    }));
+    return card;
+  }
+
+  /* ==========================================================
+   * 月历：有日记的日子按心情上色
+   * ========================================================== */
+  function calendarCard(host) {
+    var mk = ui.month;
+    var first = DateUtil.parse(mk + '-01');
+    var daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    // 月历从周一开始
+    var lead = DateUtil.isoDow(first) - 1;
+    var today = todayStr();
+
+    var card = el('div', { class: 'card diary-cal-card' });
+
+    var head = el('div', { class: 'section-title' }, ['日历']);
+    head.appendChild(el('div', { class: 'cp-cal-nav' }, [
+      el('button', {
+        class: 'icon-btn', title: '上个月',
+        onclick: function () { ui.month = shiftMonth(mk, -1); renderDiaryInto(host); }
+      }, [V.svg(V.icons.left, 16)]),
+      el('span', { class: 'cp-cal-title', text: monthLabel(mk) }),
+      el('button', {
+        class: 'icon-btn', title: '下个月',
+        onclick: function () { ui.month = shiftMonth(mk, 1); renderDiaryInto(host); }
+      }, [V.svg(V.icons.right, 16)])
+    ]));
+    card.appendChild(head);
+
+    var grid = el('div', { class: 'cp-diary-cal' });
+    ['一', '二', '三', '四', '五', '六', '日'].forEach(function (w) {
+      grid.appendChild(el('div', { class: 'cp-dc-dow', text: w }));
+    });
+    for (var i = 0; i < lead; i++) grid.appendChild(el('div', { class: 'cp-dc-blank' }));
+
+    for (var day = 1; day <= daysInMonth; day++) {
+      (function (day) {
+        var dateStr = mk + '-' + ('0' + day).slice(-2);
+        var d = Store.diaryOf(dateStr);
+        var m = d && d.mood ? moodOf(d.mood) : null;
+        // el() 只给「不带前缀」的 class 补 cp-，这里是整串拼好的，
+        // 必须自己写全 cp- 前缀，否则 CSS 里的 .cp-dc-day.cp-has-diary 匹配不上
+        var cls = 'cp-dc-day';
+        if (dateStr === today) cls += ' cp-is-today';
+        if (d) cls += ' cp-has-diary';
+        if (dateStr > today) cls += ' cp-is-future';
+
+        var cell = el('button', {
+          class: cls,
+          style: m ? { background: m.color + '2e', borderColor: m.color } : null,
+          title: d ? (m ? m.name : '有日记（未标心情）') : '没有日记',
+          onclick: function () {
+            openEditor(dateStr, d ? d.id : null, function () { renderDiaryInto(host); });
+          }
+        }, [
+          el('span', { class: 'cp-dc-num', text: String(day) }),
+          m ? el('span', { class: 'cp-dc-dot', style: { background: m.color } }) : null,
+          d && !m ? el('span', { class: 'cp-dc-dot is-plain' }) : null,
+          d && d.content ? el('span', { class: 'cp-dc-mark' }) : null
+        ]);
+        grid.appendChild(cell);
+      })(day);
+    }
+    card.appendChild(grid);
+
+    card.appendChild(el('div', {
+      class: 'cp-diary-note',
+      text: '点任意一天就能写 / 改那天的日记。一天只存一篇，所以同一天不会出现两条互相矛盾的记录。'
+    }));
+    return card;
+  }
+
+  /* ==========================================================
+   * 本月的日记列表
+   * ========================================================== */
+  function listCard(host) {
+    var mk = ui.month;
+    var list = Store.diariesSorted(Store.state.diaries).filter(function (d) {
+      return d.date.slice(0, 7) === mk;
+    });
+
+    var card = el('div', { class: 'card diary-list-card' });
+    card.appendChild(el('div', { class: 'section-title' }, ['这个月写了 ' + list.length + ' 篇']));
+
+    if (!list.length) {
+      card.appendChild(V.empty(V.icons.book, '这个月还没有日记',
+        '点下面「写今天的日记」开始。日记只存在本机，换设备时用「设置 → 导出备份」传文件。'));
+      return card;
+    }
+
+    list.forEach(function (d) {
+      var m = d.mood ? moodOf(d.mood) : null;
+      var src = d.sourceNoteId ? Store.getNote(d.sourceNoteId) : null;
+      var preview = (d.content || '').replace(/\s+/g, ' ').trim();
+      if (preview.length > 90) preview = preview.slice(0, 90) + '…';
+
+      card.appendChild(el('div', {
+        class: 'cp-diary-row',
+        dataset: { rec: 'diary:' + d.id },
+        onclick: function () { openEditor(d.date, d.id, function () { renderDiaryInto(host); }); }
+      }, [
+        el('div', { class: 'cp-diary-row-head' }, [
+          el('span', { class: 'cp-diary-row-date', text: humanDate(d.date) }),
+          m ? el('span', {
+            class: 'cp-diary-mood-tag',
+            style: { background: m.color + '1f', color: m.color },
+            text: m.emoji + ' ' + m.name
+          }) : null,
+          src ? el('span', { class: 'cp-diary-src', text: '来自灵感' }) : null
+        ]),
+        el('div', { class: 'cp-diary-row-body', text: preview || '（只有心情，没写正文）' })
+      ]));
+    });
+    return card;
+  }
+
+  /* ==========================================================
+   * 编辑器
+   * ========================================================== */
+  /**
+   * @param {string} dateStr 归属日期
+   * @param {string|null} id 已有日记的 id
+   * @param {Function} done 保存/删除后回调
+   * @param {object} [pre] 预填：{ content, sourceNoteId }
+   */
+  function openEditor(dateStr, id, done, pre) {
+    var existing = id ? Store.getDiary(id) : Store.diaryOf(dateStr);
+    var sourceNoteId = (pre && pre.sourceNoteId) || (existing && existing.sourceNoteId) || '';
+    var initContent = pre && pre.content != null ? pre.content
+      : (existing ? existing.content : '');
+
+    var curDate = dateStr;
+    var mood = existing ? existing.mood : '';
+
+    var dateLabel = el('b', { class: 'cp-de-date' });
+    var ta = V.textarea({ value: initContent, style: 'min-height:200px',
+      placeholder: '今天发生了什么？想到什么写什么，不用管格式。' });
+    var moodBar = el('div', { class: 'cp-mood-pick' });
+    var statusTip = el('div', { class: 'cp-diary-note' });
+    var m;
+
+    function refreshDateLabel() {
+      dateLabel.textContent = humanDate(curDate) + (dayWord(curDate) ? '（' + dayWord(curDate) + '）' : '');
+      var own = Store.diaryOf(curDate);
+      statusTip.textContent = (own && own.id !== (existing ? existing.id : ''))
+        ? '这一天已经有日记了，保存会覆盖它。'
+        : '';
+    }
+
+    function renderMoodBar() {
+      moodBar.innerHTML = '';
+      // 「不标」也是合法选项：心情是选填的
+      moodBar.appendChild(el('button', {
+        class: 'cp-mood-pick-btn is-none' + (mood ? '' : ' active'),
+        text: '不标',
+        onclick: function () { mood = ''; renderMoodBar(); }
+      }));
+      Store.MOODS.forEach(function (x) {
+        var b = el('button', {
+          class: 'cp-mood-pick-btn' + (mood === x.key ? ' active' : ''),
+          style: mood === x.key ? { borderColor: x.color, background: x.color + '1f', color: x.color } : null,
+          title: x.name,
+          onclick: function () { mood = x.key; renderMoodBar(); }
+        }, [el('span', { class: 'cp-mood-pick-emoji', text: x.emoji }),
+            el('span', { text: x.name })]);
+        moodBar.appendChild(b);
+      });
+    }
+
+    /* ---- 保存 ---- */
+    function save() {
+      var text = ta.value;
+      if (!text.trim() && !mood) {
+        UI.toast('写点正文，或者至少标一个心情', 'err');
+        ta.focus();
+        return;
+      }
+
+      var doWrite = function (finalDate) {
+        Store.saveDiary({
+          date: finalDate,
+          content: text,
+          mood: mood,
+          sourceNoteId: sourceNoteId
+        });
+        // 同步回灵感：从灵感来的日记，保存时把「已写进日记」标记回去
+        if (sourceNoteId) Store.updateNote(sourceNoteId, { converted: true });
+        m.close();
+        UI.toast('日记已保存');
+        if (done) done();
+      };
+
+      // 凌晨写作：问一次归属日。同一天只问一次，且设置里可关
+      var hour = new Date().getHours();
+      var canAsk = Store.state.settings.diary.askDateAtNight && !ui.asked[curDate];
+      var prompt = Store.diaryDatePrompt(hour, todayStr(), curDate);
+
+      if (!canAsk || !prompt.ask || prompt.other === prompt.suggest && prompt.suggest === curDate) {
+        doWrite(curDate);
+        return;
+      }
+
+      ui.asked[curDate] = true;
+      var a = prompt.suggest, b2 = prompt.other;
+      V.confirm({
+        title: '这篇日记算哪天的？',
+        message: '现在是凌晨，写下的内容既可以算作「' + humanDate(a) + '」，也可以算作刚过去的「' +
+                 humanDate(b2) + '」。\n\n选哪一天只是决定它出现在日历的哪一格，内容不会变；选完这一次，' +
+                 '今天再保存就不会再问了。',
+        okText: '算 ' + (dayWord(b2) || b2.slice(5)),
+        cancelText: '算 ' + (dayWord(a) || a.slice(5))
+      }).then(function (pickOther) {
+        doWrite(pickOther ? b2 : a);
+      });
+    }
+
+    var body = [
+      el('div', { class: 'cp-de-date-row' }, [
+        dateLabel,
+        el('button', {
+          class: 'btn btn-sm', text: '换一天',
+          onclick: function () {
+            var inp = V.input({ type: 'date', value: curDate, style: 'max-width:160px' });
+            var mm = V.modal({
+              title: '选择日期',
+              body: [V.field('归属日期', inp)],
+              footer: el('div', { class: 'modal-foot' }, [
+                el('button', { class: 'btn', text: '取消', onclick: function () { mm.close(); } }),
+                el('button', {
+                  class: 'btn btn-primary', text: '确定',
+                  onclick: function () {
+                    if (inp.value) { curDate = inp.value; refreshDateLabel(); }
+                    mm.close();
+                  }
+                })
+              ])
+            });
+          }
+        })
+      ]),
+      el('div', { class: 'cp-de-label', text: '今天的心情（选填）' }),
+      moodBar,
+      el('div', { class: 'cp-de-label', text: '正文' }),
+      ta,
+      statusTip
+    ];
+
+    m = V.modal({
+      title: existing ? '编辑日记' : '写日记',
+      width: '600px',
+      body: body,
+      footer: el('div', { class: 'modal-foot' }, [
+        existing ? el('button', {
+          class: 'btn btn-danger', text: '删除',
+          onclick: function () {
+            V.confirm({
+              title: '删除这篇日记',
+              message: '删除后无法恢复。如果只是写得不好，可以直接改内容再保存。',
+              danger: true, okText: '删除'
+            }).then(function (ok) {
+              if (!ok) return;
+              Store.removeDiary(existing.id);
+              m.close();
+              UI.toast('已删除');
+              if (done) done();
+            });
+          }
+        }) : null,
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', { class: 'btn btn-primary', text: '保存', onclick: save })
+      ])
+    });
+
+    refreshDateLabel();
+    renderMoodBar();
+  }
+
+  /* ==========================================================
+   * 「引用灵感 / 写进今天日记」—— 两个方向都只是拷贝
+   * ========================================================== */
+  /**
+   * 把一段灵感文本放进某天的日记。
+   * 带来源时用「两个全角空格 + ——」缩进，让人一眼看出这是引用来的段落。
+   * 用纯文本 + 缩进，不用 Markdown 引用语法：本项目的正文一律按纯文本存，
+   * 免得以后有人把 HTML 塞进来（见 ROADMAP 的 XSS 说明）。
+   */
+  function appendToDiary(noteText, dateStr, noteId, done) {
+    var d = Store.diaryOf(dateStr);
+    var quoted = '\u3000\u3000' + noteText.trim().split('\n').join('\n\u3000\u3000');
+    var base = d && d.content ? d.content.replace(/\s+$/, '') + '\n\n' : '';
+    openEditor(dateStr, d ? d.id : null, done, {
+      content: base + quoted,
+      sourceNoteId: noteId || ''
+    });
+  }
+
+  /** 从日记反向摘一段回灵感 */
+  function copyToNote(text, done) {
+    var t = (text || '').trim();
+    if (!t) { UI.toast('这篇日记还没写正文', 'err'); return; }
+    var firstLine = t.split('\n')[0].trim().slice(0, 40);
+    V.confirm({
+      title: '复制到灵感',
+      message: '会把这篇日记的全文复制成一条新灵感（原文保留，两边各自独立）。',
+      okText: '复制'
+    }).then(function (ok) {
+      if (!ok) return;
+      Store.addNote({ content: t, tags: ['日记摘录'] });
+      UI.toast('已复制到灵感：' + firstLine);
+      if (done) done();
+    });
+  }
+
+  global.DiaryPane = {
+    render: renderDiaryInto,
+    open: openEditor,
+    appendToDiary: appendToDiary,
+    copyToNote: copyToNote,
+    autoDate: autoDate
+  };
+})(window);
 
 </script>
 <script>
@@ -20095,6 +21124,71 @@ window.AK_OPS = [
 
             }
 
+      if (SUB === 'diary') {
+  /* ===================== 日记 ===================== */
+        var dcfg = Store.state.settings.diary;
+
+        function diarySwitch(title, desc, key) {
+          var on = !!dcfg[key];
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : ''),
+            onclick: function () {
+              on = !on;
+              sw.classList.toggle('cp-on', on);
+              dcfg[key] = on;
+              Store.save();
+              // 开关影响的是「日记」分页里的心情概览，回到那里才能看到变化
+              if (UI.toast) UI.toast(on ? '已打开「' + title + '」' : '已关闭「' + title + '」');
+            }
+          }, [el('i')]);
+          return el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: title }),
+              el('span', { text: desc })
+            ]),
+            sw
+          ]);
+        }
+
+        var diaryCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        diaryCard.appendChild(el('div', { class: 'section-title' }, ['日记']));
+        diaryCard.appendChild(diarySwitch(
+          '凌晨保存时问日期',
+          '凌晨 0–3 点保存日记时，问一句这篇算「昨天」还是「今天」。关了就一直按当天算，需要时可以在编辑器里「换一天」。',
+          'askDateAtNight'
+        ));
+        diaryCard.appendChild(diarySwitch(
+          '心情统计',
+          '在日记页顶部显示本月心情概览（平均分、分布、冷暖倾向）。样本不足 ' + Store.MOOD_MIN_DAYS +
+          ' 天时无论如何都不显示。日记本身和心情标签不受影响。',
+          'showMoodStats'
+        ));
+        diaryCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+          text: '日记一天只存一篇，写在「待办 → 日记」里。心情是选填的固定五档，标了才能在日历上看出颜色。' +
+                '日记只存在本机，也不进同步码——换设备时用「数据管理 → 导出备份」传文件。'
+        }));
+        root.appendChild(diaryCard);
+
+        var diaryRule = el('div', { class: 'card', style: { padding: '16px 18px' } }, [
+          el('div', { class: 'section-title' }, ['心情是怎么算的']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', lineHeight: '1.9' },
+            text: '五档依次是「很好 / 还行 / 一般 / 疲惫 / 低落」，分别记 5 / 4 / 3 / 2 / 1 分，' +
+                  '平均分就是这些分数的简单平均，不是加权。颜色按冷暖排：很好偏暖（橙），还行偏中性（绿），' +
+                  '一般中性（灰），疲惫与低落下偏冷（靛、紫）。冷暖占比只是把这几档按颜色归了类，' +
+                  '不代表心情好坏的程度差别。'
+          }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '为什么不满 ' + Store.MOOD_MIN_DAYS + ' 天不给看：样本太少时，几天的波动画成图会像「规律」，' +
+                  '实际上只是巧合。与其给一个不可信的结论，不如先不显示。'
+          })
+        ]);
+        root.appendChild(diaryRule);
+
+            }
+
       if (SUB === 'speech') {
         var asr = Store.state.settings.asr || {};
         var spCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
@@ -20540,7 +21634,11 @@ window.AK_OPS = [
           el('div', { class: 'section-title' }, ['文件备份']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '课程、日程、计划、待办、灵感、记账、时间记录与设置都保存在当前浏览器本地（localStorage），不会上传到任何服务器。清理浏览器数据前，建议导出一份文件备份。'
+            text: '课程、日程、计划、待办、灵感、日记、记账、时间记录与设置都保存在当前浏览器本地（localStorage），不会上传到任何服务器。清理浏览器数据前，建议导出一份文件备份。'
+          }),
+          el('p', {
+            style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '文件备份是唯一包含「日记」的迁移方式（同步码不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
             el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
@@ -20731,6 +21829,7 @@ window.AK_OPS = [
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
+    { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
@@ -21235,12 +22334,19 @@ window.AK_OPS = [
     }
   }
 
-  /** 三档同步码的说明文案 */
+  /**
+   * 两档同步码的说明文案。
+   * 两档都**不含日记**：日记只走「导出备份 / 恢复」，原因见下方 DAIRY_SYNC_TIP。
+   */
   var SYNC_SCOPES = [
-    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、笔记、成绩，换设备后其它模块是空的。' },
-    { key: 'standard', name: '标准', desc: '全部内容：课程、待办、计划、记账、笔记、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' },
-    { key: 'full',     name: '完整', desc: '全部内容 + 自定义背景图与桌宠素材。码会明显变长，图片多时建议改用「导出备份」传文件。' }
+    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、灵感、成绩，换设备后其它模块是空的。' },
+    { key: 'standard', name: '标准', desc: '除日记与自定义图片外的全部内容：课程、待办、计划、记账、灵感、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' }
   ];
+
+  /** 「为什么日记不在同步码里」的统一说明，两处（生成 / 粘贴）都显示 */
+  var DIARY_SYNC_TIP =
+    '日记不随同步码走。同步码要经剪贴板、聊天工具来回搬运，中途被谁看到无从控制；' +
+    '日记只通过「导出备份」传文件，那个通道是你自己的文件。本机已有的日记不会因为导入同步码而丢失。';
 
   /** 生成并展示同步码 */
   function syncCodeDialog() {
@@ -21263,6 +22369,7 @@ window.AK_OPS = [
         el('div', { class: 'section-title', text: '带哪些内容' }),
         chipBar,
         scopeTip,
+        el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta,
         sizeTip,
         partHost
@@ -21350,6 +22457,7 @@ window.AK_OPS = [
           text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。' +
                 '如果对方发来的是多片，把几片全部粘进来即可，顺序乱了也没关系；少粘了会提示还差哪几片。'
         }),
+        el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta
       ],
       footer: el('div', { class: 'modal-foot' }, [

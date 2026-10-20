@@ -27,7 +27,8 @@
     event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
     note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 5 },
-    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 6 }
+    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 6 },
+    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 7 }
   };
 
   var TYPES = Object.keys(TYPE_META);
@@ -96,6 +97,16 @@
         title: c.split('\n')[0].slice(0, 40),
         sub: tags,
         body: c
+      };
+    }
+    if (type === 'diary') {
+      // 日记没有标题，用日期当选标题：搜出来一眼能认出是哪天
+      var dm = r.mood ? Store.moodOf(r.mood) : null;
+      var c2 = String(r.content || '');
+      return {
+        title: r.date + (dm ? ' · ' + dm.emoji + ' ' + dm.name : ''),
+        sub: r.date,
+        body: c2
       };
     }
     if (type === 'ledger') {
@@ -419,6 +430,7 @@
       events: s.events || [],
       plans: s.plans || [],
       notes: s.notes || [],
+      diaries: s.diaries || [],
       ledger: s.ledger || []
     };
   }

@@ -3203,3 +3203,227 @@ mark.cp-hit {
 /* 逐日模式：格数多，收窄一点 */
 .cp-heat.cp-is-daily .cp-heat-week { min-width: 26px; padding: 7px 2px; }
 .cp-heat.cp-is-daily .cp-heat-week b { font-size: 10.5px; }
+
+/* ==========================================================
+ * 日记（并入「待办 → 日记」分页）
+ * ========================================================== */
+.cp-diary-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.7;
+  margin-top: 8px;
+}
+
+/* --- 心情概览 --- */
+.cp-diary-mood-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-mood-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.cp-mood-avg { display: flex; align-items: baseline; gap: 6px; }
+.cp-mood-avg b { font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+.cp-mood-avg span { font-size: 11.5px; color: var(--text-3); }
+.cp-mood-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.cp-mood-emoji { font-size: 16px; }
+
+.cp-mood-bars {
+  display: flex;
+  height: 22px;
+  border-radius: 7px;
+  overflow: hidden;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.cp-mood-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  font-size: 10px;
+  line-height: 1;
+  transition: flex .3s ease;
+}
+/* 彩色底上用白色描边压住：emoji 如果回退成单色字形（无彩色 emoji 字体的系统），
+   白色字形会直接消失在浅底上。text-shadow 让它无论单色还是彩色都看得见。 */
+.cp-mood-bar span {
+  opacity: .92;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, .9));
+}
+
+.cp-mood-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.cp-mood-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cp-mood-legend-row i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.cp-mood-legend-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cp-mood-legend-row.cp-is-empty { opacity: .45; }
+
+.cp-mood-tone {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.7;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* --- 月历 --- */
+.cp-diary-cal-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-cal-nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.cp-cal-title { font-size: 12.5px; color: var(--text-2); min-width: 84px; text-align: center; }
+
+.cp-diary-cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cp-dc-dow {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  padding-bottom: 2px;
+}
+.cp-dc-blank { aspect-ratio: 1 / 1; }
+.cp-dc-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  padding: 0;
+}
+.cp-dc-day:hover { border-color: var(--primary); }
+.cp-dc-day.cp-is-today { box-shadow: inset 0 0 0 1.5px var(--primary); }
+.cp-dc-day.cp-is-future { opacity: .42; }
+.cp-dc-day.cp-has-diary { font-weight: 600; }
+.cp-dc-num { font-size: 12px; line-height: 1; }
+.cp-dc-dot { width: 5px; height: 5px; border-radius: 50%; }
+.cp-dc-dot.cp-is-plain { background: var(--text-3); }
+.cp-dc-mark {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* --- 列表 --- */
+.cp-diary-list-card { padding: 14px 16px; margin-bottom: 14px; }
+.cp-diary-row {
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cp-diary-row:hover { background: var(--surface-2); }
+.cp-diary-row + .cp-diary-row { border-top: 1px solid var(--line); border-radius: 0; }
+.cp-diary-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.cp-diary-row-date { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.cp-diary-mood-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.cp-diary-src {
+  font-size: 10.5px;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.cp-diary-row-body {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.65;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cp-diary-write-btn { margin-bottom: 20px; }
+
+/* --- 编辑器 --- */
+.cp-de-date-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cp-de-date { font-size: 14px; }
+.cp-de-label {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 12px 0 7px;
+}
+.cp-mood-pick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cp-mood-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.cp-mood-pick-btn:hover { border-color: var(--line-strong); }
+.cp-mood-pick-btn.cp-active { font-weight: 600; }
+.cp-mood-pick-btn.cp-is-none.cp-active { border-color: var(--text-3); background: var(--surface-2); }
+/* emoji 不吃父级 color：否则在设了 background 的选中态里会变成彩底白字 / 白底白字 */
+.cp-mood-pick-emoji { font-size: 14px; }
+.cp-mood-pick-btn.cp-active .cp-mood-pick-emoji { color: initial; }
+
+/* 同步码里的日记说明 */
+.sync-diary-tip {
+  border-left: 2px solid var(--primary);
+  padding-left: 9px;
+  margin: 10px 0 12px;
+}
+
+@media (max-width: 560px) {
+  .cp-diary-cal { gap: 3px; }
+  .cp-dc-num { font-size: 11px; }
+  .cp-mm-pick-btn, .cp-mood-pick-btn { padding: 5px 10px; font-size: 12px; }
+  .cp-mood-avg b { font-size: 21px; }
+}

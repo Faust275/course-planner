@@ -486,6 +486,14 @@
      * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
      * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
      */
+    /* 搜索跳转用：把分页切到指定 tab。
+       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
+       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
+    setTab: function (tab) {
+      state.tab = tab;
+      if (this.root) this.render();
+    },
+
     focusRecord: function (type, id) {
       if (type !== 'task' || !global.Search) return false;
       var dirty = false;
@@ -503,27 +511,40 @@
       return Search.flash(Search.findRec(type, id));
     },
 
+    /* 搜索跳转用：把分页切到指定 tab。视图还没挂载时先记下，
+       等 render 时自然生效（否则 setTab 找不到 root 就静默失败） */
     render: function () {
       var root = this.root;
       root.innerHTML = '';
 
-      /* ---- 待办 / 灵感 分页 ---- */
+      /* ---- 待办 / 灵感 / 日记 分页 ---- */
       var nt = Store.notes.length;
+      var nd = Store.state.diaries.length;
       var paneBar = el('div', { class: 'pane-tabs' });
-      [{ v: 'tasks', l: '待办' }, { v: 'notes', l: nt ? '灵感 ' + nt : '灵感' }]
-        .forEach(function (x) {
-          paneBar.appendChild(el('button', {
-            class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
-            text: x.l,
-            onclick: function () { state.tab = x.v; view.render(); }
-          }));
-        });
+      [
+        { v: 'tasks', l: '待办' },
+        { v: 'notes', l: nt ? '灵感 ' + nt : '灵感' },
+        { v: 'diary', l: nd ? '日记 ' + nd : '日记' }
+      ].forEach(function (x) {
+        paneBar.appendChild(el('button', {
+          class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
+          text: x.l,
+          onclick: function () { state.tab = x.v; view.render(); }
+        }));
+      });
       root.appendChild(paneBar);
 
       if (state.tab === 'notes') {
         var noteHost = el('div', {});
         root.appendChild(noteHost);
         if (global.NotesPane) NotesPane.render(noteHost);
+        return;
+      }
+
+      if (state.tab === 'diary') {
+        var diaryHost = el('div', {});
+        root.appendChild(diaryHost);
+        if (global.DiaryPane) DiaryPane.render(diaryHost);
         return;
       }
 

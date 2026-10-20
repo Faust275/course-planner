@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
 const b = await chromium.launch();
 const p = await b.newPage();
-await p.goto('http://localhost:8152/index.html', { waitUntil: 'networkidle' });
+const URL = process.env.URL || 'http://localhost:8152/index.html';
+await p.goto(URL, { waitUntil: 'networkidle' });
 await p.waitForTimeout(900);
 const out = await p.evaluate(async () => {
   // 直接调用页面内的真实实现

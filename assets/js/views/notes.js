@@ -104,6 +104,16 @@
           }
         }, [V.svg(V.icons.check, 15), n.converted ? '再转一次' : '转为待办']),
         el('button', {
+          class: 'btn btn-sm',
+          title: '把这段内容放进今天的日记',
+          onclick: function (e) {
+            e.stopPropagation();
+            if (!global.DiaryPane) return;
+            // 两个方向都只是「拷贝」：灵感原文保留，日记里是独立的一份副本
+            DiaryPane.appendToDiary(n.content || '', DiaryPane.autoDate(), n.id, refresh);
+          }
+        }, [V.svg(V.icons.book, 15), '写进日记']),
+        el('button', {
           class: 'icon-btn', title: '删除',
           onclick: function (e) {
             e.stopPropagation();
@@ -193,7 +203,15 @@
     render: function () { renderNotesInto(this.root); },
 
     focusRecord: function (type, id) {
-      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
+      if (!global.Search) return false;
+      // 日记和灵感同在「待办」的三个分页里，搜索跳过来时要先把分页切对。
+      // 注意不能只靠 tasks 视图自己的 focusRecord：它只处理 task 类型，
+      // 收到 diary / note 会直接返回 false，分页就切不过去了。
+      if (global.App && (type === 'diary' || type === 'note')) {
+        var tv = App.views.filter(function (x) { return x.id === 'tasks'; })[0];
+        if (tv && tv.setTab) tv.setTab(type === 'diary' ? 'diary' : 'notes');
+      }
+      return Search.flash(Search.findRec(type, id));
     }
   };
 

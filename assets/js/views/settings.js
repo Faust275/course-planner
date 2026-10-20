@@ -417,6 +417,71 @@
 
             }
 
+      if (SUB === 'diary') {
+  /* ===================== 日记 ===================== */
+        var dcfg = Store.state.settings.diary;
+
+        function diarySwitch(title, desc, key) {
+          var on = !!dcfg[key];
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : ''),
+            onclick: function () {
+              on = !on;
+              sw.classList.toggle('cp-on', on);
+              dcfg[key] = on;
+              Store.save();
+              // 开关影响的是「日记」分页里的心情概览，回到那里才能看到变化
+              if (UI.toast) UI.toast(on ? '已打开「' + title + '」' : '已关闭「' + title + '」');
+            }
+          }, [el('i')]);
+          return el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: title }),
+              el('span', { text: desc })
+            ]),
+            sw
+          ]);
+        }
+
+        var diaryCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        diaryCard.appendChild(el('div', { class: 'section-title' }, ['日记']));
+        diaryCard.appendChild(diarySwitch(
+          '凌晨保存时问日期',
+          '凌晨 0–3 点保存日记时，问一句这篇算「昨天」还是「今天」。关了就一直按当天算，需要时可以在编辑器里「换一天」。',
+          'askDateAtNight'
+        ));
+        diaryCard.appendChild(diarySwitch(
+          '心情统计',
+          '在日记页顶部显示本月心情概览（平均分、分布、冷暖倾向）。样本不足 ' + Store.MOOD_MIN_DAYS +
+          ' 天时无论如何都不显示。日记本身和心情标签不受影响。',
+          'showMoodStats'
+        ));
+        diaryCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+          text: '日记一天只存一篇，写在「待办 → 日记」里。心情是选填的固定五档，标了才能在日历上看出颜色。' +
+                '日记只存在本机，也不进同步码——换设备时用「数据管理 → 导出备份」传文件。'
+        }));
+        root.appendChild(diaryCard);
+
+        var diaryRule = el('div', { class: 'card', style: { padding: '16px 18px' } }, [
+          el('div', { class: 'section-title' }, ['心情是怎么算的']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', lineHeight: '1.9' },
+            text: '五档依次是「很好 / 还行 / 一般 / 疲惫 / 低落」，分别记 5 / 4 / 3 / 2 / 1 分，' +
+                  '平均分就是这些分数的简单平均，不是加权。颜色按冷暖排：很好偏暖（橙），还行偏中性（绿），' +
+                  '一般中性（灰），疲惫与低落下偏冷（靛、紫）。冷暖占比只是把这几档按颜色归了类，' +
+                  '不代表心情好坏的程度差别。'
+          }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '为什么不满 ' + Store.MOOD_MIN_DAYS + ' 天不给看：样本太少时，几天的波动画成图会像「规律」，' +
+                  '实际上只是巧合。与其给一个不可信的结论，不如先不显示。'
+          })
+        ]);
+        root.appendChild(diaryRule);
+
+            }
+
       if (SUB === 'speech') {
         var asr = Store.state.settings.asr || {};
         var spCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
@@ -862,7 +927,11 @@
           el('div', { class: 'section-title' }, ['文件备份']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '课程、日程、计划、待办、灵感、记账、时间记录与设置都保存在当前浏览器本地（localStorage），不会上传到任何服务器。清理浏览器数据前，建议导出一份文件备份。'
+            text: '课程、日程、计划、待办、灵感、日记、记账、时间记录与设置都保存在当前浏览器本地（localStorage），不会上传到任何服务器。清理浏览器数据前，建议导出一份文件备份。'
+          }),
+          el('p', {
+            style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '文件备份是唯一包含「日记」的迁移方式（同步码不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
             el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
@@ -1053,6 +1122,7 @@
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
+    { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
@@ -1557,12 +1627,19 @@
     }
   }
 
-  /** 三档同步码的说明文案 */
+  /**
+   * 两档同步码的说明文案。
+   * 两档都**不含日记**：日记只走「导出备份 / 恢复」，原因见下方 DAIRY_SYNC_TIP。
+   */
   var SYNC_SCOPES = [
-    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、笔记、成绩，换设备后其它模块是空的。' },
-    { key: 'standard', name: '标准', desc: '全部内容：课程、待办、计划、记账、笔记、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' },
-    { key: 'full',     name: '完整', desc: '全部内容 + 自定义背景图与桌宠素材。码会明显变长，图片多时建议改用「导出备份」传文件。' }
+    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、灵感、成绩，换设备后其它模块是空的。' },
+    { key: 'standard', name: '标准', desc: '除日记与自定义图片外的全部内容：课程、待办、计划、记账、灵感、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' }
   ];
+
+  /** 「为什么日记不在同步码里」的统一说明，两处（生成 / 粘贴）都显示 */
+  var DIARY_SYNC_TIP =
+    '日记不随同步码走。同步码要经剪贴板、聊天工具来回搬运，中途被谁看到无从控制；' +
+    '日记只通过「导出备份」传文件，那个通道是你自己的文件。本机已有的日记不会因为导入同步码而丢失。';
 
   /** 生成并展示同步码 */
   function syncCodeDialog() {
@@ -1585,6 +1662,7 @@
         el('div', { class: 'section-title', text: '带哪些内容' }),
         chipBar,
         scopeTip,
+        el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta,
         sizeTip,
         partHost
@@ -1672,6 +1750,7 @@
           text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。' +
                 '如果对方发来的是多片，把几片全部粘进来即可，顺序乱了也没关系；少粘了会提示还差哪几片。'
         }),
+        el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta
       ],
       footer: el('div', { class: 'modal-foot' }, [

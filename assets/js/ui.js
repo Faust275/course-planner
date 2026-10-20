@@ -26,6 +26,10 @@
           node.addEventListener(k.slice(2).toLowerCase(), v);
         } else if (k === 'dataset') {
           Object.keys(v).forEach(function (d) { node.dataset[d] = v[d]; });
+        } else if (k === 'value' && tag === 'textarea') {
+          // textarea 的 value 不是 HTML 属性：setAttribute('value') 不生效，
+          // 必须写进内容，否则「预填正文」会显示为空
+          node.value = v;
         } else node.setAttribute(k, v);
       });
     }

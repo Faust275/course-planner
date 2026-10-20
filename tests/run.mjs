@@ -163,6 +163,33 @@ const perDaySrc = extractFnFrom('perDay', STATS_ANCHOR);
 const sleepByNightSrc = extractFnFrom('sleepByNight', 0);
 const heatLevelSrc = extractFnFrom('heatLevel', sliceFrom("id: 'stats'"));
 
+// 日记 / 心情：MOODS 枚举 + 归属判定 + 统计
+const MOODS_ANCHOR = sliceFrom('var MOODS = [');
+const MOODSSrc = (() => {
+  const i = sliceFrom('var MOODS = [');
+  const open = html.indexOf('[', i);
+  let depth = 0, j = open;
+  for (; j < html.length; j++) {
+    if (html[j] === '[') depth++;
+    else if (html[j] === ']') { depth--; if (depth === 0) break; }
+  }
+  return 'var MOODS = ' + html.slice(open, j + 1) + ';';
+})();
+const MOOD_MIN_DAYSSrc = (() => {
+  const i = sliceFrom('var MOOD_MIN_DAYS =');
+  return html.slice(i, html.indexOf(';', i) + 1);
+})();
+const MOOD_CROSS_MIN_DAYSSrc = (() => {
+  const i = sliceFrom('var MOOD_CROSS_MIN_DAYS =');
+  return html.slice(i, html.indexOf(';', i) + 1);
+})();
+const moodOfSrc = extractFnFrom('moodOf', MOODS_ANCHOR);
+const moodToneSrc = extractFnFrom('moodTone', MOODS_ANCHOR);
+const diaryDatePromptSrc = extractFnFrom('diaryDatePrompt', MOODS_ANCHOR);
+const moodStatsSrc = extractFnFrom('moodStats', MOODS_ANCHOR);
+const diaryOnSrc = extractFnFrom('diaryOn', MOODS_ANCHOR);
+const diariesSortedSrc = extractFnFrom('diariesSorted', MOODS_ANCHOR);
+
 const SUBTASK_ANCHOR = sliceFrom('var SUBTASK_DEFAULTS = {');
 const SUBTASK_DEFAULTSSrc = (() => {
   const i = sliceFrom('var SUBTASK_DEFAULTS = {');
@@ -234,6 +261,15 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${perDaySrc}
   ${sleepByNightSrc}
   ${heatLevelSrc}
+  ${MOODSSrc}
+  ${MOOD_MIN_DAYSSrc}
+  ${MOOD_CROSS_MIN_DAYSSrc}
+  ${moodOfSrc}
+  ${moodToneSrc}
+  ${diaryDatePromptSrc}
+  ${moodStatsSrc}
+  ${diaryOnSrc}
+  ${diariesSortedSrc}
   // rangeDates('term') 会读全局 state，这里给一个空壳，避免 ReferenceError
   var state = { semesters: [{ id: 's1', startDate: '2026-08-24', weeks: 20 }], currentSemesterId: 's1' };
   var Store = {
@@ -260,7 +296,9 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      annivNext, wrapText, measure, hexToRgb, tint,
                      subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
                      RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
-                     weekBounds, monthBounds, sleepByNight, heatLevel };
+                     weekBounds, monthBounds, sleepByNight, heatLevel,
+                     MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
+                     diaryDatePrompt, moodStats, diaryOn, diariesSorted };
 `;
 new Function('__LUNAR__', mod)(Lunar);
 const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
@@ -272,7 +310,9 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         annivNext, wrapText, measure, hexToRgb, tint,
         subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
         RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
-        weekBounds, monthBounds, sleepByNight, heatLevel } = globalThis.__T;
+        weekBounds, monthBounds, sleepByNight, heatLevel,
+        MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
+        diaryDatePrompt, moodStats, diaryOn, diariesSorted } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -1211,6 +1251,129 @@ console.log('统计口径：heatLevel 绝对刻度');
   // 关键回归：各周都是 9.9 小时时，旧实现（按本次最大值归一化）会全部顶到最深一档
   eq('9.9 小时不是满格', heatLevel(9.9 * 60), 3);
   eq('两档有明显区分', heatLevel(9.9 * 60) < heatLevel(11.9 * 60), true);
+}
+
+console.log('\n日记心情：MOODS 枚举与映射');
+{
+  eq('五档心情', MOODS.length, 5);
+  eq('顺序固定（分数 5→1）', MOODS.map(m => m.key), ['great', 'good', 'meh', 'tired', 'low']);
+  eq('每档都有名字', MOODS.every(m => m.name && m.emoji), true);
+  eq('每档都有颜色', MOODS.every(m => /^#[0-9a-f]{6}$/i.test(m.color)), true);
+  eq('颜色互不相同', new Set(MOODS.map(m => m.color)).size, 5);
+  eq('冷暖只三档', MOODS.every(m => ['warm', 'neutral', 'cold'].includes(m.tone)), true);
+  eq('首档偏暖', moodTone('great'), 'warm');
+  eq('末档偏冷', moodTone('low'), 'cold');
+  eq('中间是中性', moodTone('meh'), 'neutral');
+  eq('未知心情归类为空', moodTone('nope'), '');
+  eq('moodOf 未知返回 null', moodOf('nope'), null);
+  eq('moodOf 命中返回对象', moodOf('tired').name, '疲惫');
+  eq('样本门槛 7', MOOD_MIN_DAYS, 7);
+  eq('交叉门槛更严', MOOD_CROSS_MIN_DAYS > MOOD_MIN_DAYS, true);
+}
+
+console.log('日记心情：凌晨归属判定');
+{
+  // 0–3 点才问，4 点起不再问
+  eq('0 点要问', diaryDatePrompt(0, '2026-10-21', '').ask, true);
+  eq('3 点要问', diaryDatePrompt(3, '2026-10-21', '').ask, true);
+  eq('4 点不问', diaryDatePrompt(4, '2026-10-21', '').ask, false);
+  eq('白天不问', diaryDatePrompt(14, '2026-10-21', '').ask, false);
+  eq('23 点不问', diaryDatePrompt(23, '2026-10-21', '').ask, false);
+  eq('不问时 suggest 就是今天', diaryDatePrompt(14, '2026-10-21', '').suggest, '2026-10-21');
+  eq('不问时两个选项相同', diaryDatePrompt(14, '2026-10-21', '').other, '2026-10-21');
+
+  // 凌晨新建：默认今天，另一个是昨天
+  const a = diaryDatePrompt(1, '2026-10-21', '');
+  eq('凌晨新建默认今天', a.suggest, '2026-10-21');
+  eq('凌晨新建另一个是昨天', a.other, '2026-10-20');
+  // 已经在写「昨天」那篇：默认继续昨天，不能把用户改回今天
+  const b2 = diaryDatePrompt(1, '2026-10-21', '2026-10-20');
+  eq('在写昨天则默认昨天', b2.suggest, '2026-10-20');
+  eq('此时另一个是今天', b2.other, '2026-10-21');
+  // 两个选项永远不同（否则弹窗问了等于没问）
+  ['2026-10-21', '2026-10-20', '2026-10-19'].forEach(function (d) {
+    eq('选项必有差异 @' + d, diaryDatePrompt(2, '2026-10-21', d).suggest !== diaryDatePrompt(2, '2026-10-21', d).other, true);
+  });
+  // 跨月 / 跨年边界
+  eq('跨月：10-01 凌晨的昨天是 09-30', diaryDatePrompt(2, '2026-10-01', '').other, '2026-09-30');
+  eq('跨年：01-01 凌晨的昨天是上一年', diaryDatePrompt(2, '2027-01-01', '').other, '2026-12-31');
+}
+
+console.log('日记心情：moodStats 统计');
+{
+  const ds = [
+    { id: '1', date: '2026-10-01', content: 'a', mood: 'great' },
+    { id: '2', date: '2026-10-02', content: 'b', mood: 'good' },
+    { id: '3', date: '2026-10-03', content: '',    mood: 'good' },
+    { id: '4', date: '2026-10-04', content: 'c', mood: 'meh' },
+    { id: '5', date: '2026-10-05', content: 'd' },            // 没标心情
+    { id: '6', date: '2026-10-06', content: 'e', mood: 'tired' },
+    { id: '7', date: '2026-10-07', content: 'f', mood: 'low' },
+    { id: '8', date: '2026-10-08', content: 'g', mood: 'great' },
+    { id: '9', date: '2026-10-09', content: 'h', mood: 'good' },
+    { id: '10', date: '2026-11-02', content: '范围外', mood: 'low' }
+  ];
+  const st = moodStats(ds, '2026-10-01', '2026-10-31');
+  eq('区间内天数', st.days, 9);
+  eq('标了心情的天数', st.rated, 8);
+  eq('有正文的天数', st.withText, 8);
+  eq('great 计数', st.counts.great, 2);
+  eq('good 计数', st.counts.good, 3);
+  eq('low 计数', st.counts.low, 1);
+  eq('区间外的日记不算进来', st.counts.low, 1);
+  // 分数：5*2 + 4*3 + 3*1 + 2*1 + 1*1 = 10+12+3+2+1 = 28 / 8 = 3.5
+  eq('平均分（按 1–5 映射）', st.avg, 3.5);
+  eq('够 7 天可展示', st.eligible, true);
+  eq('还差 0 天', st.need, 0);
+  eq('最常出现的是还行', st.top, 'good');
+  eq('冷暖归类：暖', st.tones.warm, 2);
+  eq('冷暖归类：中性', st.tones.neutral, 4);
+  eq('冷暖归类：冷', st.tones.cold, 2);
+  eq('选项计数字段齐全', Object.keys(st.counts).sort(), ['good', 'great', 'low', 'meh', 'tired']);
+
+  // 不满 7 天：不展示，但要告诉用户还差几天
+  const few = moodStats(ds.slice(0, 3), '2026-10-01', '2026-10-31');
+  eq('只标 3 天不给统计', few.eligible, false);
+  eq('提示还差 4 天', few.need, 4);
+  const none = moodStats([], '2026-10-01', '2026-10-31');
+  eq('空数据不炸', none.days, 0);
+  eq('空数据平均分 0', none.avg, 0);
+  eq('空数据也提示差 7 天', none.need, 7);
+  eq('空数据 top 为空', none.top, '');
+
+  // 脏数据：未知心情键不算，缺 content 不算有正文
+  const dirty = moodStats([
+    { date: '2026-10-01', mood: 'unknown', content: 'x' },
+    { date: '2026-10-02', mood: 'good' },
+    null,
+    { mood: 'good' }
+  ], '2026-10-01', '2026-10-31');
+  eq('未知心情键被忽略', dirty.rated, 1);
+  eq('缺少 date 的条目被跳过', dirty.days, 2);
+
+  // 并列时取顺序靠前的，保证渲染稳定
+  const tie = moodStats([
+    { date: '2026-10-01', mood: 'low' },
+    { date: '2026-10-02', mood: 'great' }
+  ], '2026-10-01', '2026-10-31');
+  eq('并列取靠前档', tie.top, 'great');
+}
+
+console.log('日记：一天一篇相关');
+{
+  const ds = [
+    { id: 'a', date: '2026-10-03', content: 'x' },
+    { id: 'b', date: '2026-10-01', content: 'y' },
+    { id: 'c', date: '2026-10-02', content: 'z' }
+  ];
+  eq('按日期找得到', diaryOn(ds, '2026-10-02').id, 'c');
+  eq('找不到返回 null', diaryOn(ds, '2026-10-09'), null);
+  eq('空数组返回 null', diaryOn([], '2026-10-01'), null);
+  eq('倒序：最新在前', diariesSorted(ds).map(d => d.date), ['2026-10-03', '2026-10-02', '2026-10-01']);
+  eq('倒序不改原数组', ds[0].date, '2026-10-03');
+  eq('同一天出现两条时取第一条（防历史脏数据）', diaryOn([
+    { id: 'x1', date: '2026-10-01' }, { id: 'x2', date: '2026-10-01' }
+  ], '2026-10-01').id, 'x1');
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
