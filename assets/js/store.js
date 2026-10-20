@@ -94,7 +94,8 @@
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
-      achievements: { done: {} }   // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
+      achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
+      usage: {}                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
     };
   }
 
@@ -408,14 +409,14 @@
   };
 
   var TREE_SPECIES = [
-    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a' },
-    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45' },
-    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a' },
-    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45' },
-    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone' },
-    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6' },
-    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637' },
-    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45' }
+    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a', price: 100 },
+    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45', price: 130 },
+    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a', price: 160 },
+    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45', price: 200 },
+    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone', price: 140 },
+    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6', price: 120 },
+    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637', price: 220 },
+    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45', price: 180 }
   ];
 
   function speciesOf(key) {
@@ -657,15 +658,50 @@
     { id: 'tree6', group: '种树', name: '绿意盎然', desc: '种下 6 棵树', icon: 'tree', tier: 'silver', points: 60,
       metric: 'tree', threshold: 6 },
     { id: 'tree9', group: '种树', name: '森之守护', desc: '种下 9 棵树', icon: 'tree', tier: 'gold', points: 120,
-      metric: 'tree', threshold: 9 }
+      metric: 'tree', threshold: 9 },
+
+    /* —— 历练：各功能使用次数成就，分三档逐级解锁（1 / 10 / 100）——
+     * 初出茅庐(1) → 小有心得(10, 需初出茅庐) → 炉火纯青(100, 需小有心得)
+     * metric 用 'usage:<key>'，由 state.usage[<key>] 计次 */
+    { id: 'use_course_1', group: '历练', name: '初出茅庐：课程表', desc: '首次使用课程表', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:course', threshold: 1 },
+    { id: 'use_course_10', group: '历练', name: '小有心得：课程表', desc: '使用课程表 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:course', threshold: 10, req: 'use_course_1' },
+    { id: 'use_course_100', group: '历练', name: '炉火纯青：课程表', desc: '使用课程表 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:course', threshold: 100, req: 'use_course_10' },
+    { id: 'use_plan_1', group: '历练', name: '初出茅庐：计划', desc: '首次执行计划（打卡 / 记录进度）', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:plan', threshold: 1 },
+    { id: 'use_plan_10', group: '历练', name: '小有心得：计划', desc: '执行计划 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:plan', threshold: 10, req: 'use_plan_1' },
+    { id: 'use_plan_100', group: '历练', name: '炉火纯青：计划', desc: '执行计划 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:plan', threshold: 100, req: 'use_plan_10' },
+    { id: 'use_ledger_1', group: '历练', name: '初出茅庐：记账', desc: '首次记账', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:ledger', threshold: 1 },
+    { id: 'use_ledger_10', group: '历练', name: '小有心得：记账', desc: '记账 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:ledger', threshold: 10, req: 'use_ledger_1' },
+    { id: 'use_ledger_100', group: '历练', name: '炉火纯青：记账', desc: '记账 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:ledger', threshold: 100, req: 'use_ledger_10' },
+    { id: 'use_grade_1', group: '历练', name: '初出茅庐：成绩', desc: '首次记录成绩', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:grade', threshold: 1 },
+    { id: 'use_grade_10', group: '历练', name: '小有心得：成绩', desc: '记录成绩 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:grade', threshold: 10, req: 'use_grade_1' },
+    { id: 'use_grade_100', group: '历练', name: '炉火纯青：成绩', desc: '记录成绩 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:grade', threshold: 100, req: 'use_grade_10' },
+    { id: 'use_meal_1', group: '历练', name: '初出茅庐：饮食', desc: '首次记录饮食', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:meal', threshold: 1 },
+    { id: 'use_meal_10', group: '历练', name: '小有心得：饮食', desc: '记录饮食 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:meal', threshold: 10, req: 'use_meal_1' },
+    { id: 'use_meal_100', group: '历练', name: '炉火纯青：饮食', desc: '记录饮食 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:meal', threshold: 100, req: 'use_meal_10' },
+    { id: 'use_sleep_1', group: '历练', name: '初出茅庐：睡眠', desc: '首次记录睡眠', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:sleep', threshold: 1 },
+    { id: 'use_sleep_10', group: '历练', name: '小有心得：睡眠', desc: '记录睡眠 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:sleep', threshold: 10, req: 'use_sleep_1' },
+    { id: 'use_sleep_100', group: '历练', name: '炉火纯青：睡眠', desc: '记录睡眠 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:sleep', threshold: 100, req: 'use_sleep_10' },
+    { id: 'use_focus_1', group: '历练', name: '初出茅庐：专注', desc: '首次完成一次专注', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:focus', threshold: 1 },
+    { id: 'use_focus_10', group: '历练', name: '小有心得：专注', desc: '完成专注 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:focus', threshold: 10, req: 'use_focus_1' },
+    { id: 'use_focus_100', group: '历练', name: '炉火纯青：专注', desc: '完成专注 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:focus', threshold: 100, req: 'use_focus_10' },
+    { id: 'use_note_1', group: '历练', name: '初出茅庐：速记', desc: '首次使用速记', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:note', threshold: 1 },
+    { id: 'use_note_10', group: '历练', name: '小有心得：速记', desc: '使用速记 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:note', threshold: 10, req: 'use_note_1' },
+    { id: 'use_note_100', group: '历练', name: '炉火纯青：速记', desc: '使用速记 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:note', threshold: 100, req: 'use_note_10' },
+    { id: 'use_event_1', group: '历练', name: '初出茅庐：日程', desc: '首次添加日程', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:event', threshold: 1 },
+    { id: 'use_event_10', group: '历练', name: '小有心得：日程', desc: '添加日程 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:event', threshold: 10, req: 'use_event_1' },
+    { id: 'use_event_100', group: '历练', name: '炉火纯青：日程', desc: '添加日程 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:event', threshold: 100, req: 'use_event_10' }
   ];
 
   /** 成就分类顺序：抽卡 / 集卡 / 种树 */
-  var ACH_GROUPS = ['抽卡', '集卡', '种树'];
+  var ACH_GROUPS = ['抽卡', '集卡', '种树', '历练'];
 
   /** 当前各成就指标的实际数值 */
   function achValue(metric) {
     var s = state;
+    if (metric && metric.indexOf('usage:') === 0) {
+      var uk = metric.slice(6);
+      return (s.usage && s.usage[uk]) || 0;
+    }
     if (metric === 'tree') return (s.pomodoro.trees || []).length;
     if (metric === 'streakNo6') return (s.pomodoro.gacha.streakNo6) || 0;
     if (metric === 'streakNo5') return (s.pomodoro.gacha.streakNo5) || 0;
@@ -786,6 +822,7 @@
       if (!state.tasks) state.tasks = [];
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
+      if (!state.usage || typeof state.usage !== 'object') state.usage = {};
       if (!state.taskSeq) state.taskSeq = {};
       if (!state.periods || !state.periods.length) state.periods = ds.periods;
 
@@ -1058,6 +1095,7 @@
         note: (data.note || '').trim()
       };
       state.courses.push(c);
+      this.bumpUsage('course');
       this.emit();
       this.checkAchievements(true);
       return c;
@@ -1236,6 +1274,7 @@
       var sid = semesterId || state.currentSemesterId;
       if (!state.grades[sid]) state.grades[sid] = {};
       state.grades[sid][rec.key] = rec;
+      this.bumpUsage('grade');
       this.emit();
       return rec;
     },
@@ -1597,6 +1636,7 @@
         createdAt: new Date().toISOString()
       };
       state.events.push(e);
+      this.bumpUsage('event');
       this.emit();
       return e;
     },
@@ -1702,6 +1742,7 @@
         note: (data.note || '').trim()
       };
       state.meals.push(m);
+      this.bumpUsage('meal');
       // 有花费就自动记一笔账
       if (m.cost > 0) {
         this.addLedger({
@@ -1897,6 +1938,7 @@
         note: (data.note || '').trim()
       };
       state.sleeps.push(r);
+      this.bumpUsage('sleep');
       this.emit();
       return r;
     },
@@ -2015,6 +2057,7 @@
         running: false, endAt: 0, left: 0,
         duration: state.pomodoro.timer.duration || 25, taskId: ''
       };
+      this.bumpUsage('focus');
       this.emit();
       return gain;
     },
@@ -2241,6 +2284,15 @@
       return newly;
     },
 
+    /** 记录某功能的使用次数并检测相关成就（初出茅庐 / 小有心得 / 炉火纯青） */
+    bumpUsage: function (key) {
+      if (!state.usage) state.usage = {};
+      state.usage[key] = (state.usage[key] || 0) + 1;
+      this.checkAchievements(true);
+      this.save();
+      return state.usage[key];
+    },
+
     /** 寻访数据窗口：最近 100 抽 ∩ 近 30 天（取较小窗口） */
     gachaHistory: function () {
       var pm = state.pomodoro;
@@ -2261,14 +2313,15 @@
       return { set: set, stats: stats, days: days, last100: last100.length };
     },
 
-    plantCost: function () {
-      return POMO.PLANT_COST + state.pomodoro.trees.length * POMO.PLANT_STEP;
+    plantCost: function (speciesKey) {
+      var sp = speciesOf(speciesKey || 'camphor');
+      return (sp.price || POMO.PLANT_COST) + state.pomodoro.trees.length * POMO.PLANT_STEP;
     },
 
     /** 种一棵树，消耗当前价格的积分 */
     plantTree: function (speciesKey) {
       var pm = state.pomodoro;
-      var cost = this.plantCost();
+      var cost = this.plantCost(speciesKey);
       if (pm.points < cost) return null;
       this.spendPoints(cost);
       var tree = {
@@ -2519,6 +2572,7 @@
         if (this.pomodoro.points >= back) this.spendPoints(back);
       } else {
         plan.records.push({ date: dateStr, value: 1, note: '', at: new Date().toISOString() });
+        this.bumpUsage('plan');
       }
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
@@ -2542,6 +2596,7 @@
         date: dateStr || DateUtil.toStr(DateUtil.today()),
         value: v, note: (note || '').trim(), at: new Date().toISOString()
       });
+      this.bumpUsage('plan');
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
       var gain = POMO.PLAN_CHECKIN;
@@ -2698,6 +2753,7 @@
       createdAt: new Date().toISOString()
     };
     state.notes.unshift(n);
+    this.bumpUsage('note');
     this.emit();
     return n;
   },
@@ -2908,6 +2964,7 @@
     };
     if (e.amount <= 0) return null;
     state.ledger.push(e);
+    this.bumpUsage('ledger');
     this.emit();
     return e;
   },

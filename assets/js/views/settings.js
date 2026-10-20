@@ -901,76 +901,7 @@
         root.appendChild(about);
       }
 
-      if (SUB === 'ach') {
-        var list = Store.achievementList();
-        var doneCount = 0;
-        list.forEach(function (a) { if (Store.isAchieved(a)) doneCount++; });
-
-        root.appendChild(el('div', { class: 'set-head' }, [
-          el('button', { class: 'icon-btn', onclick: function () { SUB = ''; view.render(); } },
-            [V.svg('M18 6L6 18M6 6l12 12', 20)]),
-          el('div', { class: 'set-head-title' }, [
-            el('b', { text: '成就' }),
-            el('span', { text: '已完成 ' + doneCount + ' / ' + list.length })
-          ])
-        ]));
-
-        var achCard = el('div', { class: 'card', style: { padding: '14px 16px' } });
-        achCard.appendChild(el('div', { class: 'section-title' }, ['全部成就']));
-
-        // 按「抽卡 / 集卡 / 种树」分组展示
-        (Store.ACH_GROUPS || []).forEach(function (grp) {
-          var items = list.filter(function (a) { return a.group === grp; });
-          if (!items.length) return;
-          var doneG = items.filter(function (a) { return Store.isAchieved(a); }).length;
-          achCard.appendChild(el('div', { class: 'ach-group-head' }, [
-            el('b', { text: grp }),
-            el('span', { text: doneG + ' / ' + items.length })
-          ]));
-
-          var grid = el('div', { class: 'ach-grid' });
-          items.forEach(function (a) {
-            var done = Store.isAchieved(a);
-            // 累计型成就用 metric/threshold；事件型（十连特定结果）只看是否发生过
-            var isCounted = !!a.metric;
-            var val = isCounted ? Store.achievementValue(a.metric) : (done ? 1 : 0);
-            var denom = isCounted ? a.threshold : 1;
-            var tier = Store.ACH_TIERS[a.tier] || { color: '#888', label: '' };
-            var pct = Math.max(0, Math.min(100, Math.round(val / denom * 100)));
-            grid.appendChild(el('div', { class: 'ach-item' + (done ? ' done' : '') }, [
-              el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
-              el('div', { class: 'ach-body' }, [
-                el('div', { class: 'ach-name' }, [
-                  el('b', { text: a.name }),
-                  el('span', { class: 'ach-tier', style: { color: tier.color }, text: tier.label })
-                ]),
-                el('div', { class: 'ach-desc', text: a.desc }),
-                el('div', { class: 'ach-progress' }, [
-                  el('div', { class: 'ach-bar' }, [el('i', { style: { width: (done ? 100 : pct) + '%', background: tier.color } })]),
-                  el('span', {
-                    class: 'ach-count',
-                    text: isCounted
-                      ? (Math.min(val, a.threshold) + ' / ' + a.threshold)
-                      : (done ? '已达成' : '待触发')
-                  })
-                ])
-              ]),
-              el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
-                el('span', { class: 'ach-pts', text: '+' + a.points }),
-                el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
-              ])
-            ]));
-          });
-          achCard.appendChild(grid);
-        });
-        root.appendChild(achCard);
-
-        root.appendChild(el('div', {
-          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
-          text: '成就分「抽卡 / 集卡 / 种树」三类：达成条件即可解锁，并获得对应积分（抽卡模式下会折算成合成玉）。'
-            + '「集齐三星」需集满全部 22 名三星干员；连续未出星计数跨所有单抽与十连累计。'
-        }));
-      }
+      /* 成就页已迁移至「收集」视图（collection.js 的「成就」标签页） */
 
     }
   };
@@ -993,8 +924,7 @@
     { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
     { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
     { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
-    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
-    { key: 'ach', name: '成就', desc: '抽卡 / 集卡 / 种树三类成就', icon: V.icons.sparkle, color: '#f59e0b' }
+    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' }
   ];
 
   view.home = function () {

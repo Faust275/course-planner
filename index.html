@@ -1106,6 +1106,7 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid var(--line); border-radius: 12px;
   padding: 8px 8px 10px; text-align: center;
   background: var(--surface-2);
+  position: relative;
   transition: box-shadow .15s, transform .15s;
 }
 .tree-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
@@ -2690,6 +2691,7 @@ input[type="range"]::-moz-range-thumb {
 .ach-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .ach-bar i { display: block; height: 100%; border-radius: 999px; }
 .ach-count { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.ach-time { font-size: 10.5px; color: var(--text-3); margin-top: 4px; opacity: .85; }
 .ach-points { flex: 0 0 auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
 .ach-pts { font-size: 13px; font-weight: 700; color: var(--text-3); }
 .ach-item.done .ach-pts { color: var(--primary); }
@@ -3298,7 +3300,8 @@ window.AK_OPS = [
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
-      achievements: { done: {} }   // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
+      achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
+      usage: {}                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
     };
   }
 
@@ -3612,14 +3615,14 @@ window.AK_OPS = [
   };
 
   var TREE_SPECIES = [
-    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a' },
-    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45' },
-    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a' },
-    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45' },
-    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone' },
-    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6' },
-    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637' },
-    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45' }
+    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a', price: 100 },
+    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45', price: 130 },
+    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a', price: 160 },
+    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45', price: 200 },
+    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone', price: 140 },
+    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6', price: 120 },
+    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637', price: 220 },
+    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45', price: 180 }
   ];
 
   function speciesOf(key) {
@@ -3861,15 +3864,50 @@ window.AK_OPS = [
     { id: 'tree6', group: '种树', name: '绿意盎然', desc: '种下 6 棵树', icon: 'tree', tier: 'silver', points: 60,
       metric: 'tree', threshold: 6 },
     { id: 'tree9', group: '种树', name: '森之守护', desc: '种下 9 棵树', icon: 'tree', tier: 'gold', points: 120,
-      metric: 'tree', threshold: 9 }
+      metric: 'tree', threshold: 9 },
+
+    /* —— 历练：各功能使用次数成就，分三档逐级解锁（1 / 10 / 100）——
+     * 初出茅庐(1) → 小有心得(10, 需初出茅庐) → 炉火纯青(100, 需小有心得)
+     * metric 用 'usage:<key>'，由 state.usage[<key>] 计次 */
+    { id: 'use_course_1', group: '历练', name: '初出茅庐：课程表', desc: '首次使用课程表', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:course', threshold: 1 },
+    { id: 'use_course_10', group: '历练', name: '小有心得：课程表', desc: '使用课程表 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:course', threshold: 10, req: 'use_course_1' },
+    { id: 'use_course_100', group: '历练', name: '炉火纯青：课程表', desc: '使用课程表 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:course', threshold: 100, req: 'use_course_10' },
+    { id: 'use_plan_1', group: '历练', name: '初出茅庐：计划', desc: '首次执行计划（打卡 / 记录进度）', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:plan', threshold: 1 },
+    { id: 'use_plan_10', group: '历练', name: '小有心得：计划', desc: '执行计划 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:plan', threshold: 10, req: 'use_plan_1' },
+    { id: 'use_plan_100', group: '历练', name: '炉火纯青：计划', desc: '执行计划 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:plan', threshold: 100, req: 'use_plan_10' },
+    { id: 'use_ledger_1', group: '历练', name: '初出茅庐：记账', desc: '首次记账', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:ledger', threshold: 1 },
+    { id: 'use_ledger_10', group: '历练', name: '小有心得：记账', desc: '记账 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:ledger', threshold: 10, req: 'use_ledger_1' },
+    { id: 'use_ledger_100', group: '历练', name: '炉火纯青：记账', desc: '记账 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:ledger', threshold: 100, req: 'use_ledger_10' },
+    { id: 'use_grade_1', group: '历练', name: '初出茅庐：成绩', desc: '首次记录成绩', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:grade', threshold: 1 },
+    { id: 'use_grade_10', group: '历练', name: '小有心得：成绩', desc: '记录成绩 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:grade', threshold: 10, req: 'use_grade_1' },
+    { id: 'use_grade_100', group: '历练', name: '炉火纯青：成绩', desc: '记录成绩 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:grade', threshold: 100, req: 'use_grade_10' },
+    { id: 'use_meal_1', group: '历练', name: '初出茅庐：饮食', desc: '首次记录饮食', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:meal', threshold: 1 },
+    { id: 'use_meal_10', group: '历练', name: '小有心得：饮食', desc: '记录饮食 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:meal', threshold: 10, req: 'use_meal_1' },
+    { id: 'use_meal_100', group: '历练', name: '炉火纯青：饮食', desc: '记录饮食 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:meal', threshold: 100, req: 'use_meal_10' },
+    { id: 'use_sleep_1', group: '历练', name: '初出茅庐：睡眠', desc: '首次记录睡眠', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:sleep', threshold: 1 },
+    { id: 'use_sleep_10', group: '历练', name: '小有心得：睡眠', desc: '记录睡眠 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:sleep', threshold: 10, req: 'use_sleep_1' },
+    { id: 'use_sleep_100', group: '历练', name: '炉火纯青：睡眠', desc: '记录睡眠 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:sleep', threshold: 100, req: 'use_sleep_10' },
+    { id: 'use_focus_1', group: '历练', name: '初出茅庐：专注', desc: '首次完成一次专注', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:focus', threshold: 1 },
+    { id: 'use_focus_10', group: '历练', name: '小有心得：专注', desc: '完成专注 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:focus', threshold: 10, req: 'use_focus_1' },
+    { id: 'use_focus_100', group: '历练', name: '炉火纯青：专注', desc: '完成专注 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:focus', threshold: 100, req: 'use_focus_10' },
+    { id: 'use_note_1', group: '历练', name: '初出茅庐：速记', desc: '首次使用速记', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:note', threshold: 1 },
+    { id: 'use_note_10', group: '历练', name: '小有心得：速记', desc: '使用速记 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:note', threshold: 10, req: 'use_note_1' },
+    { id: 'use_note_100', group: '历练', name: '炉火纯青：速记', desc: '使用速记 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:note', threshold: 100, req: 'use_note_10' },
+    { id: 'use_event_1', group: '历练', name: '初出茅庐：日程', desc: '首次添加日程', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:event', threshold: 1 },
+    { id: 'use_event_10', group: '历练', name: '小有心得：日程', desc: '添加日程 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:event', threshold: 10, req: 'use_event_1' },
+    { id: 'use_event_100', group: '历练', name: '炉火纯青：日程', desc: '添加日程 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:event', threshold: 100, req: 'use_event_10' }
   ];
 
   /** 成就分类顺序：抽卡 / 集卡 / 种树 */
-  var ACH_GROUPS = ['抽卡', '集卡', '种树'];
+  var ACH_GROUPS = ['抽卡', '集卡', '种树', '历练'];
 
   /** 当前各成就指标的实际数值 */
   function achValue(metric) {
     var s = state;
+    if (metric && metric.indexOf('usage:') === 0) {
+      var uk = metric.slice(6);
+      return (s.usage && s.usage[uk]) || 0;
+    }
     if (metric === 'tree') return (s.pomodoro.trees || []).length;
     if (metric === 'streakNo6') return (s.pomodoro.gacha.streakNo6) || 0;
     if (metric === 'streakNo5') return (s.pomodoro.gacha.streakNo5) || 0;
@@ -3990,6 +4028,7 @@ window.AK_OPS = [
       if (!state.tasks) state.tasks = [];
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
+      if (!state.usage || typeof state.usage !== 'object') state.usage = {};
       if (!state.taskSeq) state.taskSeq = {};
       if (!state.periods || !state.periods.length) state.periods = ds.periods;
 
@@ -4262,6 +4301,7 @@ window.AK_OPS = [
         note: (data.note || '').trim()
       };
       state.courses.push(c);
+      this.bumpUsage('course');
       this.emit();
       this.checkAchievements(true);
       return c;
@@ -4440,6 +4480,7 @@ window.AK_OPS = [
       var sid = semesterId || state.currentSemesterId;
       if (!state.grades[sid]) state.grades[sid] = {};
       state.grades[sid][rec.key] = rec;
+      this.bumpUsage('grade');
       this.emit();
       return rec;
     },
@@ -4801,6 +4842,7 @@ window.AK_OPS = [
         createdAt: new Date().toISOString()
       };
       state.events.push(e);
+      this.bumpUsage('event');
       this.emit();
       return e;
     },
@@ -4906,6 +4948,7 @@ window.AK_OPS = [
         note: (data.note || '').trim()
       };
       state.meals.push(m);
+      this.bumpUsage('meal');
       // 有花费就自动记一笔账
       if (m.cost > 0) {
         this.addLedger({
@@ -5101,6 +5144,7 @@ window.AK_OPS = [
         note: (data.note || '').trim()
       };
       state.sleeps.push(r);
+      this.bumpUsage('sleep');
       this.emit();
       return r;
     },
@@ -5219,6 +5263,7 @@ window.AK_OPS = [
         running: false, endAt: 0, left: 0,
         duration: state.pomodoro.timer.duration || 25, taskId: ''
       };
+      this.bumpUsage('focus');
       this.emit();
       return gain;
     },
@@ -5445,6 +5490,15 @@ window.AK_OPS = [
       return newly;
     },
 
+    /** 记录某功能的使用次数并检测相关成就（初出茅庐 / 小有心得 / 炉火纯青） */
+    bumpUsage: function (key) {
+      if (!state.usage) state.usage = {};
+      state.usage[key] = (state.usage[key] || 0) + 1;
+      this.checkAchievements(true);
+      this.save();
+      return state.usage[key];
+    },
+
     /** 寻访数据窗口：最近 100 抽 ∩ 近 30 天（取较小窗口） */
     gachaHistory: function () {
       var pm = state.pomodoro;
@@ -5465,14 +5519,15 @@ window.AK_OPS = [
       return { set: set, stats: stats, days: days, last100: last100.length };
     },
 
-    plantCost: function () {
-      return POMO.PLANT_COST + state.pomodoro.trees.length * POMO.PLANT_STEP;
+    plantCost: function (speciesKey) {
+      var sp = speciesOf(speciesKey || 'camphor');
+      return (sp.price || POMO.PLANT_COST) + state.pomodoro.trees.length * POMO.PLANT_STEP;
     },
 
     /** 种一棵树，消耗当前价格的积分 */
     plantTree: function (speciesKey) {
       var pm = state.pomodoro;
-      var cost = this.plantCost();
+      var cost = this.plantCost(speciesKey);
       if (pm.points < cost) return null;
       this.spendPoints(cost);
       var tree = {
@@ -5723,6 +5778,7 @@ window.AK_OPS = [
         if (this.pomodoro.points >= back) this.spendPoints(back);
       } else {
         plan.records.push({ date: dateStr, value: 1, note: '', at: new Date().toISOString() });
+        this.bumpUsage('plan');
       }
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
@@ -5746,6 +5802,7 @@ window.AK_OPS = [
         date: dateStr || DateUtil.toStr(DateUtil.today()),
         value: v, note: (note || '').trim(), at: new Date().toISOString()
       });
+      this.bumpUsage('plan');
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
       var gain = POMO.PLAN_CHECKIN;
@@ -5902,6 +5959,7 @@ window.AK_OPS = [
       createdAt: new Date().toISOString()
     };
     state.notes.unshift(n);
+    this.bumpUsage('note');
     this.emit();
     return n;
   },
@@ -6112,6 +6170,7 @@ window.AK_OPS = [
     };
     if (e.amount <= 0) return null;
     state.ledger.push(e);
+    this.bumpUsage('ledger');
     this.emit();
     return e;
   },
@@ -8564,7 +8623,7 @@ window.AK_OPS = [
           style: { fontSize: '12px', color: '#5a7a4a', marginBottom: '6px' },
           text: nTrees
             ? (nTrees + ' 棵树 · 累计专注 ' + Store.pomodoro.focusMinutes + ' 分钟')
-            : '森林还是空的 · 专注攒够 ' + Store.plantCost() + ' 分就能种下第一棵树'
+            : '森林还是空的 · 专注攒够 ' + Store.plantCost('camphor') + ' 分就能种下第一棵树'
         }));
 
         if (nTrees) {
@@ -13472,7 +13531,13 @@ window.AK_OPS = [
 
   /* 动画标记（不进 Store，避免每帧写磁盘） */
   var justPlantedId = '';
-  var wateredId = '';
+
+  /** 成就获得时间格式化 */
+  function fmtAchTime(ts) {
+    var d = new Date(ts);
+    var p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
 
   var view = {
     id: 'collection',
@@ -13503,30 +13568,42 @@ window.AK_OPS = [
 
       var s = Store.gachaStats();
       var pm = Store.pomodoro;
+      var isForest = pm.mode === 'forest';
+      if (isForest && this.tab === 'ops') this.tab = 'forest';
       var done = 0;
-      Store.achievementList().forEach(function (a) { if (Store.isAchieved(a)) done++; });
+      Store.achievementList().forEach(function (a) {
+        // 抽卡 / 集卡 未解锁的成就不在总数里计入（其本身也隐藏）
+        if ((a.group === '抽卡' || a.group === '集卡') && !Store.isAchieved(a)) return;
+        if (Store.isAchieved(a)) done++;
+      });
 
-      root.appendChild(el('div', { class: 'task-summary' }, [
-        V.statCard(s.owned, '已获得干员', 'var(--amber)'),
-        V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'),
-        V.statCard(done, '成就', 'var(--text-2)')
-      ]));
+      var statCards = [];
+      if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
+      statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
+      statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
+      root.appendChild(el('div', { class: 'task-summary' }, statCards));
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
-        el('button', {
+        (!isForest) ? el('button', {
           class: 'gacha-tab' + (this.tab === 'ops' ? ' active' : ''),
           text: '干员图鉴 ' + s.owned + '/' + s.total,
           onclick: function () { self.tab = 'ops'; self.render(); }
-        }),
+        }) : null,
         el('button', {
           class: 'gacha-tab' + (this.tab === 'forest' ? ' active' : ''),
           text: '我的森林 ' + pm.trees.length,
           onclick: function () { self.tab = 'forest'; self.render(); }
+        }),
+        el('button', {
+          class: 'gacha-tab' + (this.tab === 'ach' ? ' active' : ''),
+          text: '成就 ' + done,
+          onclick: function () { self.tab = 'ach'; self.render(); }
         })
-      ]);
+      ].filter(Boolean));
       root.appendChild(tabs);
 
-      if (this.tab === 'forest') root.appendChild(this.forestPane());
+      if (this.tab === 'ach') root.appendChild(this.achPane());
+      else if (this.tab === 'forest') root.appendChild(this.forestPane());
       else root.appendChild(this.opsPane());
     },
 
@@ -13601,6 +13678,77 @@ window.AK_OPS = [
     },
 
     /* ==========================================================
+     * 成就（从设置迁入：抽卡/集卡未解锁隐藏、历练逐级解锁、记录获得时间）
+     * ========================================================== */
+    achPane: function () {
+      var self = this;
+      var st = Store.state;
+      var card = el('div', { class: 'card', style: { padding: '14px 16px' } });
+      card.appendChild(el('div', { class: 'section-title' }, ['全部成就']));
+
+      (Store.ACH_GROUPS || []).forEach(function (grp) {
+        var items = Store.achievementList().filter(function (a) {
+          if (a.group !== grp) return false;
+          // 抽卡 / 集卡：未解锁的成就全部隐藏
+          if ((grp === '抽卡' || grp === '集卡') && !Store.isAchieved(a)) return false;
+          // 历练：需先完成前置成就才出现
+          if (a.req && !Store.achievementDone(a.req)) return false;
+          return true;
+        });
+        if (!items.length) return;
+
+        var doneG = items.filter(function (a) { return Store.isAchieved(a); }).length;
+        card.appendChild(el('div', { class: 'ach-group-head' }, [
+          el('b', { text: grp }),
+          el('span', { text: doneG + ' / ' + items.length })
+        ]));
+
+        var grid = el('div', { class: 'ach-grid' });
+        items.forEach(function (a) {
+          var done = Store.isAchieved(a);
+          var isCounted = !!a.metric;
+          var val = isCounted ? Store.achievementValue(a.metric) : (done ? 1 : 0);
+          var denom = isCounted ? a.threshold : 1;
+          var tier = Store.ACH_TIERS[a.tier] || { color: '#888', label: '' };
+          var pct = Math.max(0, Math.min(100, Math.round(val / denom * 100)));
+          var rec = (st.achievements && st.achievements.done && st.achievements.done[a.id]) || null;
+
+          var body = el('div', { class: 'ach-body' }, [
+            el('div', { class: 'ach-name' }, [
+              el('b', { text: a.name }),
+              el('span', { class: 'ach-tier', style: { color: tier.color }, text: tier.label })
+            ]),
+            el('div', { class: 'ach-desc', text: a.desc })
+          ]);
+          body.appendChild(el('div', { class: 'ach-progress' }, [
+            el('div', { class: 'ach-bar' }, [el('i', { style: { width: (done ? 100 : pct) + '%', background: tier.color } })]),
+            el('span', { class: 'ach-count', text: isCounted ? (Math.min(val, a.threshold) + ' / ' + a.threshold) : (done ? '已达成' : '待触发') })
+          ]));
+          if (done && rec && rec.at) {
+            body.appendChild(el('div', { class: 'ach-time', text: '获得于 ' + fmtAchTime(rec.at) }));
+          }
+
+          grid.appendChild(el('div', { class: 'ach-item' + (done ? ' done' : '') }, [
+            el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
+            body,
+            el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
+              el('span', { class: 'ach-pts', text: '+' + a.points }),
+              el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
+            ])
+          ]));
+        });
+        card.appendChild(grid);
+      });
+
+      card.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: '成就分「抽卡 / 集卡 / 种树 / 历练」四类：达成条件即可解锁并获得对应积分（抽卡模式下折算成合成玉）。' +
+              '抽卡与集卡类成就在解锁前默认隐藏；历练类成就按「初出茅庐(1 次) → 小有心得(10 次) → 炉火纯青(100 次)」逐级解锁。'
+      }));
+      return card;
+    },
+
+    /* ==========================================================
      * 我的森林（种树 / 浇水）
      * ========================================================== */
     forestPane: function () {
@@ -13613,27 +13761,27 @@ window.AK_OPS = [
         el('span', { class: 'q-count', text: pm.trees.length + ' 棵' })
       ]));
 
-      var cost = Store.plantCost();
-      var canPlant = pm.points >= cost;
+      var baseCost = Store.plantCost(TREE_SPECIES[0].key);
+      var canPlant = pm.points >= baseCost;
       var plantBtn = el('button', {
         class: 'btn ' + (canPlant ? 'btn-primary' : '') + ' btn-block',
         onclick: function () {
-          if (Store.pomodoro.points < cost) {
-            UI.toast('还差 ' + (cost - Store.pomodoro.points) + ' 分才能种树', 'err');
+          if (Store.pomodoro.points < baseCost) {
+            UI.toast('还差 ' + (baseCost - Store.pomodoro.points) + ' 分才能种树', 'err');
             return;
           }
-          openPlantDialog(cost, self);
+          openPlantDialog(self);
         }
       }, [V.svg(V.icons.leaf, 16), canPlant
-        ? '种一棵树（-' + cost + ' 分）'
-        : '还差 ' + (cost - pm.points) + ' 分可种树']);
+        ? '选树种 · 种一棵树'
+        : '还差 ' + (baseCost - pm.points) + ' 分可种树']);
       plantBtn.style.marginBottom = '14px';
       card.appendChild(plantBtn);
 
       if (!pm.trees.length) {
         card.appendChild(V.empty(
           V.icons.tree, '森林还是空的',
-          '专注攒够 ' + Store.plantCost() + ' 分就能种下第一棵树。种得越多，下一棵越贵（每棵 +' +
+          '专注攒够 ' + Store.plantCost(TREE_SPECIES[0].key) + ' 分就能种下第一棵树。不同树种价格不同，种得越多越贵（每棵 +' +
           POMO.PLANT_STEP + ' 分）；浇水（' + POMO.WATER_COST + ' 分）可以让它长大。'
         ));
         return card;
@@ -13731,7 +13879,6 @@ window.AK_OPS = [
 
     var cls = 'tree-card';
     if (tree.id === justPlantedId) cls += ' just-planted';
-    if (tree.id === wateredId) cls += ' watered';
 
     var card = el('div', { class: cls, dataset: { id: tree.id } });
     card.appendChild(treeSVG(stage, sp));
@@ -13754,26 +13901,33 @@ window.AK_OPS = [
           UI.toast('积分不足，浇水需要 ' + POMO.WATER_COST + ' 分', 'err');
           return;
         }
-        wateredId = tree.id;
         UI.toast('浇了一次水，成长 +' + POMO.WATER_COST);
         var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
         if (v) v.render();
-        setTimeout(function () { wateredId = ''; }, 900);
+        // 直接在对应卡片上打特效，避免整页重渲染后特效错位（修复：右边树浇水左边树出特效）
+        var node = V.$('.tree-card[data-id="' + tree.id + '"]', v ? v.root : null);
+        if (node) {
+          node.classList.add('watered');
+          setTimeout(function () { node.classList.remove('watered'); }, 900);
+        }
       }
     }, ['浇水 -' + POMO.WATER_COST + ' 分']));
 
     return card;
   }
 
-  /** 选择树种后种下 */
-  function openPlantDialog(cost, view) {
+  /** 选择树种后种下（不同树种价格不同） */
+  function openPlantDialog(view) {
     var m;
     var grid = el('div', { class: 'species-grid' });
+    var maxPrice = TREE_SPECIES.reduce(function (mx, sp) { return Math.max(mx, sp.price); }, 0);
     TREE_SPECIES.forEach(function (sp) {
+      var cost = Store.plantCost(sp.key);
       grid.appendChild(el('button', {
         class: 'species-item',
         onclick: function () {
           m.close();
+          if (Store.pomodoro.points < cost) { UI.toast('积分不足，' + sp.name + '需 ' + cost + ' 分', 'err'); return; }
           var tree = Store.plantTree(sp.key);
           if (!tree) { UI.toast('积分不足', 'err'); return; }
           justPlantedId = tree.id;
@@ -13794,8 +13948,9 @@ window.AK_OPS = [
       body: [
         el('p', {
           style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-          text: '这是你的第 ' + (Store.pomodoro.trees.length + 1) + ' 棵树，需要 ' + cost +
-                ' 分（当前可用 ' + Store.pomodoro.points + ' 分）。种得越多，下一棵越贵。'
+          text: '这是你的第 ' + (Store.pomodoro.trees.length + 1) + ' 棵树。不同树种基础价不同（' +
+                TREE_SPECIES[0].price + '~' + maxPrice + ' 分），且种得越多下一棵越贵。当前可用 ' +
+                Store.pomodoro.points + ' 分。'
         }),
         grid
       ],
@@ -15362,76 +15517,7 @@ window.AK_OPS = [
         root.appendChild(about);
       }
 
-      if (SUB === 'ach') {
-        var list = Store.achievementList();
-        var doneCount = 0;
-        list.forEach(function (a) { if (Store.isAchieved(a)) doneCount++; });
-
-        root.appendChild(el('div', { class: 'set-head' }, [
-          el('button', { class: 'icon-btn', onclick: function () { SUB = ''; view.render(); } },
-            [V.svg('M18 6L6 18M6 6l12 12', 20)]),
-          el('div', { class: 'set-head-title' }, [
-            el('b', { text: '成就' }),
-            el('span', { text: '已完成 ' + doneCount + ' / ' + list.length })
-          ])
-        ]));
-
-        var achCard = el('div', { class: 'card', style: { padding: '14px 16px' } });
-        achCard.appendChild(el('div', { class: 'section-title' }, ['全部成就']));
-
-        // 按「抽卡 / 集卡 / 种树」分组展示
-        (Store.ACH_GROUPS || []).forEach(function (grp) {
-          var items = list.filter(function (a) { return a.group === grp; });
-          if (!items.length) return;
-          var doneG = items.filter(function (a) { return Store.isAchieved(a); }).length;
-          achCard.appendChild(el('div', { class: 'ach-group-head' }, [
-            el('b', { text: grp }),
-            el('span', { text: doneG + ' / ' + items.length })
-          ]));
-
-          var grid = el('div', { class: 'ach-grid' });
-          items.forEach(function (a) {
-            var done = Store.isAchieved(a);
-            // 累计型成就用 metric/threshold；事件型（十连特定结果）只看是否发生过
-            var isCounted = !!a.metric;
-            var val = isCounted ? Store.achievementValue(a.metric) : (done ? 1 : 0);
-            var denom = isCounted ? a.threshold : 1;
-            var tier = Store.ACH_TIERS[a.tier] || { color: '#888', label: '' };
-            var pct = Math.max(0, Math.min(100, Math.round(val / denom * 100)));
-            grid.appendChild(el('div', { class: 'ach-item' + (done ? ' done' : '') }, [
-              el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
-              el('div', { class: 'ach-body' }, [
-                el('div', { class: 'ach-name' }, [
-                  el('b', { text: a.name }),
-                  el('span', { class: 'ach-tier', style: { color: tier.color }, text: tier.label })
-                ]),
-                el('div', { class: 'ach-desc', text: a.desc }),
-                el('div', { class: 'ach-progress' }, [
-                  el('div', { class: 'ach-bar' }, [el('i', { style: { width: (done ? 100 : pct) + '%', background: tier.color } })]),
-                  el('span', {
-                    class: 'ach-count',
-                    text: isCounted
-                      ? (Math.min(val, a.threshold) + ' / ' + a.threshold)
-                      : (done ? '已达成' : '待触发')
-                  })
-                ])
-              ]),
-              el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
-                el('span', { class: 'ach-pts', text: '+' + a.points }),
-                el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
-              ])
-            ]));
-          });
-          achCard.appendChild(grid);
-        });
-        root.appendChild(achCard);
-
-        root.appendChild(el('div', {
-          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
-          text: '成就分「抽卡 / 集卡 / 种树」三类：达成条件即可解锁，并获得对应积分（抽卡模式下会折算成合成玉）。'
-            + '「集齐三星」需集满全部 22 名三星干员；连续未出星计数跨所有单抽与十连累计。'
-        }));
-      }
+      /* 成就页已迁移至「收集」视图（collection.js 的「成就」标签页） */
 
     }
   };
@@ -15454,8 +15540,7 @@ window.AK_OPS = [
     { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
     { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
     { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
-    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
-    { key: 'ach', name: '成就', desc: '抽卡 / 集卡 / 种树三类成就', icon: V.icons.sparkle, color: '#f59e0b' }
+    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' }
   ];
 
   view.home = function () {

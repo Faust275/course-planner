@@ -12,7 +12,13 @@
 
   /* 动画标记（不进 Store，避免每帧写磁盘） */
   var justPlantedId = '';
-  var wateredId = '';
+
+  /** 成就获得时间格式化 */
+  function fmtAchTime(ts) {
+    var d = new Date(ts);
+    var p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
 
   var view = {
     id: 'collection',
@@ -43,30 +49,42 @@
 
       var s = Store.gachaStats();
       var pm = Store.pomodoro;
+      var isForest = pm.mode === 'forest';
+      if (isForest && this.tab === 'ops') this.tab = 'forest';
       var done = 0;
-      Store.achievementList().forEach(function (a) { if (Store.isAchieved(a)) done++; });
+      Store.achievementList().forEach(function (a) {
+        // 抽卡 / 集卡 未解锁的成就不在总数里计入（其本身也隐藏）
+        if ((a.group === '抽卡' || a.group === '集卡') && !Store.isAchieved(a)) return;
+        if (Store.isAchieved(a)) done++;
+      });
 
-      root.appendChild(el('div', { class: 'task-summary' }, [
-        V.statCard(s.owned, '已获得干员', 'var(--amber)'),
-        V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'),
-        V.statCard(done, '成就', 'var(--text-2)')
-      ]));
+      var statCards = [];
+      if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
+      statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
+      statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
+      root.appendChild(el('div', { class: 'task-summary' }, statCards));
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
-        el('button', {
+        (!isForest) ? el('button', {
           class: 'gacha-tab' + (this.tab === 'ops' ? ' active' : ''),
           text: '干员图鉴 ' + s.owned + '/' + s.total,
           onclick: function () { self.tab = 'ops'; self.render(); }
-        }),
+        }) : null,
         el('button', {
           class: 'gacha-tab' + (this.tab === 'forest' ? ' active' : ''),
           text: '我的森林 ' + pm.trees.length,
           onclick: function () { self.tab = 'forest'; self.render(); }
+        }),
+        el('button', {
+          class: 'gacha-tab' + (this.tab === 'ach' ? ' active' : ''),
+          text: '成就 ' + done,
+          onclick: function () { self.tab = 'ach'; self.render(); }
         })
-      ]);
+      ].filter(Boolean));
       root.appendChild(tabs);
 
-      if (this.tab === 'forest') root.appendChild(this.forestPane());
+      if (this.tab === 'ach') root.appendChild(this.achPane());
+      else if (this.tab === 'forest') root.appendChild(this.forestPane());
       else root.appendChild(this.opsPane());
     },
 
@@ -141,6 +159,77 @@
     },
 
     /* ==========================================================
+     * 成就（从设置迁入：抽卡/集卡未解锁隐藏、历练逐级解锁、记录获得时间）
+     * ========================================================== */
+    achPane: function () {
+      var self = this;
+      var st = Store.state;
+      var card = el('div', { class: 'card', style: { padding: '14px 16px' } });
+      card.appendChild(el('div', { class: 'section-title' }, ['全部成就']));
+
+      (Store.ACH_GROUPS || []).forEach(function (grp) {
+        var items = Store.achievementList().filter(function (a) {
+          if (a.group !== grp) return false;
+          // 抽卡 / 集卡：未解锁的成就全部隐藏
+          if ((grp === '抽卡' || grp === '集卡') && !Store.isAchieved(a)) return false;
+          // 历练：需先完成前置成就才出现
+          if (a.req && !Store.achievementDone(a.req)) return false;
+          return true;
+        });
+        if (!items.length) return;
+
+        var doneG = items.filter(function (a) { return Store.isAchieved(a); }).length;
+        card.appendChild(el('div', { class: 'ach-group-head' }, [
+          el('b', { text: grp }),
+          el('span', { text: doneG + ' / ' + items.length })
+        ]));
+
+        var grid = el('div', { class: 'ach-grid' });
+        items.forEach(function (a) {
+          var done = Store.isAchieved(a);
+          var isCounted = !!a.metric;
+          var val = isCounted ? Store.achievementValue(a.metric) : (done ? 1 : 0);
+          var denom = isCounted ? a.threshold : 1;
+          var tier = Store.ACH_TIERS[a.tier] || { color: '#888', label: '' };
+          var pct = Math.max(0, Math.min(100, Math.round(val / denom * 100)));
+          var rec = (st.achievements && st.achievements.done && st.achievements.done[a.id]) || null;
+
+          var body = el('div', { class: 'ach-body' }, [
+            el('div', { class: 'ach-name' }, [
+              el('b', { text: a.name }),
+              el('span', { class: 'ach-tier', style: { color: tier.color }, text: tier.label })
+            ]),
+            el('div', { class: 'ach-desc', text: a.desc })
+          ]);
+          body.appendChild(el('div', { class: 'ach-progress' }, [
+            el('div', { class: 'ach-bar' }, [el('i', { style: { width: (done ? 100 : pct) + '%', background: tier.color } })]),
+            el('span', { class: 'ach-count', text: isCounted ? (Math.min(val, a.threshold) + ' / ' + a.threshold) : (done ? '已达成' : '待触发') })
+          ]));
+          if (done && rec && rec.at) {
+            body.appendChild(el('div', { class: 'ach-time', text: '获得于 ' + fmtAchTime(rec.at) }));
+          }
+
+          grid.appendChild(el('div', { class: 'ach-item' + (done ? ' done' : '') }, [
+            el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
+            body,
+            el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
+              el('span', { class: 'ach-pts', text: '+' + a.points }),
+              el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
+            ])
+          ]));
+        });
+        card.appendChild(grid);
+      });
+
+      card.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: '成就分「抽卡 / 集卡 / 种树 / 历练」四类：达成条件即可解锁并获得对应积分（抽卡模式下折算成合成玉）。' +
+              '抽卡与集卡类成就在解锁前默认隐藏；历练类成就按「初出茅庐(1 次) → 小有心得(10 次) → 炉火纯青(100 次)」逐级解锁。'
+      }));
+      return card;
+    },
+
+    /* ==========================================================
      * 我的森林（种树 / 浇水）
      * ========================================================== */
     forestPane: function () {
@@ -153,27 +242,27 @@
         el('span', { class: 'q-count', text: pm.trees.length + ' 棵' })
       ]));
 
-      var cost = Store.plantCost();
-      var canPlant = pm.points >= cost;
+      var baseCost = Store.plantCost(TREE_SPECIES[0].key);
+      var canPlant = pm.points >= baseCost;
       var plantBtn = el('button', {
         class: 'btn ' + (canPlant ? 'btn-primary' : '') + ' btn-block',
         onclick: function () {
-          if (Store.pomodoro.points < cost) {
-            UI.toast('还差 ' + (cost - Store.pomodoro.points) + ' 分才能种树', 'err');
+          if (Store.pomodoro.points < baseCost) {
+            UI.toast('还差 ' + (baseCost - Store.pomodoro.points) + ' 分才能种树', 'err');
             return;
           }
-          openPlantDialog(cost, self);
+          openPlantDialog(self);
         }
       }, [V.svg(V.icons.leaf, 16), canPlant
-        ? '种一棵树（-' + cost + ' 分）'
-        : '还差 ' + (cost - pm.points) + ' 分可种树']);
+        ? '选树种 · 种一棵树'
+        : '还差 ' + (baseCost - pm.points) + ' 分可种树']);
       plantBtn.style.marginBottom = '14px';
       card.appendChild(plantBtn);
 
       if (!pm.trees.length) {
         card.appendChild(V.empty(
           V.icons.tree, '森林还是空的',
-          '专注攒够 ' + Store.plantCost() + ' 分就能种下第一棵树。种得越多，下一棵越贵（每棵 +' +
+          '专注攒够 ' + Store.plantCost(TREE_SPECIES[0].key) + ' 分就能种下第一棵树。不同树种价格不同，种得越多越贵（每棵 +' +
           POMO.PLANT_STEP + ' 分）；浇水（' + POMO.WATER_COST + ' 分）可以让它长大。'
         ));
         return card;
@@ -271,7 +360,6 @@
 
     var cls = 'tree-card';
     if (tree.id === justPlantedId) cls += ' just-planted';
-    if (tree.id === wateredId) cls += ' watered';
 
     var card = el('div', { class: cls, dataset: { id: tree.id } });
     card.appendChild(treeSVG(stage, sp));
@@ -294,26 +382,33 @@
           UI.toast('积分不足，浇水需要 ' + POMO.WATER_COST + ' 分', 'err');
           return;
         }
-        wateredId = tree.id;
         UI.toast('浇了一次水，成长 +' + POMO.WATER_COST);
         var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
         if (v) v.render();
-        setTimeout(function () { wateredId = ''; }, 900);
+        // 直接在对应卡片上打特效，避免整页重渲染后特效错位（修复：右边树浇水左边树出特效）
+        var node = V.$('.tree-card[data-id="' + tree.id + '"]', v ? v.root : null);
+        if (node) {
+          node.classList.add('watered');
+          setTimeout(function () { node.classList.remove('watered'); }, 900);
+        }
       }
     }, ['浇水 -' + POMO.WATER_COST + ' 分']));
 
     return card;
   }
 
-  /** 选择树种后种下 */
-  function openPlantDialog(cost, view) {
+  /** 选择树种后种下（不同树种价格不同） */
+  function openPlantDialog(view) {
     var m;
     var grid = el('div', { class: 'species-grid' });
+    var maxPrice = TREE_SPECIES.reduce(function (mx, sp) { return Math.max(mx, sp.price); }, 0);
     TREE_SPECIES.forEach(function (sp) {
+      var cost = Store.plantCost(sp.key);
       grid.appendChild(el('button', {
         class: 'species-item',
         onclick: function () {
           m.close();
+          if (Store.pomodoro.points < cost) { UI.toast('积分不足，' + sp.name + '需 ' + cost + ' 分', 'err'); return; }
           var tree = Store.plantTree(sp.key);
           if (!tree) { UI.toast('积分不足', 'err'); return; }
           justPlantedId = tree.id;
@@ -334,8 +429,9 @@
       body: [
         el('p', {
           style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-          text: '这是你的第 ' + (Store.pomodoro.trees.length + 1) + ' 棵树，需要 ' + cost +
-                ' 分（当前可用 ' + Store.pomodoro.points + ' 分）。种得越多，下一棵越贵。'
+          text: '这是你的第 ' + (Store.pomodoro.trees.length + 1) + ' 棵树。不同树种基础价不同（' +
+                TREE_SPECIES[0].price + '~' + maxPrice + ' 分），且种得越多下一棵越贵。当前可用 ' +
+                Store.pomodoro.points + ' 分。'
         }),
         grid
       ],

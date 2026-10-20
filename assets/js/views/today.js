@@ -220,7 +220,7 @@
           style: { fontSize: '12px', color: '#5a7a4a', marginBottom: '6px' },
           text: nTrees
             ? (nTrees + ' 棵树 · 累计专注 ' + Store.pomodoro.focusMinutes + ' 分钟')
-            : '森林还是空的 · 专注攒够 ' + Store.plantCost() + ' 分就能种下第一棵树'
+            : '森林还是空的 · 专注攒够 ' + Store.plantCost('camphor') + ' 分就能种下第一棵树'
         }));
 
         if (nTrees) {
