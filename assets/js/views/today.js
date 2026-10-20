@@ -82,6 +82,46 @@
         ])
       ]);
       root.appendChild(hero);
+
+      /* ---------- 倒数纪念日 ---------- */
+      (function () {
+        var anns = Store.anniversaries();
+        if (!anns.length) return;
+        // 只显示 60 天内的，或最近的 3 条
+        var near = anns.filter(function (a) { return a.daysLeft <= 60; });
+        if (!near.length) near = anns.slice(0, 3);
+        near = near.slice(0, 4);
+
+        var KIND_ICON = { birthday: '🎂', anniversary: '💝', countdown: '⏳' };
+        root.appendChild(el('div', { class: 'card anniv-card' }, [
+          el('div', { class: 'anniv-head' }, [
+            el('span', { class: 'anniv-title', text: '倒数纪念日' }),
+            el('button', {
+              class: 'link-btn', text: '全部 ›',
+              onclick: function () { App.go('agenda'); }
+            })
+          ]),
+          el('div', { class: 'anniv-list' }, near.map(function (a) {
+            var e = a.ev;
+            var days = a.daysLeft;
+            return el('div', {
+              class: 'anniv-row' + (days === 0 ? ' is-today' : ''),
+              dataset: { rec: 'event:' + e.id },
+              onclick: function () { if (global.openAnnivDialog) global.openAnnivDialog(e.id); }
+            }, [
+              el('span', { class: 'anniv-ico', text: KIND_ICON[e.kind] || '🎉' }),
+              el('div', { class: 'anniv-main' }, [
+                el('div', { class: 'anniv-name', text: e.title }),
+                el('div', { class: 'anniv-sub', text: a.next + (e.lunar ? ' · 农历' : '') + (e.repeat === 'yearly' && a.nth > 1 ? ' · 第 ' + a.nth + ' 年' : '') })
+              ]),
+              el('div', { class: 'anniv-days' + (days <= 7 ? ' near' : '') }, [
+                el('b', { text: days === 0 ? '今天' : String(days) }),
+                days === 0 ? null : el('span', { text: '天' })
+              ])
+            ]);
+          }))
+        ]));
+      })();
       if (global.DailyCards) root.appendChild(DailyCards.section());
 
       /* ---------- 最近的重要日程倒计时 ---------- */

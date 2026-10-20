@@ -134,7 +134,7 @@
     var card = el('div', {
       class: 'card plan-card' + (p.done ? ' is-done' : '') + (p.id === justDoneId ? ' plan-win' : ''),
       style: { '--pl-c': p.color },
-      dataset: { id: p.id }
+      dataset: { id: p.id, rec: 'plan:' + p.id }   // rec 供全局搜索跳转定位
     });
 
     /* ---- 标题行 ---- */
@@ -490,6 +490,20 @@
   }
 
   global.openPlanDialog = openPlanDialog;
+
+  // 计划列表有「进行中 / 已完成」筛选，跳转过来时先把筛选放宽
+  view.focusRecord = function (type, id) {
+    if (type !== 'plan' || !global.Search) return false;
+    var p = Store.getPlan(id);
+    var dirty = false;
+    if (p && state.status !== 'all' && ((state.status === 'running') === !!p.done)) {
+      state.status = 'all';
+      dirty = true;
+    }
+    if (p && state.tag && !hasTag(p.tags, state.tag)) { state.tag = ''; dirty = true; }
+    if (dirty) this.render();
+    return Search.flash(Search.findRec(type, id));
+  };
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);

@@ -47,6 +47,12 @@
       return el('span', { class: cls, text: label });
     },
 
+    LABELS: { daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' },
+
+    repLabel: function (t) {
+      return (t.repeat && TaskRow.LABELS[t.repeat.type]) ? TaskRow.LABELS[t.repeat.type] : '';
+    },
+
     build: function (t, opts) {
       opts = opts || {};
       var course = t.courseId ? Store.getCourse(t.courseId) : null;
@@ -64,6 +70,7 @@
 
       return el('div', {
         class: 'task-row' + (t.status === 'done' ? ' done' : '') + (opts.compact ? ' compact' : ''),
+        dataset: { rec: 'task:' + t.id },     // 全局搜索跳转后靠它定位
         onclick: function () { TaskDialog.open(t.id); }
       }, [
         TaskRow.check(t),
@@ -72,6 +79,7 @@
           (meta.length || t.note || (t.tags && t.tags.length)) ? el('div', { class: 'task-meta' }, [
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
+            (t.repeat && t.repeat.type !== 'none') ? el('span', { class: 'chip', style: { padding: '0 6px', fontSize: '10.5px' }, text: '↻ ' + TaskRow.repLabel(t) }) : null,
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -207,6 +215,20 @@
       var fNote = V.textarea({ placeholder: '可选，补充说明', value: t ? t.note : '' });
       var fTags = V.tagInput(t ? (t.tags || []).join(',') : '');
 
+      /* ---- 重复 ---- */
+      var curRep = (t && t.repeat && t.repeat.type && t.repeat.type !== 'none')
+        ? t.repeat : { type: 'none', interval: 1, until: '' };
+      var repOpts = [
+        { value: 'none', label: '不重复' },
+        { value: 'daily', label: '每天' },
+        { value: 'weekly', label: '每周' },
+        { value: 'monthly', label: '每月' },
+        { value: 'yearly', label: '每年' }
+      ];
+      var fRepeatType = V.select(repOpts, curRep.type);
+      var fRepeatInterval = V.input({ type: 'number', min: '1', value: curRep.interval || 1, style: { width: '64px' } });
+      var fRepeatUntil = V.input({ type: 'date', value: curRep.until || '' });
+
       var body = [
         el('div', { class: 'field' }, [
           el('label', { text: '待办内容' }),
@@ -218,6 +240,13 @@
           V.field('截止日期', fDate),
           V.field('截止时间', fTime)
         ]),
+        V.field('重复', el('div', { class: 'field-inline' }, [
+          fRepeatType,
+          el('span', { class: 'rep-iv', text: '每' }),
+          fRepeatInterval,
+          el('span', { class: 'rep-iv', text: '周期' })
+        ]), '完成后自动生成下一期；留空「到」则一直重复'),
+        V.field('重复到（可选）', fRepeatUntil, '到达该日期后不再生成新一期'),
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
@@ -254,7 +283,15 @@
                 priority: data.priority,
                 important: impOn,
                 note: fNote.value,
-                tags: fTags.getValue()
+                tags: fTags.getValue(),
+                repeat: (function () {
+                  if (fRepeatType.value === 'none') return { type: 'none' };
+                  return {
+                    type: fRepeatType.value,
+                    interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
+                    until: fRepeatUntil.value || ''
+                  };
+                })()
               };
               if (!d.title.trim()) { UI.toast('请填写待办内容', 'err'); fTitle.focus(); return; }
               if (isEdit) Store.updateTask(taskId, d);
@@ -302,6 +339,23 @@
 
     onDataChange: function () {
       if (App.currentId === 'tasks') App.badge('tasks', Store.pendingTasks().length);
+    },
+
+    /**
+     * 全局搜索跳转过来时定位到某条待办。
+     * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
+     * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
+     */
+    focusRecord: function (type, id) {
+      if (type !== 'task' || !global.Search) return false;
+      var dirty = false;
+      if (state.tab !== 'tasks') { state.tab = 'tasks'; dirty = true; }
+      var t = Store.getTask(id);
+      if (t && state.status !== 'all' && state.status !== t.status) { state.status = 'all'; dirty = true; }
+      if (t && state.course !== 'all' && state.course !== (t.courseId || '')) { state.course = 'all'; dirty = true; }
+      if (state.q) { state.q = ''; dirty = true; }
+      if (dirty) this.render();
+      return Search.flash(Search.findRec(type, id));
     },
 
     render: function () {

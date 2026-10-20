@@ -119,6 +119,7 @@
 
     return el('div', {
       class: 'card note-card' + (n.converted ? ' converted' : ''),
+      dataset: { rec: 'note:' + n.id },     // 全局搜索跳转后靠它定位
       onclick: function () { editNote(n, refresh); }
     }, [body, foot]);
   }
@@ -189,7 +190,11 @@
 
     onEnter: function () { this.render(); },
 
-    render: function () { renderNotesInto(this.root); }
+    render: function () { renderNotesInto(this.root); },
+
+    focusRecord: function (type, id) {
+      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
+    }
   };
 
   (window.VIEWS = window.VIEWS || []).push(view);

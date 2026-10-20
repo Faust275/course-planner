@@ -354,6 +354,25 @@
       return x;
     },
 
+    /** 加月份，day 超出目标月时夹到当月最后一天（1/31 + 1 -> 2/28） */
+    addMonths: function (d, n) {
+      var day = d.getDate();
+      var m = d.getMonth() + n;
+      var y = d.getFullYear() + Math.floor(m / 12);
+      m = ((m % 12) + 12) % 12;
+      var last = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, last));
+    },
+
+    /** 加年份，闰年 2/29 夹到 2/28 */
+    addYears: function (d, n) {
+      var day = d.getDate();
+      var m = d.getMonth();
+      var y = d.getFullYear() + n;
+      var last = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, last));
+    },
+
     /** 该日期所在周的周一 00:00 */
     weekStart: function (d) {
       var x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -856,16 +875,160 @@
     return 0;
   }
 
+  /* ---------- 日期夹紧（纪念日顺延用） ---------- */
+
+  /** 指定年月的 day，超出当月天数时夹到月末；2/29 在平年落到 2/28 */
+  function clampDayOfMonth(y, m0, day) {
+    var last = new Date(y, m0 + 1, 0).getDate();
+    return new Date(y, m0, Math.min(day, last));
+  }
+
+  /** 指定年 + 原月份的某日，同样做月末夹紧 */
+  function clampFeb29(y, m0, day) {
+    return clampDayOfMonth(y, m0, day);
+  }
+
   /** 成就是否已满足：累计型看 threshold，事件型走 check() */
-  function achMet(a) {
-    if (typeof a.check === 'function') return !!a.check();
+  function achMet(a) {    if (typeof a.check === 'function') return !!a.check();
     return achValue(a.metric) >= (a.threshold || 0);
+  }
+
+  /**
+   * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
+   * - repeat.type: none | daily | weekly | monthly | yearly
+   * - 基准日若已过期，从今天起算，避免一直在远古日期往后推
+   * - monthly/yearly 的 day 超出目标月时夹到当月最后一天（闰年 2/29 -> 2/28）
+   * @returns YYYY-MM-DD 字符串；无下一期返回 null
+   */
+  function nextDueDate(dueDateStr, repeat, todayStr) {
+    if (!repeat || repeat.type === 'none') return null;
+    var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
+    var ref = DateUtil.parse(dueDateStr);
+    if (!ref) return null;
+    if (DateUtil.diffDays(ref, today) < 0) ref = today;       // 已过期的基准，从今天算
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var nxt;
+    if (repeat.type === 'daily') nxt = DateUtil.addDays(ref, iv);
+    else if (repeat.type === 'weekly') nxt = DateUtil.addDays(ref, 7 * iv);
+    else if (repeat.type === 'monthly') nxt = DateUtil.addMonths(ref, iv);
+    else if (repeat.type === 'yearly') nxt = DateUtil.addYears(ref, iv);
+    else return null;
+    return DateUtil.toStr(nxt);
+  }
+
+  /** until 是含当天的最末一次；超过 until 即到期 */
+  function repeatExpired(repeat, dateStr) {
+    if (!repeat || !repeat.until) return false;
+    return DateUtil.diffDays(DateUtil.parse(dateStr), DateUtil.parse(repeat.until)) > 0;
+  }
+
+  /** 规范化 repeat 字段，非法输入一律降级为不重复 */
+  function sanitizeRepeat(raw) {
+    if (!raw || !raw.type || raw.type === 'none') return { type: 'none' };
+    var types = { daily: 1, weekly: 1, monthly: 1, yearly: 1 };
+    if (!types[raw.type]) return { type: 'none' };
+    var r = { type: raw.type, interval: Math.max(1, (raw.interval | 0) || 1) };
+    if (raw.until && /^\d{4}-\d{2}-\d{2}$/.test(raw.until)) r.until = raw.until;
+    return r;
+  }
+
+  /** 由当前实例生成下一个实例（保留 repeat 使链条继续）；无下一期返回 null */
+  function genNextTask(task, todayStr) {
+    if (!task.repeat || task.repeat.type === 'none') return null;
+    var nxt = nextDueDate(task.dueDate, task.repeat, todayStr);
+    if (!nxt) return null;
+    if (repeatExpired(task.repeat, nxt)) return null;
+    var copy = clone(task);
+    copy.id = uid('t');
+    copy.dueDate = nxt;
+    copy.status = 'todo';
+    copy.doneAt = '';
+    copy.createdAt = new Date().toISOString();
+    copy.repeatFrom = task.id;
+    copy.occurrence = (task.occurrence || 0) + 1;
+    return copy;
   }
 
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
     util: DateUtil,
+
+    /* ---------- 纪念日 / 倒数日 纯函数 ---------- */
+    /**
+     * 把纪念日解析为"下一次发生"的公历日期。
+     * @param {object} ev  { date, repeat: 'none'|'yearly'|'monthly', lunar, lunarMonth, lunarDay, lunarLeap }
+     * @param {string} todayStr  基准日 YYYY-MM-DD
+     * @returns {{ next: string, nth: number, daysLeft: number }|null}
+     *   next     下一次（含今天；正好今天就是今天）
+     *   nth      第几届（第 N 个周年 / 第 N 次）
+     *   daysLeft 距今天数
+     */
+    annivNext: function (ev, todayStr) {
+      if (!ev || !ev.date) return null;
+      var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
+      var base = DateUtil.parse(ev.date);
+      if (!base) return null;
+      var rp = ev.repeat || 'none';
+
+      var cand = base;
+      var nth = 1;
+
+      if (rp === 'yearly') {
+        if (ev.lunar && global.Lunar && ev.lunarMonth && ev.lunarDay) {
+          // 农历：逐年找，直到 >= 今天
+          for (var ly = base.getFullYear(); ly <= base.getFullYear() + 200 && ly <= 2100; ly++) {
+            var s = global.Lunar.lunarInYear(ly, ev.lunarMonth, ev.lunarDay, !!ev.lunarLeap);
+            if (!s) continue;
+            var sd = DateUtil.parse(s);
+            cand = sd;
+            nth = ly - base.getFullYear() + 1;
+            if (DateUtil.diffDays(sd, today) >= 0) break;
+          }
+        } else {
+          // 公历：从「今天所在年」起试，没过就顺延一年
+          var y0 = base.getFullYear();
+          var keepMonth = base.getMonth();
+          var keepDay = base.getDate();
+          var y = Math.max(y0, today.getFullYear());
+          cand = clampFeb29(y, keepMonth, keepDay);
+          if (DateUtil.diffDays(cand, today) < 0) {
+            y += 1;
+            cand = clampFeb29(y, keepMonth, keepDay);
+          }
+          nth = y - y0 + 1;
+        }
+      } else if (rp === 'monthly') {
+        // 每月：按"日"对齐，日超出当月天数时夹到月末
+        var m0 = base.getFullYear() * 12 + base.getMonth();
+        var mNow = today.getFullYear() * 12 + today.getMonth();
+        var k = Math.max(0, mNow - m0);
+        cand = clampDayOfMonth(today.getFullYear(), today.getMonth(), base.getDate());
+        nth = k + 1;
+        if (DateUtil.diffDays(cand, today) < 0) {
+          var nm = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+          cand = clampDayOfMonth(nm.getFullYear(), nm.getMonth(), base.getDate());
+          nth = k + 2;
+        }
+      }
+
+      return {
+        next: DateUtil.toStr(cand),
+        nth: nth,
+        daysLeft: DateUtil.diffDays(cand, today)
+      };
+    },
+
+    /** 所有纪念日，按"下一次"升序 */
+    anniversaries: function (todayStr) {
+      var out = [];
+      state.events.forEach(function (e) {
+        if (!e.repeat || e.repeat === 'none') return;
+        var a = Store.annivNext(e, todayStr);
+        if (a) out.push({ ev: e, next: a.next, nth: a.nth, daysLeft: a.daysLeft });
+      });
+      return out.sort(function (x, y) { return x.daysLeft - y.daysLeft; });
+    },
 
     get state() { return state; },
     get courses() { return state.courses; },
@@ -1910,6 +2073,7 @@
         important: !!data.important,
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
+        repeat: sanitizeRepeat(data.repeat),
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
@@ -1928,6 +2092,11 @@
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
         this.addPoints(POMO.TASK_DONE);
+        // 重复任务：完成时生成下一期实例（保留 repeat 链条）
+        if (t.repeat && t.repeat.type !== 'none') {
+          var nt = genNextTask(t);
+          if (nt) state.tasks.push(nt);
+        }
       }
       this.checkAchievements(true);
       if (t.status === 'done' && !t.doneAt) t.doneAt = new Date().toISOString();
@@ -2015,6 +2184,12 @@
         note: (data.note || '').trim(),
         done: !!data.done,
         important: !!data.important,
+        repeat: data.repeat || 'none',       // none | yearly | monthly
+        kind: data.kind || '',               // birthday | anniversary | countdown | ''
+        lunar: !!data.lunar,
+        lunarMonth: data.lunarMonth || 0,
+        lunarDay: data.lunarDay || 0,
+        lunarLeap: !!data.lunarLeap,
         createdAt: new Date().toISOString()
       };
       state.events.push(e);

@@ -81,6 +81,50 @@ const icsTriggerSrc = extractFnFrom('icsTrigger', icsAnchor);
 const valarmSrc = extractFnFrom('valarm', icsAnchor);
 const buildICSSrc = extractFnFrom('buildICS', icsAnchor);
 
+// 7) 全局搜索（search.js 里的纯函数）
+const searchAnchor = sliceFrom('var TYPE_META = {');
+const TYPE_METASrc = 'var TYPE_META = ' + extractBalanced(html, html.indexOf('{', searchAnchor)) + ';';
+const joinNonEmptySrc = extractFnFrom('joinNonEmpty', searchAnchor);
+const hitsInSrc = extractFnFrom('hitsIn', searchAnchor);
+const describeSrc = extractFnFrom('describe', searchAnchor);
+const snippetSrc = extractFnFrom('snippet', searchAnchor);
+const scoreOfSrc = extractFnFrom('scoreOf', searchAnchor);
+const searchAllSrc = extractFnFrom('searchAll', searchAnchor);
+const groupResultsSrc = extractFnFrom('groupResults', searchAnchor);
+
+// 8) 重复任务（store.js 里的纯函数，依赖 DateUtil）
+const nextDueDateSrc = extractFn('nextDueDate');
+const repeatExpiredSrc = extractFn('repeatExpired');
+const sanitizeRepeatSrc = extractFn('sanitizeRepeat');
+
+// 9) 农历模块（lunar.js，整体 IIFE，直接求值到独立 window 上）
+const lunarIiFE = (() => {
+  const i = sliceFrom("(function (global) {", sliceFrom('农历（1900–2100）') - 400);
+  // 从该 IIFE 的起始位置提取到匹配的 })(window);
+  let depth = 0, j = i;
+  for (; j < html.length; j++) {
+    const c = html[j];
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) break;
+    }
+  }
+  return html.slice(i, html.indexOf('\n', j) + 1);
+})();
+const lunarWin = {};
+new Function('window', lunarIiFE)(lunarWin);
+const Lunar = lunarWin.Lunar;
+
+// 10) 纪念日顺延（store.js，依赖 DateUtil + global.Lunar）
+const clampDayOfMonthSrc = extractFn('clampDayOfMonth');
+const clampFeb29Src = extractFn('clampFeb29');
+const annivNextSrc = (() => {
+  const i = sliceFrom('annivNext: function (ev, todayStr) {');
+  const o = html.indexOf('{', i + 'annivNext: function'.length);
+  return 'function annivNext(ev, todayStr) ' + extractBalanced(html, o);
+})();
+
 // 在隔离作用域里求值并导出
 const mod = `var TimeUtil = ${TimeUtilSrc};
   ${DateUtilSrc}
@@ -111,16 +155,38 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${icsTriggerSrc}
   ${valarmSrc}
   ${buildICSSrc}
+  ${TYPE_METASrc}
+  var TYPES = Object.keys(TYPE_META);
+  ${joinNonEmptySrc}
+  ${hitsInSrc}
+  ${describeSrc}
+  ${snippetSrc}
+  ${scoreOfSrc}
+  ${searchAllSrc}
+  ${groupResultsSrc}
+  ${nextDueDateSrc}
+  ${repeatExpiredSrc}
+  ${sanitizeRepeatSrc}
+  ${clampDayOfMonthSrc}
+  ${clampFeb29Src}
+  ${annivNextSrc}
+  var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
                      inWeekOf, weekOverlap, timeOverlap, findConflicts,
-                     icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS };
+                     icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
+                     hitsIn, describe, snippet, searchAll, groupResults,
+                     nextDueDate, repeatExpired, sanitizeRepeat,
+                     annivNext };
 `;
-new Function(mod)();
+new Function('__LUNAR__', mod)(Lunar);
 const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
         parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
         inWeekOf, weekOverlap, timeOverlap, findConflicts,
-        icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS } = globalThis.__T;
+        icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
+        hitsIn, describe, snippet, searchAll, groupResults,
+        nextDueDate, repeatExpired, sanitizeRepeat,
+        annivNext } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -602,6 +668,196 @@ console.log('buildICS（考试 / 重要日程）');
   eq('每条课程事件都有 VALARM', (all.match(/BEGIN:VALARM/g) || []).length, 4);
   eq('两个时段的 UID 不同', /UID:c1-0@/.test(all) && /UID:c1-1@/.test(all), true);
 }
+
+// ---- 全局搜索 ----
+console.log('hitsIn（命中区间）');
+eq('单个命中', hitsIn('高等数学', '数学'), [[2, 4]]);
+eq('多个命中', hitsIn('数学与数学', '数学'), [[0, 2], [3, 5]]);
+eq('大小写无关', hitsIn('JavaScript', 'java'), [[0, 4]]);
+eq('英文小写化后位置不变', hitsIn('ABCabc', 'bc'), [[1, 3], [4, 6]]);
+eq('重叠不嵌套', hitsIn('aaa', 'aa'), [[0, 2]]);
+eq('没命中 -> []', hitsIn('高等数学', '英语'), []);
+eq('空关键词 -> []', hitsIn('高等数学', ''), []);
+eq('空文本 -> []', hitsIn('', '数学'), []);
+eq('null 不炸', hitsIn(null, null), []);
+
+console.log('snippet（长文本截摘要）');
+{
+  const long = 'x'.repeat(50) + '目标' + 'y'.repeat(50);
+  const s = snippet(long, '目标', 30);
+  eq('命中在中间：前面截断', s.head, true);
+  eq('命中在中间：后面截断', s.tail, true);
+  eq('窗口不超 4 倍 pad', s.text.length <= 30 * 4, true);
+  eq('命中偏移归零后正确', s.hits.length, 1);
+  eq('截取位置正确', ['x', 'y'].every(c => s.text.indexOf(c) >= 0), true);
+
+  const headHit = '目标' + 'y'.repeat(50);
+  const s2 = snippet(headHit, '目标', 30);
+  eq('命中在开头：不补前导省略号', s2.head, false);
+  eq('命中在开头：偏移为 0', s2.hits[0][0], 0);
+
+  const s3 = snippet('abc', 'zzz', 30);
+  eq('无命中时返回前 60 字', s3.text, 'abc');
+  eq('无命中不标省略', s3.head, false);
+}
+
+console.log('describe（记录 → 标题/副标题/正文）');
+eq('课程', describe('course', { name: '高等数学', teacher: '张老师', location: 'A301', note: '难' }),
+   { title: '高等数学', sub: '张老师 · A301', body: '难' });
+eq('笔记标题取首行', describe('note', { content: '第一行\n第二行' }).title, '第一行');
+eq('笔记正文是全文', describe('note', { content: '第一行\n第二行' }).body, '第一行\n第二行');
+eq('账目无备注用类别', describe('ledger', { category: 'food', amount: 12, date: '2025-03-03' }).title, 'food');
+eq('账目副标题带金额', describe('ledger', { category: 'food', amount: 12, date: '2025-03-03' }).sub, '2025-03-03 · ¥12');
+eq('未知类型不炸', describe('nope', {}), { title: '', sub: '', body: '' });
+eq('null 不炸', describe('task', null), { title: '', sub: '', body: '' });
+
+console.log('searchAll（跨集合检索）');
+{
+  const data = {
+    courses: [{ id: 'c1', name: '高等数学', teacher: '张老师', location: 'A301', note: '' }],
+    tasks: [{ id: 't1', title: '交数学作业', note: '', tags: ['学习'] }],
+    events: [],
+    plans: [],
+    notes: [{ id: 'n1', content: '记得复习数学', tags: [] }],
+    ledger: []
+  };
+
+  const r = searchAll(data, '数学');
+  eq('命中 3 条', r.length, 3);
+  eq('类型顺序：课程在前', [r[0].type, r[1].type], ['course', 'task']);
+  eq('待办标题命中带区间', r[1].titleHits.length > 0, true);
+  eq('目标视图正确', [r[0].view, r[1].view, r[2].view], ['schedule', 'tasks', 'notes']);
+
+  // 只搜老师也能命中课程
+  eq('副标题也参与匹配', searchAll(data, '张老师').length, 1);
+  // 标题命中优先于正文命中
+  const both = searchAll({
+    courses: [{ id: 'a', name: '数学' }, { id: 'b', name: '无关', note: '数学' }],
+    tasks: [], events: [], plans: [], notes: [], ledger: []
+  }, '数学');
+  eq('标题命中排前面', both[0].id, 'a');
+
+  eq('空关键词返回空', searchAll(data, '   '), []);
+  eq('无命中返回空', searchAll(data, 'zzz不存在zzz'), []);
+  eq('缺集合不炸', searchAll({ courses: [{ id: 'c1', name: '数学' }] }, '数学').length, 1);
+  eq('limit 生效', searchAll({
+    courses: [1, 2, 3, 4, 5].map(i => ({ id: 'c' + i, name: '数学' + i })),
+    tasks: [], events: [], plans: [], notes: [], ledger: []
+  }, '数学', 3).length, 3);
+  eq('跳过空记录', searchAll({ courses: [null, { id: 'c1', name: '数学' }] , tasks: [], events: [], plans: [], notes: [], ledger: [] }, '数学').length, 1);
+}
+
+console.log('groupResults（按类型分组）');
+{
+  const data = {
+    courses: [{ id: 'c1', name: '数学' }, { id: 'c2', name: '数学' }],
+    tasks: [{ id: 't1', title: '数学作业' }],
+    events: [], plans: [], notes: [], ledger: []
+  };
+  const g = groupResults(searchAll(data, '数学'));
+  eq('分成 2 组', g.length, 2);
+  eq('第一组是课程且 2 条', [g[0].type, g[0].items.length], ['course', 2]);
+  eq('第二组是待办且 1 条', [g[1].type, g[1].items.length], ['task', 1]);
+  eq('空结果分组为空', groupResults([]), []);
+}
+
+console.log('nextDueDate（重复任务）');
+// 传 todayStr = dueDate，验证「从原日期后推」的纯逻辑（不过滤过期）
+eq('无 repeat 返回 null', nextDueDate('2026-01-01', { type: 'none' }, '2026-01-01'), null);
+eq('日：+1 天', nextDueDate('2026-01-01', { type: 'daily', interval: 1 }, '2026-01-01'), '2026-01-02');
+eq('日：每 3 天', nextDueDate('2026-01-01', { type: 'daily', interval: 3 }, '2026-01-01'), '2026-01-04');
+eq('周：+7 天', nextDueDate('2026-01-05', { type: 'weekly', interval: 1 }, '2026-01-05'), '2026-01-12');
+eq('周：每 2 周', nextDueDate('2026-01-05', { type: 'weekly', interval: 2 }, '2026-01-05'), '2026-01-19');
+eq('月：1/31 + 1 -> 2/28', nextDueDate('2026-01-31', { type: 'monthly', interval: 1 }, '2026-01-31'), '2026-02-28');
+eq('月：3/31 + 1 -> 4/30', nextDueDate('2026-03-31', { type: 'monthly', interval: 1 }, '2026-03-31'), '2026-04-30');
+eq('月：闰年 2/29 + 1 -> 3/29（目标月够长不夹紧）', nextDueDate('2024-02-29', { type: 'monthly', interval: 1 }, '2024-02-29'), '2024-03-29');
+eq('月：每 2 月', nextDueDate('2026-01-15', { type: 'monthly', interval: 2 }, '2026-01-15'), '2026-03-15');
+eq('年：2024-02-29 + 1 -> 2025-02-28', nextDueDate('2024-02-29', { type: 'yearly', interval: 1 }, '2024-02-29'), '2025-02-28');
+eq('年：2025-03-01 + 4 -> 2029-03-01', nextDueDate('2025-03-01', { type: 'yearly', interval: 4 }, '2025-03-01'), '2029-03-01');
+eq('过期基准：从今天起算', nextDueDate('2000-01-01', { type: 'daily', interval: 1 }, '2026-10-21'), '2026-10-22');
+eq('未过期基准：按原日期后推', nextDueDate('2026-12-25', { type: 'daily', interval: 1 }, '2026-10-21'), '2026-12-26');
+
+console.log('repeatExpired');
+eq('无 until 不过期', repeatExpired({ type: 'daily' }, '2099-01-01'), false);
+eq('等于 until 不过期（含当天）', repeatExpired({ type: 'daily', until: '2026-12-31' }, '2026-12-31'), false);
+eq('超过 until 到期', repeatExpired({ type: 'daily', until: '2026-12-31' }, '2027-01-01'), true);
+
+console.log('sanitizeRepeat');
+eq('无输入 -> 不重复', sanitizeRepeat(undefined), { type: 'none' });
+eq('type=none -> 不重复', sanitizeRepeat({ type: 'none' }), { type: 'none' });
+eq('非法 type -> 不重复', sanitizeRepeat({ type: 'bogus' }), { type: 'none' });
+eq('正常 weekly', sanitizeRepeat({ type: 'weekly', interval: 2 }), { type: 'weekly', interval: 2 });
+eq('interval 非法 -> 1', sanitizeRepeat({ type: 'daily', interval: 0 }), { type: 'daily', interval: 1 });
+eq('until 非法被丢弃', sanitizeRepeat({ type: 'monthly', until: 'abc' }), { type: 'monthly', interval: 1 });
+
+console.log('农历数据自检');
+eq('selfTest 全过', Lunar.selfTest().bad, []);
+eq('段数 2486', Lunar.decode().lens.length, 2486);
+eq('闰月年数 74', Object.keys(Lunar.decode().leap).length, 74);
+
+console.log('农历：春节');
+eq('1900 春节', JSON.stringify(Lunar.lunarToSolar(1900, 1, 1)), '{"y":1900,"m":1,"d":31}');
+eq('2023 春节', JSON.stringify(Lunar.lunarToSolar(2023, 1, 1)), '{"y":2023,"m":1,"d":22}');
+eq('2024 春节', JSON.stringify(Lunar.lunarToSolar(2024, 1, 1)), '{"y":2024,"m":2,"d":10}');
+eq('2025 春节', JSON.stringify(Lunar.lunarToSolar(2025, 1, 1)), '{"y":2025,"m":1,"d":29}');
+eq('2026 春节', JSON.stringify(Lunar.lunarToSolar(2026, 1, 1)), '{"y":2026,"m":2,"d":17}');
+eq('2100 春节', JSON.stringify(Lunar.lunarToSolar(2100, 1, 1)), '{"y":2100,"m":2,"d":9}');
+
+console.log('农历：节日与闰月');
+eq('2024 中秋 八月十五', JSON.stringify(Lunar.lunarToSolar(2024, 8, 15)), '{"y":2024,"m":9,"d":17}');
+eq('2023 闰二月初一', JSON.stringify(Lunar.lunarToSolar(2023, 2, 1, true)), '{"y":2023,"m":3,"d":22}');
+eq('2024 无闰二月 -> null', Lunar.lunarToSolar(2024, 2, 1, true), null);
+eq('2024 闰四月不存在 -> null', Lunar.lunarToSolar(2024, 4, 1, true), null);
+eq('2020 闰四月初一', JSON.stringify(Lunar.lunarToSolar(2020, 4, 1, true)), '{"y":2020,"m":5,"d":23}');
+eq('2025 闰六月初一', JSON.stringify(Lunar.lunarToSolar(2025, 6, 1, true)), '{"y":2025,"m":7,"d":25}');
+
+console.log('农历：反向转换');
+eq('2024-09-17 -> 八月十五', JSON.stringify(Lunar.solarToLunar(2024, 9, 17)), '{"year":2024,"month":8,"day":15,"isLeap":false}');
+eq('2023-03-22 -> 闰二月初一', JSON.stringify(Lunar.solarToLunar(2023, 3, 22)), '{"year":2023,"month":2,"day":1,"isLeap":true}');
+eq('2024-02-10 -> 正月初一', JSON.stringify(Lunar.solarToLunar(2024, 2, 10)), '{"year":2024,"month":1,"day":1,"isLeap":false}');
+
+console.log('农历：边界');
+eq('超出上限 2101 -> null', Lunar.lunarToSolar(2101, 1, 1), null);
+eq('超出下限 1899 -> null', Lunar.lunarToSolar(1899, 1, 1), null);
+eq('月号 13 -> null', Lunar.lunarToSolar(2024, 13, 1), null);
+eq('日 31 -> null', Lunar.lunarToSolar(2024, 1, 31), null);
+eq('小月要 30 日 -> null', (() => {
+  // 找一个 29 天的月
+  for (let m = 1; m <= 12; m++) {
+    const a = Lunar.lunarToSolar(2024, m, 29);
+    const b = Lunar.lunarToSolar(2024, m, 30);
+    if (a && !b) return true;
+  }
+  return false;
+})(), true);
+
+console.log('lunarInYear（纪念日顺延用）');
+eq('2024 农历八月十五 -> 2024-09-17', Lunar.lunarInYear(2024, 8, 15), '2024-09-17');
+eq('2025 农历八月十五 -> 2025-10-06', Lunar.lunarInYear(2025, 8, 15), '2025-10-06');
+eq('闰月不存在时退回常规月', LuaNCheck(), LuaNExpect());
+
+function LuaNCheck() {
+  // 2024 没有闰二月，preferLeap=true 应退回常规二月
+  return Lunar.lunarInYear(2024, 2, 1, true);
+}
+function LuaNExpect() { return '2024-03-10'; }
+
+console.log('annivNext（纪念日）');
+const T = '2026-10-21';
+eq('无 repeat -> 原日期', annivNext({ date: '2020-05-01', repeat: 'none' }, T).next, '2020-05-01');
+eq('每年：今年已过 -> 明年', annivNext({ date: '2000-05-01', repeat: 'yearly' }, T).next, '2027-05-01');
+eq('每年：今年未到 -> 今年', annivNext({ date: '2000-12-25', repeat: 'yearly' }, T).next, '2026-12-25');
+eq('每年：正好今天 -> 今天', annivNext({ date: '2000-10-21', repeat: 'yearly' }, T).next, '2026-10-21');
+eq('每年：届数（2000 为第 1 届，2027 为第 28 届）', annivNext({ date: '2000-05-01', repeat: 'yearly' }, T).nth, 28);
+eq('每年：今天算第几届', annivNext({ date: '2000-10-21', repeat: 'yearly' }, T).nth, 27);
+eq('闰日 2/29 平年 -> 2/28', annivNext({ date: '2024-02-29', repeat: 'yearly' }, '2025-01-01').next, '2025-02-28');
+eq('闰日 2/29 闰年 -> 2/29', annivNext({ date: '2024-02-29', repeat: 'yearly' }, '2028-01-01').next, '2028-02-29');
+eq('每月：本月已过 -> 下月同日', annivNext({ date: '2024-01-05', repeat: 'monthly' }, '2026-10-21').next, '2026-11-05');
+eq('每月：本月未到 -> 本月同日', annivNext({ date: '2024-01-31', repeat: 'monthly' }, '2026-10-21').next, '2026-10-31');
+eq('每月：末日夹紧 11 月无 31 日', annivNext({ date: '2024-01-31', repeat: 'monthly' }, '2026-11-01').next, '2026-11-30');
+eq('daysLeft 计算', annivNext({ date: '2000-10-25', repeat: 'yearly' }, T).daysLeft, 4);
+eq('农历生日：今年已过 -> 明年', annivNext({ date: '1990-06-15', repeat: 'yearly', lunar: true, lunarMonth: 8, lunarDay: 15 }, T).next, '2027-09-15');
+eq('农历生日：今年未到 -> 今年', annivNext({ date: '1990-06-15', repeat: 'yearly', lunar: true, lunarMonth: 8, lunarDay: 15 }, '2026-01-01').next, '2026-09-25');
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

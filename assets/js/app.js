@@ -207,6 +207,19 @@
     var drawerBtn = UI.$('#btnDrawer');
     if (drawerBtn) drawerBtn.addEventListener('click', openDrawer);
 
+    // 全局搜索：顶栏按钮 + Ctrl/⌘ + K
+    var searchBtn = UI.$('#btnSearch');
+    if (searchBtn) searchBtn.addEventListener('click', function () {
+      if (global.Search) Search.open();
+    });
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        if (!global.Search) return;
+        e.preventDefault();
+        Search.open();
+      }
+    });
+
     if (!Store.storageOK) {
       var warn = UI.el('div', {
         class: 'storage-warn',

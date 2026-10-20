@@ -47,6 +47,9 @@
       </button>
       <h1 class="cp-topbar-title" id="viewTitle">课程表</h1>
       <div class="cp-topbar-actions" id="viewActions"></div>
+      <button class="cp-icon-btn" id="btnSearch" aria-label="搜索" title="搜索（Ctrl/⌘ + K）" style="margin-left:6px;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </button>
     </header>
 
     <div class="cp-view-wrap" id="views"></div>
@@ -2933,6 +2936,87 @@ input[type="range"]::-moz-range-thumb {
 @keyframes opNewPop { from { opacity: 0; transform: scale(.4) rotate(-12deg); } to { opacity: 1; transform: none; } }
 
 
+/* ==========================================================
+ * 全局搜索
+ * ========================================================== */
+.cp-s-input { width: 100%; font-size: 14px; padding: 9px 12px; }
+.cp-s-list {
+  margin-top: 10px; max-height: 46vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cp-s-group-title {
+  font-size: 11.5px; font-weight: 650; color: var(--text-3);
+  padding: 9px 4px 3px; letter-spacing: .3px;
+}
+.cp-s-result {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 10px;
+  padding: 8px 10px; cursor: pointer; font: inherit; color: inherit;
+}
+.cp-s-result:hover { background: var(--surface-2); }
+.cp-s-result.cp-sel { background: var(--primary-tint); border-color: var(--primary-light); }
+.cp-s-result-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cp-s-result-type {
+  flex: 0 0 auto; font-size: 10.5px; font-weight: 600; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 6px;
+}
+.cp-s-result-title {
+  font-size: 13.5px; font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cp-s-result-meta {
+  font-size: 11.5px; color: var(--text-3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cp-s-result-sub {
+  font-size: 12px; color: var(--text-2); margin-top: 3px;
+  line-height: 1.6; word-break: break-all;
+}
+.cp-s-empty { padding: 26px 0; text-align: center; font-size: 12.5px; color: var(--text-3); }
+
+/* 命中词高亮 */
+mark.cp-hit {
+  background: var(--amber-weak); color: #b54708;
+  border-radius: 3px; padding: 0 1px; font-weight: 650;
+}
+
+/* 跳转定位：滚到视野中央后闪一圈描边 */
+@keyframes cpFlash {
+  0%, 55% { box-shadow: 0 0 0 3px var(--amber); }
+  100%    { box-shadow: 0 0 0 3px rgba(247, 144, 9, 0); }
+}
+.cp-flash { animation: cpFlash 2s ease-out; border-radius: 8px; }
+
+/* 重复任务：重复字段横向排布 */
+.cp-field-inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-rep-iv { font-size: 12.5px; color: var(--text-2); }
+
+/* ==========================================================
+ * 倒数纪念日
+ * ========================================================== */
+.cp-anniv-card { margin-bottom: 16px; }
+.cp-anniv-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cp-anniv-title { font-size: 13.5px; font-weight: 650; }
+.cp-anniv-list { display: flex; flex-direction: column; gap: 2px; }
+.cp-anniv-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px; border-radius: 10px; cursor: pointer;
+  border: 1px solid transparent;
+}
+.cp-anniv-row:hover { background: var(--surface-2); }
+.cp-anniv-row.is-today { background: var(--primary-tint); border-color: var(--primary-light); }
+.cp-anniv-ico { flex: 0 0 auto; font-size: 17px; line-height: 1; }
+.cp-anniv-main { flex: 1; min-width: 0; }
+.cp-anniv-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-anniv-sub { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.cp-anniv-days { flex: 0 0 auto; text-align: right; color: var(--text-2); }
+.cp-anniv-days b { font-size: 17px; font-weight: 700; letter-spacing: -.5px; }
+.cp-anniv-days span { font-size: 11px; margin-left: 1px; }
+.cp-anniv-days.near b { color: var(--primary); }
+.cp-anniv-lunar-preview { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+.cp-anniv-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }
+
 </style>
 <script>
 
@@ -3384,6 +3468,273 @@ window.AK_OPS = [
 
 </script>
 <script>
+/* ==========================================================
+ * 农历（1900–2100）
+ *
+ * 为什么要内置数据而不是算：农历没有简单公式，必须查表。
+ * 数据来源：用 `sxtwl`（寿星天文历）逐日扫描 1899-12 ~ 2101-06 的
+ * 农历初一，取出 1900 正月初一 ~ 2101 正月初一 之间的 2486 个"月"，
+ * 记录每段长度（29/30 天）与每年的闰月号，压成 416 字节位流。
+ *
+ * 存储格式（base64 解码后）：
+ *   [0..2]  1900 正月初一 相对 1900-01-31 的天数（3 字节大端）
+ *   [3]     尾部补齐用的 bit 数
+ *   [4..]   位流：先 2486 个"月长位"（1=30 天，0=29 天），
+ *           再 201 年 × 4 bit 的"闰月号"（0=不闰）
+ *
+ * 月份号不存——固定是 1..12，闰月插在同名月之后，由闰月号唯一确定。
+ * 体积 556 字符，相对 1.7MB 的单文件可忽略。
+ *
+ * 校验：9 个已知春节（1900/1950/2000/2023/2024/2025/2026/2033/2100）
+ *       与 5 个闰月（2020闰四、2023闰二、2025闰六、2028闰五、2033闰十一）
+ *       全部正确；2486 个初一日序与 sxtwl 原始值 0 不一致。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var START = 1900;
+  var END = 2100;
+  var SEGS = 2486;              // 1900 正月初一 ~ 2101 正月初一 之间的月段数
+  var EPOCH_MS = Date.UTC(1900, 0, 31);
+  var DAY_MS = 86400000;
+
+  /* 见文件头注释：416 字节位流，base64 后 556 字符 */
+  var LUNAR_B64 =
+    'AAAABktqV1K6k3SbZVqqrVNaldSupN0m6S6pbVNapbUraTdJekuyW1K2pW1K2lXSXpLsltSupW1K1pW0m6S7JbkrqVtKtVVqqtku' +
+    'yW5K6lbSrZVqqrVNqltSupXUq6VaqrVVapbUrqV1Juk2yq1VWqW1K6lbSbpN0l1S2qW1S2pW0m6S9JdktqVtStpVtKukvSXZLald' +
+    'StZVrKtpNsl2S2pXUraVaqrVVbJdktyV1K2lWqq1VWqXVLaldSupN0q1VWqm1S2pXUnaTdJtU1qmtUtqV1K2k3SXpLqltUtaVtSt' +
+    'pN0l6S6pbUraVbSraTdJekuyW1K6laqq2VXSXZLsltSupW0q1VWqm1S6pbUrqVtKtVVqqtUuqW1K6k7SblNqqtVNqltSupO0W6Ta' +
+    'pbVNalbUrqTtFuiuyXVKABQBAAgYAUAIHAFAEACBgBQAwcAYAQAIHAFADCABgBAAwcAUAQIAGAECgBgBQAwgAUAQAIHAFAECQBgB' +
+    'AAgYAUAMLAGAFACBwBQAwgAYAQAMHAFAECABgBAAwcAUAQIAGAEACAA=';
+;
+
+  /* ---------- 解码（惰性，只做一次） ---------- */
+  var cache = null;
+
+  function b64ToBytes(str) {
+    var CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var map = {};
+    for (var i = 0; i < CH.length; i++) map[CH[i]] = i;
+    var out = [];
+    var buf = 0, bits = 0;
+    for (var k = 0; k < str.length; k++) {
+      var c = str[k];
+      if (c === '=') break;
+      if (map[c] === undefined) continue;
+      buf = (buf << 6) | map[c];
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        out.push((buf >> bits) & 0xff);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 解出农历表。
+   * @returns { baseOff, lens, leap, monthStarts }
+   *   baseOff      1900 正月初一 相对 1900-01-31 的天数
+   *   lens[]       每段天数（29/30）
+   *   leap{year:m} 每年闰几月（无此键=不闰）
+   *   monthStarts[] 每个月初一相对 1900-01-31 的天数（长度 SEGS+1，末位是 2101 正月初一）
+   */
+  function decode() {
+    if (cache) return cache;
+
+    var bytes = b64ToBytes(LUNAR_B64);
+    var baseOff = (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
+    var pad = bytes[3] || 0;
+
+    // 展开为 bit 数组
+    var bits = [];
+    for (var i = 4; i < bytes.length; i++) {
+      for (var b = 7; b >= 0; b--) bits.push((bytes[i] >> b) & 1);
+    }
+    if (pad) bits = bits.slice(0, bits.length - pad);
+
+    var lens = [];
+    for (var s = 0; s < SEGS; s++) lens.push(bits[s] ? 30 : 29);
+
+    var leap = {};
+    var off = SEGS;
+    for (var y = START; y <= END; y++) {
+      var v = 0;
+      for (var j = 0; j < 4; j++) v = (v << 1) | (bits[off++] || 0);
+      if (v) leap[y] = v;
+    }
+
+    var starts = [baseOff];
+    var cur = baseOff;
+    for (var t = 0; t < SEGS; t++) {
+      cur += lens[t];
+      starts.push(cur);
+    }
+
+    cache = { baseOff: baseOff, lens: lens, leap: leap, monthStarts: starts, bits: bits };
+    return cache;
+  }
+
+  /* ---------- 工具 ---------- */
+  function dayIndex(y, m, d) {          // 公历 -> 相对 1900-01-31 的天数
+    return Math.round((Date.UTC(y, m - 1, d) - EPOCH_MS) / DAY_MS);
+  }
+  function fromIndex(n) {               // 相对天数 -> { y, m, d }
+    var t = new Date(EPOCH_MS + n * DAY_MS);
+    return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+  }
+
+  /**
+   * 把"每年第几个农历月"映射到真实的月号。
+   * 无闰月的年份就是 1..12；有闰月的年份，闰月插在同名月之后。
+   * @param {number} year 农历年
+   * @param {number} seq  1..(12 或 13)
+   */
+  function monthAt(year, seq) {
+    var lv = decode().leap[year] || 0;
+    if (!lv) return { month: seq, isLeap: false };
+    if (seq <= lv) return { month: seq, isLeap: false };
+    if (seq === lv + 1) return { month: lv, isLeap: true };
+    return { month: seq - 1, isLeap: false };
+  }
+
+  /** 该农历年共有几个月（12 或 13） */
+  function monthsInYear(year) {
+    return decode().leap[year] ? 13 : 12;
+  }
+
+  /** 某农历年某月的起始相对天数（下标 = 该年之前的累计月数） */
+  function indexOfMonthStart(year, seq) {
+    var d = decode();
+    if (year < START || year > END) return null;
+    // 累加 1900..year-1 的月数
+    var n = 0;
+    for (var y = START; y < year; y++) n += monthsInYear(y);
+    n += seq - 1;
+    return n < d.monthStarts.length ? d.monthStarts[n] : null;
+  }
+
+  /**
+   * 农历转公历。
+   * @param {number} year  农历年（1900-2100）
+   * @param {number} month 月号 1-12
+   * @param {number} day   日 1-30
+   * @param {boolean} [isLeap] 是否闰月
+   * @returns {{y,m,d}|null} 公历日期；超出范围或该月无此日返回 null
+   */
+  function lunarToSolar(year, month, day, isLeap) {
+    var d = decode();
+    if (year < START || year > END) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 30) return null;
+
+    var total = monthsInYear(year);
+    for (var seq = 1; seq <= total; seq++) {
+      var info = monthAt(year, seq);
+      if (info.month !== month || !!info.isLeap !== !!isLeap) continue;
+      var start = indexOfMonthStart(year, seq);
+      if (start === null) return null;
+      var len = d.lens[/* 该月的全局下标 */ (function () {
+        var n = 0;
+        for (var y = START; y < year; y++) n += monthsInYear(y);
+        return n + seq - 1;
+      })()];
+      if (day > len) return null;          // 该月只有 29 天却要 30 日
+      return fromIndex(start + day - 1);
+    }
+    return null;   // 该年没有这个月（如闰月不存在）
+  }
+
+  /**
+   * 公历转农历。
+   * @param {number} y 公历年
+   * @param {number} m 公历月
+   * @param {number} d 公历日
+   * @returns {{year,month,day,isLeap}|null}
+   */
+  function solarToLunar(y, m, d) {
+    var tb = decode();
+    var idx = dayIndex(y, m, d) - tb.baseOff;
+    if (idx < 0 || idx >= tb.lens.reduce(function (a, b) { return a + b; }, 0)) return null;
+
+    // 二分找所属月段
+    var lo = 0, hi = SEGS - 1, seg = 0;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      if (tb.monthStarts[mid] - tb.baseOff <= idx) { seg = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+
+    // 第 seg 段属于哪个农历年
+    var n = 0, year = START;
+    while (year <= END) {
+      var cnt = monthsInYear(year);
+      if (seg < n + cnt) break;
+      n += cnt;
+      year++;
+    }
+    if (year > END) return null;
+    var seq = seg - n + 1;
+    var info = monthAt(year, seq);
+    return {
+      year: year,
+      month: info.month,
+      day: idx - (tb.monthStarts[seg] - tb.baseOff) + 1,
+      isLeap: info.isLeap
+    };
+  }
+
+  /**
+   * 某个农历日期在指定（农历）年对应哪个公历日 —— 给纪念日顺延用。
+   * 闰月生日如果该年没有闰月，退回同名常规月（常见做法）。
+   * @returns {string|null} 'YYYY-MM-DD'
+   */
+  function lunarInYear(lunarYear, month, day, preferLeap) {
+    var p = lunarToSolar(lunarYear, month, day, preferLeap);
+    if (!p && preferLeap) p = lunarToSolar(lunarYear, month, day, false);
+    if (!p) p = lunarToSolar(lunarYear, month, Math.min(day, 29));   // 三十在小月退到廿九
+    if (!p) return null;
+    return p.y + '-' + pad(p.m) + '-' + pad(p.d);
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  global.Lunar = {
+    START: START,
+    END: END,
+    SEGS: SEGS,
+    decode: decode,
+    lunarToSolar: lunarToSolar,
+    solarToLunar: solarToLunar,
+    lunarInYear: lunarInYear,
+    monthsInYear: monthsInYear,
+    monthAt: monthAt,
+    /** 数据自检：返回 { ok, bad[] } */
+    selfTest: function () {
+      var known = {
+        1900: '1900-01-31', 1950: '1950-02-17', 2000: '2000-02-05',
+        2023: '2023-01-22', 2024: '2024-02-10', 2025: '2025-01-29',
+        2026: '2026-02-17', 2033: '2033-01-31', 2100: '2100-02-09'
+      };
+      var leapKnown = { 2020: 4, 2023: 2, 2025: 6, 2028: 5, 2033: 11 };
+      var bad = [];
+      Object.keys(known).forEach(function (y) {
+        var r = lunarToSolar(+y, 1, 1, false);
+        var got = r ? r.y + '-' + pad(r.m) + '-' + pad(r.d) : 'null';
+        if (got !== known[y]) bad.push('春节 ' + y + ': ' + got + ' != ' + known[y]);
+      });
+      var tb = decode();
+      Object.keys(leapKnown).forEach(function (y) {
+        if ((tb.leap[+y] || 0) !== leapKnown[y]) {
+          bad.push('闰月 ' + y + ': ' + (tb.leap[+y] || 0) + ' != ' + leapKnown[y]);
+        }
+      });
+      return { ok: bad.length === 0, bad: bad };
+    }
+  };
+})(window);
+
+</script>
+<script>
 
 
 /* ==========================================================
@@ -3738,6 +4089,25 @@ window.AK_OPS = [
       var x = new Date(d.getTime());
       x.setDate(x.getDate() + n);
       return x;
+    },
+
+    /** 加月份，day 超出目标月时夹到当月最后一天（1/31 + 1 -> 2/28） */
+    addMonths: function (d, n) {
+      var day = d.getDate();
+      var m = d.getMonth() + n;
+      var y = d.getFullYear() + Math.floor(m / 12);
+      m = ((m % 12) + 12) % 12;
+      var last = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, last));
+    },
+
+    /** 加年份，闰年 2/29 夹到 2/28 */
+    addYears: function (d, n) {
+      var day = d.getDate();
+      var m = d.getMonth();
+      var y = d.getFullYear() + n;
+      var last = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, last));
     },
 
     /** 该日期所在周的周一 00:00 */
@@ -4242,16 +4612,160 @@ window.AK_OPS = [
     return 0;
   }
 
+  /* ---------- 日期夹紧（纪念日顺延用） ---------- */
+
+  /** 指定年月的 day，超出当月天数时夹到月末；2/29 在平年落到 2/28 */
+  function clampDayOfMonth(y, m0, day) {
+    var last = new Date(y, m0 + 1, 0).getDate();
+    return new Date(y, m0, Math.min(day, last));
+  }
+
+  /** 指定年 + 原月份的某日，同样做月末夹紧 */
+  function clampFeb29(y, m0, day) {
+    return clampDayOfMonth(y, m0, day);
+  }
+
   /** 成就是否已满足：累计型看 threshold，事件型走 check() */
-  function achMet(a) {
-    if (typeof a.check === 'function') return !!a.check();
+  function achMet(a) {    if (typeof a.check === 'function') return !!a.check();
     return achValue(a.metric) >= (a.threshold || 0);
+  }
+
+  /**
+   * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
+   * - repeat.type: none | daily | weekly | monthly | yearly
+   * - 基准日若已过期，从今天起算，避免一直在远古日期往后推
+   * - monthly/yearly 的 day 超出目标月时夹到当月最后一天（闰年 2/29 -> 2/28）
+   * @returns YYYY-MM-DD 字符串；无下一期返回 null
+   */
+  function nextDueDate(dueDateStr, repeat, todayStr) {
+    if (!repeat || repeat.type === 'none') return null;
+    var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
+    var ref = DateUtil.parse(dueDateStr);
+    if (!ref) return null;
+    if (DateUtil.diffDays(ref, today) < 0) ref = today;       // 已过期的基准，从今天算
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var nxt;
+    if (repeat.type === 'daily') nxt = DateUtil.addDays(ref, iv);
+    else if (repeat.type === 'weekly') nxt = DateUtil.addDays(ref, 7 * iv);
+    else if (repeat.type === 'monthly') nxt = DateUtil.addMonths(ref, iv);
+    else if (repeat.type === 'yearly') nxt = DateUtil.addYears(ref, iv);
+    else return null;
+    return DateUtil.toStr(nxt);
+  }
+
+  /** until 是含当天的最末一次；超过 until 即到期 */
+  function repeatExpired(repeat, dateStr) {
+    if (!repeat || !repeat.until) return false;
+    return DateUtil.diffDays(DateUtil.parse(dateStr), DateUtil.parse(repeat.until)) > 0;
+  }
+
+  /** 规范化 repeat 字段，非法输入一律降级为不重复 */
+  function sanitizeRepeat(raw) {
+    if (!raw || !raw.type || raw.type === 'none') return { type: 'none' };
+    var types = { daily: 1, weekly: 1, monthly: 1, yearly: 1 };
+    if (!types[raw.type]) return { type: 'none' };
+    var r = { type: raw.type, interval: Math.max(1, (raw.interval | 0) || 1) };
+    if (raw.until && /^\d{4}-\d{2}-\d{2}$/.test(raw.until)) r.until = raw.until;
+    return r;
+  }
+
+  /** 由当前实例生成下一个实例（保留 repeat 使链条继续）；无下一期返回 null */
+  function genNextTask(task, todayStr) {
+    if (!task.repeat || task.repeat.type === 'none') return null;
+    var nxt = nextDueDate(task.dueDate, task.repeat, todayStr);
+    if (!nxt) return null;
+    if (repeatExpired(task.repeat, nxt)) return null;
+    var copy = clone(task);
+    copy.id = uid('t');
+    copy.dueDate = nxt;
+    copy.status = 'todo';
+    copy.doneAt = '';
+    copy.createdAt = new Date().toISOString();
+    copy.repeatFrom = task.id;
+    copy.occurrence = (task.occurrence || 0) + 1;
+    return copy;
   }
 
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
     util: DateUtil,
+
+    /* ---------- 纪念日 / 倒数日 纯函数 ---------- */
+    /**
+     * 把纪念日解析为"下一次发生"的公历日期。
+     * @param {object} ev  { date, repeat: 'none'|'yearly'|'monthly', lunar, lunarMonth, lunarDay, lunarLeap }
+     * @param {string} todayStr  基准日 YYYY-MM-DD
+     * @returns {{ next: string, nth: number, daysLeft: number }|null}
+     *   next     下一次（含今天；正好今天就是今天）
+     *   nth      第几届（第 N 个周年 / 第 N 次）
+     *   daysLeft 距今天数
+     */
+    annivNext: function (ev, todayStr) {
+      if (!ev || !ev.date) return null;
+      var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
+      var base = DateUtil.parse(ev.date);
+      if (!base) return null;
+      var rp = ev.repeat || 'none';
+
+      var cand = base;
+      var nth = 1;
+
+      if (rp === 'yearly') {
+        if (ev.lunar && global.Lunar && ev.lunarMonth && ev.lunarDay) {
+          // 农历：逐年找，直到 >= 今天
+          for (var ly = base.getFullYear(); ly <= base.getFullYear() + 200 && ly <= 2100; ly++) {
+            var s = global.Lunar.lunarInYear(ly, ev.lunarMonth, ev.lunarDay, !!ev.lunarLeap);
+            if (!s) continue;
+            var sd = DateUtil.parse(s);
+            cand = sd;
+            nth = ly - base.getFullYear() + 1;
+            if (DateUtil.diffDays(sd, today) >= 0) break;
+          }
+        } else {
+          // 公历：从「今天所在年」起试，没过就顺延一年
+          var y0 = base.getFullYear();
+          var keepMonth = base.getMonth();
+          var keepDay = base.getDate();
+          var y = Math.max(y0, today.getFullYear());
+          cand = clampFeb29(y, keepMonth, keepDay);
+          if (DateUtil.diffDays(cand, today) < 0) {
+            y += 1;
+            cand = clampFeb29(y, keepMonth, keepDay);
+          }
+          nth = y - y0 + 1;
+        }
+      } else if (rp === 'monthly') {
+        // 每月：按"日"对齐，日超出当月天数时夹到月末
+        var m0 = base.getFullYear() * 12 + base.getMonth();
+        var mNow = today.getFullYear() * 12 + today.getMonth();
+        var k = Math.max(0, mNow - m0);
+        cand = clampDayOfMonth(today.getFullYear(), today.getMonth(), base.getDate());
+        nth = k + 1;
+        if (DateUtil.diffDays(cand, today) < 0) {
+          var nm = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+          cand = clampDayOfMonth(nm.getFullYear(), nm.getMonth(), base.getDate());
+          nth = k + 2;
+        }
+      }
+
+      return {
+        next: DateUtil.toStr(cand),
+        nth: nth,
+        daysLeft: DateUtil.diffDays(cand, today)
+      };
+    },
+
+    /** 所有纪念日，按"下一次"升序 */
+    anniversaries: function (todayStr) {
+      var out = [];
+      state.events.forEach(function (e) {
+        if (!e.repeat || e.repeat === 'none') return;
+        var a = Store.annivNext(e, todayStr);
+        if (a) out.push({ ev: e, next: a.next, nth: a.nth, daysLeft: a.daysLeft });
+      });
+      return out.sort(function (x, y) { return x.daysLeft - y.daysLeft; });
+    },
 
     get state() { return state; },
     get courses() { return state.courses; },
@@ -5296,6 +5810,7 @@ window.AK_OPS = [
         important: !!data.important,
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
+        repeat: sanitizeRepeat(data.repeat),
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
@@ -5314,6 +5829,11 @@ window.AK_OPS = [
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
         this.addPoints(POMO.TASK_DONE);
+        // 重复任务：完成时生成下一期实例（保留 repeat 链条）
+        if (t.repeat && t.repeat.type !== 'none') {
+          var nt = genNextTask(t);
+          if (nt) state.tasks.push(nt);
+        }
       }
       this.checkAchievements(true);
       if (t.status === 'done' && !t.doneAt) t.doneAt = new Date().toISOString();
@@ -5401,6 +5921,12 @@ window.AK_OPS = [
         note: (data.note || '').trim(),
         done: !!data.done,
         important: !!data.important,
+        repeat: data.repeat || 'none',       // none | yearly | monthly
+        kind: data.kind || '',               // birthday | anniversary | countdown | ''
+        lunar: !!data.lunar,
+        lunarMonth: data.lunarMonth || 0,
+        lunarDay: data.lunarDay || 0,
+        lunarLeap: !!data.lunarLeap,
         createdAt: new Date().toISOString()
       };
       state.events.push(e);
@@ -8637,6 +9163,443 @@ window.AK_OPS = [
 </script>
 <script>
 
+/* ==========================================================
+ * 全局搜索
+ * ----------------------------------------------------------
+ * 上面一半是纯函数（不碰 Store、不碰 DOM，直接从 index.html 里提出来单测）；
+ * 下面一半才是弹窗和跳转定位。
+ *
+ * 跳转定位的约定：
+ *   视图只要在渲染时给每条记录的根节点带上 data-rec="<类型>:<id>"，
+ *   再挂一个 focusRecord(type, id) 就行；没挂的视图退化成「只切页面不定位」，
+ *   这样新接入一个视图不会牵动别处。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+
+  /* ==========================================================
+   * 一、纯函数区
+   * ========================================================== */
+
+  /** 类型 → 集合名 + 目标视图 + 显示名 */
+  var TYPE_META = {
+    course: { key: 'courses', view: 'schedule', name: '课程', order: 1 },
+    task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
+    event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
+    plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
+    note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 5 },
+    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 6 }
+  };
+
+  var TYPES = Object.keys(TYPE_META);
+
+  /**
+   * 在 text 里找 q 的全部命中区间，大小写无关。
+   * 返回 [[start, end], ...]，end 为开区间；区间互不重叠
+   * （重叠会导致高亮时 <mark> 嵌套，所以命中后跳过整段）。
+   */
+  function hitsIn(text, q) {
+    var s = String(text == null ? '' : text);
+    var n = String(q == null ? '' : q).trim();
+    if (!n || !s) return [];
+    var ls = s.toLowerCase(), ln = n.toLowerCase();
+    var out = [], from = 0, i;
+    while (from + ln.length <= ls.length) {
+      i = ls.indexOf(ln, from);
+      if (i < 0) break;
+      out.push([i, i + ln.length]);
+      from = i + ln.length;
+    }
+    return out;
+  }
+
+  function joinNonEmpty(arr, sep) {
+    return (arr || []).filter(function (x) { return x !== '' && x != null; }).join(sep || '');
+  }
+
+  /** 把一条记录翻译成「标题 / 副标题 / 正文」三段，供匹配与展示复用 */
+  function describe(type, rec) {
+    var r = rec || {};
+    var tags = joinNonEmpty(r.tags || [], ' ');
+    if (type === 'course') {
+      return {
+        title: r.name || '',
+        sub: [r.teacher, r.location].filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note], ' ')
+      };
+    }
+    if (type === 'task') {
+      return {
+        title: r.title || '',
+        sub: [r.dueDate, r.courseName, tags].filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note, tags], ' ')
+      };
+    }
+    if (type === 'event') {
+      return {
+        title: r.title || '',
+        sub: [r.date, r.location].filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note], ' ')
+      };
+    }
+    if (type === 'plan') {
+      return {
+        title: r.title || '',
+        sub: tags,
+        body: joinNonEmpty([r.note, tags], ' ')
+      };
+    }
+    if (type === 'note') {
+      var c = String(r.content || '');
+      return {
+        title: c.split('\n')[0].slice(0, 40),
+        sub: tags,
+        body: c
+      };
+    }
+    if (type === 'ledger') {
+      var head = r.note || r.category || (r.type === 'income' ? '收入' : '支出');
+      return {
+        title: String(head),
+        sub: [r.date, r.amount != null ? '¥' + r.amount : ''].filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note, r.category, tags], ' ')
+      };
+    }
+    return { title: '', sub: '', body: '' };
+  }
+
+  /**
+   * 长文本截摘要：以第一次命中为中心截前后各 pad 字，
+   * 落在窗口内的其余命中一并保留。返回 { text, hits, head, tail }，
+   * hits 是相对 text 的偏移。
+   */
+  function snippet(text, q, pad) {
+    pad = pad == null ? 30 : pad;
+    var s = String(text == null ? '' : text);
+    var all = hitsIn(s, q);
+    if (!all.length) {
+      return {
+        text: s.length > pad * 2 ? s.slice(0, pad * 2) : s,
+        hits: [], head: false, tail: s.length > pad * 2
+      };
+    }
+    var a = all[0][0], b = all[all.length - 1][1];
+    var start = Math.max(0, a - pad);
+    var end = Math.min(s.length, Math.max(b + pad, start + pad * 2 + (b - a)));
+    if (end - start > pad * 4) end = start + pad * 4;   // 兜底，别把整篇笔记拉进来
+    var hits = [];
+    all.forEach(function (h) {
+      if (h[0] >= start && h[1] <= end) hits.push([h[0] - start, h[1] - start]);
+    });
+    return { text: s.slice(start, end), hits: hits, head: start > 0, tail: end < s.length };
+  }
+
+  /** 命中权重：标题最重，且越靠前越高；副标题次之；正文最低 */
+  function scoreOf(t, s, b) {
+    var n = 0;
+    if (t.length) n += 1000 - Math.min(200, t[0][0]);
+    if (s.length) n += 300;
+    if (b.length) n += 100;
+    return n;
+  }
+
+  /**
+   * 跨集合检索。
+   * data: { courses, tasks, events, plans, notes, ledger }
+   * 返回按「类型顺序 → 分数降序」排好的数组，UI 直接分组渲染。
+   */
+  function searchAll(data, q, limit) {
+    limit = limit || 50;
+    var needle = String(q == null ? '' : q).trim();
+    if (!needle) return [];
+    var d = data || {};
+    var out = [];
+
+    TYPES.forEach(function (type) {
+      var meta = TYPE_META[type];
+      var list = d[meta.key] || [];
+      list.forEach(function (rec) {
+        if (!rec) return;
+        var f = describe(type, rec);
+        var th = hitsIn(f.title, needle);
+        var sh = hitsIn(f.sub, needle);
+        var bh = hitsIn(f.body, needle);
+        if (!th.length && !sh.length && !bh.length) return;
+        out.push({
+          type: type,
+          typeName: meta.name,
+          view: meta.view,
+          id: rec.id || '',
+          title: f.title,
+          titleHits: th,
+          sub: f.sub,
+          subHits: sh,
+          snippet: snippet(f.body, needle),
+          score: scoreOf(th, sh, bh)
+        });
+      });
+    });
+
+    out.sort(function (a, b) {
+      var oa = TYPE_META[a.type].order, ob = TYPE_META[b.type].order;
+      if (oa !== ob) return oa - ob;
+      return b.score - a.score;
+    });
+    return out.slice(0, limit);
+  }
+
+  /** 结果按类型分组，保持顺序；返回 [{ type, name, view, items }] */
+  function groupResults(list) {
+    var map = {}, order = [];
+    (list || []).forEach(function (r) {
+      if (!map[r.type]) {
+        map[r.type] = { type: r.type, name: r.typeName, view: r.view, items: [] };
+        order.push(r.type);
+      }
+      map[r.type].items.push(r);
+    });
+    return order.map(function (t) { return map[t]; });
+  }
+
+  /* ==========================================================
+   * 二、渲染
+   * ========================================================== */
+
+  /** 把命中的片段包成 <mark>；没命中就原样返回 */
+  function markSpan(text, hits, prefix, suffix) {
+    var wrap = el('span');
+    if (prefix) wrap.appendChild(document.createTextNode(prefix));
+    var s = String(text == null ? '' : text);
+    if (!hits || !hits.length) {
+      wrap.appendChild(document.createTextNode(s));
+    } else {
+      var last = 0;
+      hits.forEach(function (h) {
+        if (h[0] > last) wrap.appendChild(document.createTextNode(s.slice(last, h[0])));
+        wrap.appendChild(el('mark', { class: 'hit', text: s.slice(h[0], h[1]) }));
+        last = h[1];
+      });
+      if (last < s.length) wrap.appendChild(document.createTextNode(s.slice(last)));
+    }
+    if (suffix) wrap.appendChild(document.createTextNode(suffix));
+    return wrap;
+  }
+
+  /** 结果行 */
+  function resultRow(r, onPick) {
+    var sn = r.snippet || { text: '', hits: [], head: false, tail: false };
+    var body = null;
+    if (sn.text) {
+      body = el('div', { class: 's-result-sub' }, [
+        markSpan(sn.text, sn.hits, sn.head ? '…' : '', sn.tail ? '…' : '')
+      ]);
+    }
+    return el('button', {
+      class: 's-result',
+      onclick: function () { onPick(r); }
+    }, [
+      el('div', { class: 's-result-top' }, [
+        el('span', { class: 's-result-type', text: r.typeName }),
+        el('span', { class: 's-result-title' }, [markSpan(r.title, r.titleHits)])
+      ]),
+      el('div', { class: 's-result-meta' }, [markSpan(r.sub || '—', r.subHits)]),
+      body
+    ]);
+  }
+
+  /* ==========================================================
+   * 三、跳转定位
+   * ========================================================== */
+
+  function findRec(type, id) {
+    if (!type || !id) return null;
+    return document.querySelector('[data-rec="' + type + ':' + id + '"]');
+  }
+
+  /** 滚动到视野中央并闪一下描边 */
+  function flash(node) {
+    if (!node) return false;
+    try {
+      node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (e) { /* 老浏览器不支持 smooth，忽略 */ }
+    node.classList.remove('cp-flash');
+    // 强制重排，保证连续点同一条也能再闪一次
+    void node.offsetWidth;
+    node.classList.add('cp-flash');
+    setTimeout(function () { node.classList.remove('cp-flash'); }, 2000);
+    return true;
+  }
+
+  var pendingFocus = null;
+
+  /** 切到目标视图并定位到那条记录 */
+  function goTo(r) {
+    if (!r || !r.view) return;
+    pendingFocus = { type: r.type, id: r.id };
+    if (App.currentId === r.view) {
+      afterView(r.view);
+    } else {
+      App.go(r.view);
+      // 视图 render 是同步的，但数据变化可能触发异步重渲染，
+      // 所以稍等一拍再定位，失败就再试一次
+      setTimeout(function () { afterView(r.view); }, 60);
+    }
+  }
+
+  function afterView(view) {
+    if (!pendingFocus) return;
+    var pf = pendingFocus;
+    var v = App.views.filter(function (x) { return x.id === view; })[0];
+    var ok = false;
+    try {
+      if (v && v.focusRecord) ok = !!v.focusRecord(pf.type, pf.id);
+      if (!ok) ok = flash(findRec(pf.type, pf.id));
+    } catch (e) { ok = false; }
+    pendingFocus = null;
+    if (!ok) UI.toast('已切到「' + ((v && v.name) || '目标页') + '」，但没定位到那条记录');
+  }
+
+  /* ==========================================================
+   * 四、搜索弹窗
+   * ========================================================== */
+
+  var timer = null;
+
+  function openDialog() {
+    var listBox = el('div', { class: 's-list' });
+    var input = el('input', {
+      class: 'input s-input',
+      type: 'search',
+      placeholder: '搜课程 / 待办 / 日程 / 计划 / 笔记 / 账目'
+    });
+
+    var m = V.modal({
+      title: '全局搜索',
+      width: '620px',
+      body: [
+        input,
+        el('p', { class: 'ocr-hint', text: '输完自动搜，回车打开第一条，↑↓ 换一条，Esc 关闭。' }),
+        listBox
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } })
+      ])
+    });
+
+    var cur = [];
+
+    function render(q) {
+      listBox.innerHTML = '';
+      var kw = String(q || '').trim();
+      if (!kw) {
+        listBox.appendChild(el('div', {
+          class: 's-empty',
+          text: '输入关键词开始搜索'
+        }));
+        cur = [];
+        return;
+      }
+      var res = searchAll(collect(), kw, 50);
+      if (!res.length) {
+        listBox.appendChild(el('div', { class: 's-empty', text: '没有找到「' + kw + '」' }));
+        cur = [];
+        return;
+      }
+      var groups = groupResults(res);
+      var idx = 0;
+      cur = res;
+      groups.forEach(function (g) {
+        listBox.appendChild(el('div', {
+          class: 's-group-title',
+          text: g.name + '（' + g.items.length + '）'
+        }));
+        g.items.forEach(function (r) {
+          r.__i = idx++;
+          listBox.appendChild(resultRow(r, pick));
+        });
+      });
+      var first = listBox.querySelector('.cp-s-result');
+      if (first) first.classList.add('cp-sel');
+    }
+
+    function pick(r) {
+      m.close();
+      setTimeout(function () { goTo(r); }, 120);
+    }
+
+    function move(d) {
+      if (!cur.length) return;
+      var nodes = [...listBox.querySelectorAll('.cp-s-result')];
+      var at = nodes.findIndex(function (n) { return n.classList.contains('cp-sel'); });
+      if (at < 0) at = 0;
+      else at = (at + d + nodes.length) % nodes.length;
+      nodes.forEach(function (n, i) { n.classList.toggle('cp-sel', i === at); });
+      nodes[at].scrollIntoView({ block: 'nearest' });
+    }
+
+    input.oninput = function () {
+      var q = input.value;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { render(q); }, 200);   // debounce，笔记多时别卡
+    };
+    input.onkeydown = function (e) {
+      if (e.key === 'ArrowDown') { move(1); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { move(-1); e.preventDefault(); }
+      else if (e.key === 'Enter') {
+        var nodes = [...listBox.querySelectorAll('.cp-s-result')];
+        var at = nodes.findIndex(function (n) { return n.classList.contains('cp-sel'); });
+        if (at < 0) at = 0;
+        if (nodes[at]) nodes[at].click();
+        e.preventDefault();
+      }
+    };
+
+    render('');
+    setTimeout(function () { input.focus(); }, 60);
+    return m;
+  }
+
+  /** 组装待检索的数据；给待办补上课程名，方便搜「高数」时命中作业 */
+  function collect() {
+    var s = Store.state;
+    var courseName = {};
+    (s.courses || []).forEach(function (c) { courseName[c.id] = c.name; });
+    var tasks = (s.tasks || []).map(function (t) {
+      return Object.assign({}, t, { courseName: courseName[t.courseId] || '' });
+    });
+    return {
+      courses: s.courses || [],
+      tasks: tasks,
+      events: s.events || [],
+      plans: s.plans || [],
+      notes: s.notes || [],
+      ledger: s.ledger || []
+    };
+  }
+
+  var Search = {
+    hitsIn: hitsIn,
+    snippet: snippet,
+    describe: describe,
+    searchAll: searchAll,
+    groupResults: groupResults,
+    markSpan: markSpan,
+    findRec: findRec,
+    flash: flash,
+    goTo: goTo,
+    open: openDialog,
+    TYPE_META: TYPE_META
+  };
+
+  global.Search = Search;
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+
 
 /* ==========================================================
  * 视图：课程表（核心排课）
@@ -9562,6 +10525,7 @@ window.AK_OPS = [
       return el('button', {
         class: 'course-block' + ((hasExam || hasBadge) ? ' has-marks' : ''),
         style: { '--c': p.color },
+        dataset: { rec: 'course:' + cid },     // 全局搜索跳转后靠它定位
         title: p.name + ' · ' + (p.teacher || '') + ' · ' + (loc || '') +
                (hasExam ? '\n考试：' + p.exam.date + ' ' + (p.exam.start || '') : ''),
         onclick: function (e) {
@@ -10138,6 +11102,12 @@ window.AK_OPS = [
   global.__CourseDialog = CourseDialog;
   global.__SampleData = Sample;
 
+  // 一门课有多个时段时格子上会有多个块，定位到第一个即可
+  view.focusRecord = function (type, id) {
+    if (type !== 'course' || !global.Search) return false;
+    return Search.flash(Search.findRec(type, id));
+  };
+
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
 
@@ -10229,6 +11199,46 @@ window.AK_OPS = [
         ])
       ]);
       root.appendChild(hero);
+
+      /* ---------- 倒数纪念日 ---------- */
+      (function () {
+        var anns = Store.anniversaries();
+        if (!anns.length) return;
+        // 只显示 60 天内的，或最近的 3 条
+        var near = anns.filter(function (a) { return a.daysLeft <= 60; });
+        if (!near.length) near = anns.slice(0, 3);
+        near = near.slice(0, 4);
+
+        var KIND_ICON = { birthday: '🎂', anniversary: '💝', countdown: '⏳' };
+        root.appendChild(el('div', { class: 'card anniv-card' }, [
+          el('div', { class: 'anniv-head' }, [
+            el('span', { class: 'anniv-title', text: '倒数纪念日' }),
+            el('button', {
+              class: 'link-btn', text: '全部 ›',
+              onclick: function () { App.go('agenda'); }
+            })
+          ]),
+          el('div', { class: 'anniv-list' }, near.map(function (a) {
+            var e = a.ev;
+            var days = a.daysLeft;
+            return el('div', {
+              class: 'anniv-row' + (days === 0 ? ' is-today' : ''),
+              dataset: { rec: 'event:' + e.id },
+              onclick: function () { if (global.openAnnivDialog) global.openAnnivDialog(e.id); }
+            }, [
+              el('span', { class: 'anniv-ico', text: KIND_ICON[e.kind] || '🎉' }),
+              el('div', { class: 'anniv-main' }, [
+                el('div', { class: 'anniv-name', text: e.title }),
+                el('div', { class: 'anniv-sub', text: a.next + (e.lunar ? ' · 农历' : '') + (e.repeat === 'yearly' && a.nth > 1 ? ' · 第 ' + a.nth + ' 年' : '') })
+              ]),
+              el('div', { class: 'anniv-days' + (days <= 7 ? ' near' : '') }, [
+                el('b', { text: days === 0 ? '今天' : String(days) }),
+                days === 0 ? null : el('span', { text: '天' })
+              ])
+            ]);
+          }))
+        ]));
+      })();
       if (global.DailyCards) root.appendChild(DailyCards.section());
 
       /* ---------- 最近的重要日程倒计时 ---------- */
@@ -11078,6 +12088,11 @@ window.AK_OPS = [
       }, [V.svg(V.icons.calendar, 16), viewState.showCourses ? '隐藏课程' : '显示课程']));
 
       host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { AnnivDialog.open(); }
+      }, [V.svg(V.icons.clock, 16), '纪念日']));
+
+      host.appendChild(el('button', {
         class: 'btn btn-primary',
         onclick: function () { EventDialog.open(); }
       }, [V.svg(V.icons.plus, 16), '新建日程']));
@@ -11358,8 +12373,178 @@ window.AK_OPS = [
     }
   };
 
+  /* ==========================================================
+   * 倒数纪念日编辑
+   *
+   * 纪念日复用 events 存储，靠 repeat（yearly/monthly）+ kind + lunar 区分：
+   *   repeat = 'none'   -> 普通一次性日程（不在此弹窗管理）
+   *   repeat = 'yearly' -> 每年一次（生日 / 周年），过了自动顺延到下一年的第 N 届
+   *   repeat = 'monthly'-> 每月一次（如每月还款日）
+   * lunar = true 时用 lunarMonth / lunarDay 记农历，由 global.Lunar 换算公历。
+   * ========================================================== */
+  var KIND_LABELS = { birthday: '生日', anniversary: '纪念日', countdown: '倒数日' };
+  var KIND_ICONS = { birthday: '🎂', anniversary: '💝', countdown: '⏳' };
+
+  var AnnivDialog = {
+    open: function (eventId) {
+      var isEdit = !!eventId;
+      var e = eventId ? Store.getEvent(eventId) : null;
+
+      var fTitle = V.input({
+        placeholder: '例如：妈妈生日 / 恋爱纪念日 / 考研倒计时',
+        value: e ? e.title : '', dataset: { autofocus: '1' }
+      });
+
+      var kindVal = e && e.kind ? e.kind : 'anniversary';
+      var fKind = V.segment([
+        { value: 'birthday', label: '生日' },
+        { value: 'anniversary', label: '纪念日' },
+        { value: 'countdown', label: '倒数日' }
+      ], kindVal, function (v) { kindVal = v; });
+
+      // 起算日：定义"第 1 届"是哪天
+      var fDate = V.input({ type: 'date', value: e ? e.date : DateUtil.toStr(DateUtil.today()) });
+
+      var repVal = e && e.repeat && e.repeat !== 'none' ? e.repeat : 'yearly';
+      var fRepeat = V.segment([
+        { value: 'yearly', label: '每年' },
+        { value: 'monthly', label: '每月' }
+      ], repVal, function (v) { repVal = v; });
+
+      /* ---- 农历 ---- */
+      var lunarOn = e ? !!e.lunar : false;
+      var lMonth = e && e.lunarMonth ? e.lunarMonth : 1;
+      var lDay = e && e.lunarDay ? e.lunarDay : 1;
+
+      var lunarInfo = el('div', { class: 'anniv-lunar-preview' });
+
+      function refreshLunarPreview() {
+        if (!lunarOn || !global.Lunar) { lunarInfo.textContent = ''; return; }
+        var thisYear = new Date().getFullYear();
+        var s = global.Lunar.lunarInYear(thisYear, lMonth, lDay, false) ||
+                global.Lunar.lunarInYear(thisYear + 1, lMonth, lDay, false);
+        if (!s) { lunarInfo.textContent = '该农历日期无法换算'; return; }
+        var yr = +s.slice(0, 4);
+        var sl = global.Lunar.solarToLunar(+s.slice(0, 4), +s.slice(5, 7), +s.slice(8, 10));
+        lunarInfo.textContent = '农历' + cnMonth(lMonth) + cnDay(lDay) + ' → ' +
+          yr + ' 年为 ' + s.slice(5);
+      }
+
+      var fLunarToggle = el('button', {
+        class: 'chip', type: 'button',
+        style: lunarOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: lunarOn ? '☾ 按农历' : '按公历',
+        onclick: function () {
+          lunarOn = !lunarOn;
+          this.style.background = lunarOn ? 'var(--primary)' : '';
+          this.style.color = lunarOn ? '#fff' : '';
+          this.textContent = lunarOn ? '☾ 按农历' : '按公历';
+          lunarBox.style.display = lunarOn ? '' : 'none';
+          // 切到农历时，用当前公历日期初始化月/日
+          if (lunarOn && global.Lunar && fDate.value) {
+            var p = fDate.value.split('-');
+            var l = global.Lunar.solarToLunar(+p[0], +p[1], +p[2]);
+            if (l) { lMonth = l.month; lDay = l.day; syncLunarSelects(); refreshLunarPreview(); }
+          }
+        }
+      });
+
+      var fLMonth = V.select(
+        Array.from({ length: 12 }, function (_, i) { return { value: String(i + 1), label: cnMonth(i + 1) }; }),
+        String(lMonth),
+        { onchange: function () { lMonth = +this.value; refreshLunarPreview(); } }
+      );
+      var fLDay = V.select(
+        Array.from({ length: 30 }, function (_, i) { return { value: String(i + 1), label: cnDay(i + 1) }; }),
+        String(lDay),
+        { onchange: function () { lDay = +this.value; refreshLunarPreview(); } }
+      );
+      function syncLunarSelects() {
+        fLMonth.value = String(lMonth);
+        fLDay.value = String(lDay);
+      }
+
+      var lunarBox = el('div', { style: lunarOn ? null : { display: 'none' } }, [
+        el('div', { class: 'field-inline' }, [
+          fLMonth, fLDay,
+          el('span', { class: 'rep-iv', text: '（闰月按同名月算）' })
+        ]),
+        lunarInfo
+      ]);
+
+      if (lunarOn) refreshLunarPreview();
+
+      var body = [
+        V.field('名称', fTitle),
+        V.field('类型', fKind),
+        V.field('日期', fDate, '「每年 / 每月」以这一天为起点；倒数日填目标日'),
+        V.field('重复', fRepeat),
+        V.field('历法', fLunarToggle, '农历生日每年对应的公历日都不同，需要用下面的月/日'),
+        lunarBox,
+        el('div', { class: 'anniv-hint', text: '纪念日会出现在「今日」页的倒数卡片里，过了当天自动顺延到下一次。' })
+      ];
+
+      var m = V.modal({
+        title: isEdit ? '编辑纪念日' : '新建纪念日',
+        body: body,
+        autofocus: true,
+        footer: el('div', { class: 'modal-foot' }, [
+          isEdit ? el('button', {
+            class: 'btn btn-danger', text: '删除',
+            onclick: function () {
+              m.close();
+              setTimeout(function () {
+                V.confirm({ title: '删除纪念日', message: '确定删除「' + e.title + '」吗？', danger: true, okText: '删除' })
+                  .then(function (ok) { if (ok) { Store.removeEvent(eventId); UI.toast('纪念日已删除'); } });
+              }, 220);
+            }
+          }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+          el('button', {
+            class: 'btn btn-primary', text: '保存',
+            onclick: function () {
+              var d = {
+                title: fTitle.value,
+                date: fDate.value,
+                repeat: repVal,
+                kind: kindVal,
+                lunar: lunarOn,
+                lunarMonth: lunarOn ? lMonth : 0,
+                lunarDay: lunarOn ? lDay : 0,
+                lunarLeap: false,
+                start: e ? e.start : '00:00',
+                end: e ? e.end : '23:59'
+              };
+              if (!d.title.trim()) { UI.toast('请填写名称', 'err'); fTitle.focus(); return; }
+              if (!d.date) { UI.toast('请选择日期', 'err'); return; }
+              if (isEdit) Store.updateEvent(eventId, d);
+              else Store.addEvent(d);
+              m.close();
+              UI.toast(isEdit ? '纪念日已更新' : '纪念日已添加');
+            }
+          })
+        ])
+      });
+    }
+  };
+
+  /* 中文月/日：初一、廿一、正月、腊月 */
+  function cnMonth(m) {
+    var N = ['', '正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '腊'];
+    return (N[m] || m) + '月';
+  }
+  function cnDay(d) {
+    var N = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    if (d <= 10) return '初' + N[d];
+    if (d < 20) return '十' + N[d - 10];
+    if (d === 20) return '二十';
+    if (d < 30) return '廿' + N[d - 20];
+    return '三十';
+  }
+
   global.EventDialog = EventDialog;
   global.EventDetail = EventDetail;
+  global.openAnnivDialog = function (id) { AnnivDialog.open(id); };
+  global.AnnivDialog = AnnivDialog;
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
@@ -12368,6 +13553,12 @@ window.AK_OPS = [
       return el('span', { class: cls, text: label });
     },
 
+    LABELS: { daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' },
+
+    repLabel: function (t) {
+      return (t.repeat && TaskRow.LABELS[t.repeat.type]) ? TaskRow.LABELS[t.repeat.type] : '';
+    },
+
     build: function (t, opts) {
       opts = opts || {};
       var course = t.courseId ? Store.getCourse(t.courseId) : null;
@@ -12385,6 +13576,7 @@ window.AK_OPS = [
 
       return el('div', {
         class: 'task-row' + (t.status === 'done' ? ' done' : '') + (opts.compact ? ' compact' : ''),
+        dataset: { rec: 'task:' + t.id },     // 全局搜索跳转后靠它定位
         onclick: function () { TaskDialog.open(t.id); }
       }, [
         TaskRow.check(t),
@@ -12393,6 +13585,7 @@ window.AK_OPS = [
           (meta.length || t.note || (t.tags && t.tags.length)) ? el('div', { class: 'task-meta' }, [
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
+            (t.repeat && t.repeat.type !== 'none') ? el('span', { class: 'chip', style: { padding: '0 6px', fontSize: '10.5px' }, text: '↻ ' + TaskRow.repLabel(t) }) : null,
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -12528,6 +13721,20 @@ window.AK_OPS = [
       var fNote = V.textarea({ placeholder: '可选，补充说明', value: t ? t.note : '' });
       var fTags = V.tagInput(t ? (t.tags || []).join(',') : '');
 
+      /* ---- 重复 ---- */
+      var curRep = (t && t.repeat && t.repeat.type && t.repeat.type !== 'none')
+        ? t.repeat : { type: 'none', interval: 1, until: '' };
+      var repOpts = [
+        { value: 'none', label: '不重复' },
+        { value: 'daily', label: '每天' },
+        { value: 'weekly', label: '每周' },
+        { value: 'monthly', label: '每月' },
+        { value: 'yearly', label: '每年' }
+      ];
+      var fRepeatType = V.select(repOpts, curRep.type);
+      var fRepeatInterval = V.input({ type: 'number', min: '1', value: curRep.interval || 1, style: { width: '64px' } });
+      var fRepeatUntil = V.input({ type: 'date', value: curRep.until || '' });
+
       var body = [
         el('div', { class: 'field' }, [
           el('label', { text: '待办内容' }),
@@ -12539,6 +13746,13 @@ window.AK_OPS = [
           V.field('截止日期', fDate),
           V.field('截止时间', fTime)
         ]),
+        V.field('重复', el('div', { class: 'field-inline' }, [
+          fRepeatType,
+          el('span', { class: 'rep-iv', text: '每' }),
+          fRepeatInterval,
+          el('span', { class: 'rep-iv', text: '周期' })
+        ]), '完成后自动生成下一期；留空「到」则一直重复'),
+        V.field('重复到（可选）', fRepeatUntil, '到达该日期后不再生成新一期'),
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
@@ -12575,7 +13789,15 @@ window.AK_OPS = [
                 priority: data.priority,
                 important: impOn,
                 note: fNote.value,
-                tags: fTags.getValue()
+                tags: fTags.getValue(),
+                repeat: (function () {
+                  if (fRepeatType.value === 'none') return { type: 'none' };
+                  return {
+                    type: fRepeatType.value,
+                    interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
+                    until: fRepeatUntil.value || ''
+                  };
+                })()
               };
               if (!d.title.trim()) { UI.toast('请填写待办内容', 'err'); fTitle.focus(); return; }
               if (isEdit) Store.updateTask(taskId, d);
@@ -12623,6 +13845,23 @@ window.AK_OPS = [
 
     onDataChange: function () {
       if (App.currentId === 'tasks') App.badge('tasks', Store.pendingTasks().length);
+    },
+
+    /**
+     * 全局搜索跳转过来时定位到某条待办。
+     * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
+     * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
+     */
+    focusRecord: function (type, id) {
+      if (type !== 'task' || !global.Search) return false;
+      var dirty = false;
+      if (state.tab !== 'tasks') { state.tab = 'tasks'; dirty = true; }
+      var t = Store.getTask(id);
+      if (t && state.status !== 'all' && state.status !== t.status) { state.status = 'all'; dirty = true; }
+      if (t && state.course !== 'all' && state.course !== (t.courseId || '')) { state.course = 'all'; dirty = true; }
+      if (state.q) { state.q = ''; dirty = true; }
+      if (dirty) this.render();
+      return Search.flash(Search.findRec(type, id));
     },
 
     render: function () {
@@ -12946,7 +14185,7 @@ window.AK_OPS = [
     var card = el('div', {
       class: 'card plan-card' + (p.done ? ' is-done' : '') + (p.id === justDoneId ? ' plan-win' : ''),
       style: { '--pl-c': p.color },
-      dataset: { id: p.id }
+      dataset: { id: p.id, rec: 'plan:' + p.id }   // rec 供全局搜索跳转定位
     });
 
     /* ---- 标题行 ---- */
@@ -13302,6 +14541,20 @@ window.AK_OPS = [
   }
 
   global.openPlanDialog = openPlanDialog;
+
+  // 计划列表有「进行中 / 已完成」筛选，跳转过来时先把筛选放宽
+  view.focusRecord = function (type, id) {
+    if (type !== 'plan' || !global.Search) return false;
+    var p = Store.getPlan(id);
+    var dirty = false;
+    if (p && state.status !== 'all' && ((state.status === 'running') === !!p.done)) {
+      state.status = 'all';
+      dirty = true;
+    }
+    if (p && state.tag && !hasTag(p.tags, state.tag)) { state.tag = ''; dirty = true; }
+    if (dirty) this.render();
+    return Search.flash(Search.findRec(type, id));
+  };
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
@@ -13977,6 +15230,7 @@ window.AK_OPS = [
 
     return el('div', {
       class: 'card note-card' + (n.converted ? ' converted' : ''),
+      dataset: { rec: 'note:' + n.id },     // 全局搜索跳转后靠它定位
       onclick: function () { editNote(n, refresh); }
     }, [body, foot]);
   }
@@ -14047,7 +15301,11 @@ window.AK_OPS = [
 
     onEnter: function () { this.render(); },
 
-    render: function () { renderNotesInto(this.root); }
+    render: function () { renderNotesInto(this.root); },
+
+    focusRecord: function (type, id) {
+      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
+    }
   };
 
   (window.VIEWS = window.VIEWS || []).push(view);
@@ -27796,6 +29054,19 @@ window.Pet = (function () {
 
     var drawerBtn = UI.$('#btnDrawer');
     if (drawerBtn) drawerBtn.addEventListener('click', openDrawer);
+
+    // 全局搜索：顶栏按钮 + Ctrl/⌘ + K
+    var searchBtn = UI.$('#btnSearch');
+    if (searchBtn) searchBtn.addEventListener('click', function () {
+      if (global.Search) Search.open();
+    });
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        if (!global.Search) return;
+        e.preventDefault();
+        Search.open();
+      }
+    });
 
     if (!Store.storageOK) {
       var warn = UI.el('div', {

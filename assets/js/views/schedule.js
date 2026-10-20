@@ -924,6 +924,7 @@
       return el('button', {
         class: 'course-block' + ((hasExam || hasBadge) ? ' has-marks' : ''),
         style: { '--c': p.color },
+        dataset: { rec: 'course:' + cid },     // 全局搜索跳转后靠它定位
         title: p.name + ' · ' + (p.teacher || '') + ' · ' + (loc || '') +
                (hasExam ? '\n考试：' + p.exam.date + ' ' + (p.exam.start || '') : ''),
         onclick: function (e) {
@@ -1499,6 +1500,12 @@
 
   global.__CourseDialog = CourseDialog;
   global.__SampleData = Sample;
+
+  // 一门课有多个时段时格子上会有多个块，定位到第一个即可
+  view.focusRecord = function (type, id) {
+    if (type !== 'course' || !global.Search) return false;
+    return Search.flash(Search.findRec(type, id));
+  };
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);

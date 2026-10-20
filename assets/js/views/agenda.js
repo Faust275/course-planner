@@ -32,6 +32,11 @@
       }, [V.svg(V.icons.calendar, 16), viewState.showCourses ? '隐藏课程' : '显示课程']));
 
       host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { AnnivDialog.open(); }
+      }, [V.svg(V.icons.clock, 16), '纪念日']));
+
+      host.appendChild(el('button', {
         class: 'btn btn-primary',
         onclick: function () { EventDialog.open(); }
       }, [V.svg(V.icons.plus, 16), '新建日程']));
@@ -312,8 +317,178 @@
     }
   };
 
+  /* ==========================================================
+   * 倒数纪念日编辑
+   *
+   * 纪念日复用 events 存储，靠 repeat（yearly/monthly）+ kind + lunar 区分：
+   *   repeat = 'none'   -> 普通一次性日程（不在此弹窗管理）
+   *   repeat = 'yearly' -> 每年一次（生日 / 周年），过了自动顺延到下一年的第 N 届
+   *   repeat = 'monthly'-> 每月一次（如每月还款日）
+   * lunar = true 时用 lunarMonth / lunarDay 记农历，由 global.Lunar 换算公历。
+   * ========================================================== */
+  var KIND_LABELS = { birthday: '生日', anniversary: '纪念日', countdown: '倒数日' };
+  var KIND_ICONS = { birthday: '🎂', anniversary: '💝', countdown: '⏳' };
+
+  var AnnivDialog = {
+    open: function (eventId) {
+      var isEdit = !!eventId;
+      var e = eventId ? Store.getEvent(eventId) : null;
+
+      var fTitle = V.input({
+        placeholder: '例如：妈妈生日 / 恋爱纪念日 / 考研倒计时',
+        value: e ? e.title : '', dataset: { autofocus: '1' }
+      });
+
+      var kindVal = e && e.kind ? e.kind : 'anniversary';
+      var fKind = V.segment([
+        { value: 'birthday', label: '生日' },
+        { value: 'anniversary', label: '纪念日' },
+        { value: 'countdown', label: '倒数日' }
+      ], kindVal, function (v) { kindVal = v; });
+
+      // 起算日：定义"第 1 届"是哪天
+      var fDate = V.input({ type: 'date', value: e ? e.date : DateUtil.toStr(DateUtil.today()) });
+
+      var repVal = e && e.repeat && e.repeat !== 'none' ? e.repeat : 'yearly';
+      var fRepeat = V.segment([
+        { value: 'yearly', label: '每年' },
+        { value: 'monthly', label: '每月' }
+      ], repVal, function (v) { repVal = v; });
+
+      /* ---- 农历 ---- */
+      var lunarOn = e ? !!e.lunar : false;
+      var lMonth = e && e.lunarMonth ? e.lunarMonth : 1;
+      var lDay = e && e.lunarDay ? e.lunarDay : 1;
+
+      var lunarInfo = el('div', { class: 'anniv-lunar-preview' });
+
+      function refreshLunarPreview() {
+        if (!lunarOn || !global.Lunar) { lunarInfo.textContent = ''; return; }
+        var thisYear = new Date().getFullYear();
+        var s = global.Lunar.lunarInYear(thisYear, lMonth, lDay, false) ||
+                global.Lunar.lunarInYear(thisYear + 1, lMonth, lDay, false);
+        if (!s) { lunarInfo.textContent = '该农历日期无法换算'; return; }
+        var yr = +s.slice(0, 4);
+        var sl = global.Lunar.solarToLunar(+s.slice(0, 4), +s.slice(5, 7), +s.slice(8, 10));
+        lunarInfo.textContent = '农历' + cnMonth(lMonth) + cnDay(lDay) + ' → ' +
+          yr + ' 年为 ' + s.slice(5);
+      }
+
+      var fLunarToggle = el('button', {
+        class: 'chip', type: 'button',
+        style: lunarOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: lunarOn ? '☾ 按农历' : '按公历',
+        onclick: function () {
+          lunarOn = !lunarOn;
+          this.style.background = lunarOn ? 'var(--primary)' : '';
+          this.style.color = lunarOn ? '#fff' : '';
+          this.textContent = lunarOn ? '☾ 按农历' : '按公历';
+          lunarBox.style.display = lunarOn ? '' : 'none';
+          // 切到农历时，用当前公历日期初始化月/日
+          if (lunarOn && global.Lunar && fDate.value) {
+            var p = fDate.value.split('-');
+            var l = global.Lunar.solarToLunar(+p[0], +p[1], +p[2]);
+            if (l) { lMonth = l.month; lDay = l.day; syncLunarSelects(); refreshLunarPreview(); }
+          }
+        }
+      });
+
+      var fLMonth = V.select(
+        Array.from({ length: 12 }, function (_, i) { return { value: String(i + 1), label: cnMonth(i + 1) }; }),
+        String(lMonth),
+        { onchange: function () { lMonth = +this.value; refreshLunarPreview(); } }
+      );
+      var fLDay = V.select(
+        Array.from({ length: 30 }, function (_, i) { return { value: String(i + 1), label: cnDay(i + 1) }; }),
+        String(lDay),
+        { onchange: function () { lDay = +this.value; refreshLunarPreview(); } }
+      );
+      function syncLunarSelects() {
+        fLMonth.value = String(lMonth);
+        fLDay.value = String(lDay);
+      }
+
+      var lunarBox = el('div', { style: lunarOn ? null : { display: 'none' } }, [
+        el('div', { class: 'field-inline' }, [
+          fLMonth, fLDay,
+          el('span', { class: 'rep-iv', text: '（闰月按同名月算）' })
+        ]),
+        lunarInfo
+      ]);
+
+      if (lunarOn) refreshLunarPreview();
+
+      var body = [
+        V.field('名称', fTitle),
+        V.field('类型', fKind),
+        V.field('日期', fDate, '「每年 / 每月」以这一天为起点；倒数日填目标日'),
+        V.field('重复', fRepeat),
+        V.field('历法', fLunarToggle, '农历生日每年对应的公历日都不同，需要用下面的月/日'),
+        lunarBox,
+        el('div', { class: 'anniv-hint', text: '纪念日会出现在「今日」页的倒数卡片里，过了当天自动顺延到下一次。' })
+      ];
+
+      var m = V.modal({
+        title: isEdit ? '编辑纪念日' : '新建纪念日',
+        body: body,
+        autofocus: true,
+        footer: el('div', { class: 'modal-foot' }, [
+          isEdit ? el('button', {
+            class: 'btn btn-danger', text: '删除',
+            onclick: function () {
+              m.close();
+              setTimeout(function () {
+                V.confirm({ title: '删除纪念日', message: '确定删除「' + e.title + '」吗？', danger: true, okText: '删除' })
+                  .then(function (ok) { if (ok) { Store.removeEvent(eventId); UI.toast('纪念日已删除'); } });
+              }, 220);
+            }
+          }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+          el('button', {
+            class: 'btn btn-primary', text: '保存',
+            onclick: function () {
+              var d = {
+                title: fTitle.value,
+                date: fDate.value,
+                repeat: repVal,
+                kind: kindVal,
+                lunar: lunarOn,
+                lunarMonth: lunarOn ? lMonth : 0,
+                lunarDay: lunarOn ? lDay : 0,
+                lunarLeap: false,
+                start: e ? e.start : '00:00',
+                end: e ? e.end : '23:59'
+              };
+              if (!d.title.trim()) { UI.toast('请填写名称', 'err'); fTitle.focus(); return; }
+              if (!d.date) { UI.toast('请选择日期', 'err'); return; }
+              if (isEdit) Store.updateEvent(eventId, d);
+              else Store.addEvent(d);
+              m.close();
+              UI.toast(isEdit ? '纪念日已更新' : '纪念日已添加');
+            }
+          })
+        ])
+      });
+    }
+  };
+
+  /* 中文月/日：初一、廿一、正月、腊月 */
+  function cnMonth(m) {
+    var N = ['', '正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '腊'];
+    return (N[m] || m) + '月';
+  }
+  function cnDay(d) {
+    var N = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    if (d <= 10) return '初' + N[d];
+    if (d < 20) return '十' + N[d - 10];
+    if (d === 20) return '二十';
+    if (d < 30) return '廿' + N[d - 20];
+    return '三十';
+  }
+
   global.EventDialog = EventDialog;
   global.EventDetail = EventDetail;
+  global.openAnnivDialog = function (id) { AnnivDialog.open(id); };
+  global.AnnivDialog = AnnivDialog;
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);

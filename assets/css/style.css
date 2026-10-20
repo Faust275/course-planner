@@ -2864,3 +2864,84 @@ input[type="range"]::-moz-range-thumb {
 }
 @keyframes opNewPop { from { opacity: 0; transform: scale(.4) rotate(-12deg); } to { opacity: 1; transform: none; } }
 
+
+/* ==========================================================
+ * 全局搜索
+ * ========================================================== */
+.cp-s-input { width: 100%; font-size: 14px; padding: 9px 12px; }
+.cp-s-list {
+  margin-top: 10px; max-height: 46vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cp-s-group-title {
+  font-size: 11.5px; font-weight: 650; color: var(--text-3);
+  padding: 9px 4px 3px; letter-spacing: .3px;
+}
+.cp-s-result {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 10px;
+  padding: 8px 10px; cursor: pointer; font: inherit; color: inherit;
+}
+.cp-s-result:hover { background: var(--surface-2); }
+.cp-s-result.cp-sel { background: var(--primary-tint); border-color: var(--primary-light); }
+.cp-s-result-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cp-s-result-type {
+  flex: 0 0 auto; font-size: 10.5px; font-weight: 600; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 1px 6px;
+}
+.cp-s-result-title {
+  font-size: 13.5px; font-weight: 600; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cp-s-result-meta {
+  font-size: 11.5px; color: var(--text-3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cp-s-result-sub {
+  font-size: 12px; color: var(--text-2); margin-top: 3px;
+  line-height: 1.6; word-break: break-all;
+}
+.cp-s-empty { padding: 26px 0; text-align: center; font-size: 12.5px; color: var(--text-3); }
+
+/* 命中词高亮 */
+mark.cp-hit {
+  background: var(--amber-weak); color: #b54708;
+  border-radius: 3px; padding: 0 1px; font-weight: 650;
+}
+
+/* 跳转定位：滚到视野中央后闪一圈描边 */
+@keyframes cpFlash {
+  0%, 55% { box-shadow: 0 0 0 3px var(--amber); }
+  100%    { box-shadow: 0 0 0 3px rgba(247, 144, 9, 0); }
+}
+.cp-flash { animation: cpFlash 2s ease-out; border-radius: 8px; }
+
+/* 重复任务：重复字段横向排布 */
+.cp-field-inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-rep-iv { font-size: 12.5px; color: var(--text-2); }
+
+/* ==========================================================
+ * 倒数纪念日
+ * ========================================================== */
+.cp-anniv-card { margin-bottom: 16px; }
+.cp-anniv-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cp-anniv-title { font-size: 13.5px; font-weight: 650; }
+.cp-anniv-list { display: flex; flex-direction: column; gap: 2px; }
+.cp-anniv-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px; border-radius: 10px; cursor: pointer;
+  border: 1px solid transparent;
+}
+.cp-anniv-row:hover { background: var(--surface-2); }
+.cp-anniv-row.is-today { background: var(--primary-tint); border-color: var(--primary-light); }
+.cp-anniv-ico { flex: 0 0 auto; font-size: 17px; line-height: 1; }
+.cp-anniv-main { flex: 1; min-width: 0; }
+.cp-anniv-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-anniv-sub { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.cp-anniv-days { flex: 0 0 auto; text-align: right; color: var(--text-2); }
+.cp-anniv-days b { font-size: 17px; font-weight: 700; letter-spacing: -.5px; }
+.cp-anniv-days span { font-size: 11px; margin-left: 1px; }
+.cp-anniv-days.near b { color: var(--primary); }
+.cp-anniv-lunar-preview { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+.cp-anniv-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.6; }

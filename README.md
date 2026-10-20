@@ -41,8 +41,11 @@ course-planner-web/
 ├── verify_batch.mjs          课表批量导入端到端验证
 ├── verify_conflict.mjs       课表时间冲突检测验证
 ├── verify_ics.mjs            上课提醒：.ics 导出内容 + 页面内提醒触发
+├── verify_search.mjs         全局搜索：结果分组、关键词高亮、跳转定位
+├── verify_repeat.mjs         重复任务：展开生成、过期锚定、until 截止
+├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（185 条）
+└── tests/run.mjs             纯函数单测（287 条）
 ```
 
 ## 构建
@@ -65,7 +68,8 @@ python3 build.py
 
 ```bash
 node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析、
-                             #             时间冲突、.ics 生成与折行）
+                             #             时间冲突、.ics 生成与折行、全局搜索、
+                             #             重复任务顺延、农历换算、纪念日届数）
 
 # UI 回归（需 playwright；先起本地静态服务）
 python3 -m http.server 8137 &
@@ -77,6 +81,9 @@ node verify_parts2.mjs       # 同步码分片
 node verify_batch.mjs        # 课表批量导入
 node verify_conflict.mjs     # 课表时间冲突
 node verify_ics.mjs          # .ics 导出内容 + 页面内提醒
+node verify_search.mjs       # 全局搜索 + 高亮 + 跳转定位
+node verify_repeat.mjs       # 重复任务展开生成
+node verify_anniv.mjs        # 倒数纪念日（含农历）
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
