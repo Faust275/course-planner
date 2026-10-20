@@ -3237,7 +3237,7 @@ mark.cp-hit {
 
 .cp-mood-bars {
   display: flex;
-  height: 22px;
+  height: 26px;
   border-radius: 7px;
   overflow: hidden;
   gap: 2px;
@@ -3248,15 +3248,7 @@ mark.cp-hit {
   align-items: center;
   justify-content: center;
   min-width: 18px;
-  font-size: 10px;
-  line-height: 1;
   transition: flex .3s ease;
-}
-/* 彩色底上用白色描边压住：emoji 如果回退成单色字形（无彩色 emoji 字体的系统），
-   白色字形会直接消失在浅底上。text-shadow 让它无论单色还是彩色都看得见。 */
-.cp-mood-bar span {
-  opacity: .92;
-  filter: drop-shadow(0 0 1px rgba(255, 255, 255, .9));
 }
 
 .cp-mood-legend {

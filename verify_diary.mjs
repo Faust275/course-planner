@@ -279,7 +279,24 @@ check('9 天：显示分布条', D9.hasBars === true);
 check('九条心情全占满五档', D9.bars === 5, D9.bars);
 check('图例有五档', D9.legend === 5, D9.legend);
 check('平均分已算出', /^\d\.\d{2}$/.test(D9.avg), D9.avg);
-check('并列冷暖数字（不给因果结论）', /偏暖.*偏冷/.test(D9.tone) && !/因为|说明你|导致/.test(D9.tone), D9.tone.slice(0, 60));
+// 9 天够出平均分，但不够出冷暖结论（门槛 14 天）
+check('9 天不出冷暖结论', D9.tone === '', D9.tone);
+
+// 补到 15 天 → 冷暖才出现，且只并列数字
+await seed(15, ['great', 'good', 'meh', 'tired', 'low']);
+const D15 = await p.evaluate(() => {
+  const card = document.querySelector('.cp-diary-mood-card');
+  return {
+    tone: (card.querySelector('.cp-mood-tone') || {}).textContent || '',
+    avg: (card.querySelector('.cp-mood-avg b') || {}).textContent || ''
+  };
+});
+check('15 天出冷暖结论', /偏暖.*偏冷/.test(D15.tone), D15.tone);
+check('只并列数字（不给因果结论）', !/因为|说明你|导致|所以/.test(D15.tone), D15.tone);
+check('百分比加起来 100%', (function () {
+  const m = D15.tone.match(/偏暖 (\d+)%[^%]*中性 (\d+)%[^%]*偏冷 (\d+)%/);
+  return !!m && (+m[1] + +m[2] + +m[3] === 100);
+})(), D15.tone);
 
 // 关掉开关 → 统计隐藏，但日记本身还在
 const Ds = await p.evaluate(() => {
@@ -298,7 +315,7 @@ const Ds2 = await p.evaluate(() => ({
 }));
 check('关掉开关后不显示统计', Ds2.hasBars === false);
 check('关掉后给出解释', /设置 → 日记/.test(Ds2.text), Ds2.text.slice(0, 30));
-check('关掉统计不影响日记数据', Ds2.diaries === 9, Ds2.diaries);
+check('关掉统计不影响日记数据', Ds2.diaries === 15, Ds2.diaries);   // 上面刚 seed(15)
 await p.evaluate(() => { window.Store.state.settings.diary.showMoodStats = true; window.Store.save(); });
 
 /* ==========================================================
@@ -338,9 +355,13 @@ await p.waitForTimeout(320);
 const E3 = await p.evaluate(() => {
   const modals = [...document.querySelectorAll('.cp-modal')];
   const titles = modals.map(m => (m.querySelector('.cp-modal-head h3') || {}).textContent || '');
-  return { titles: titles };
+  const m = modals[modals.length - 1];
+  const labels = m ? [...m.querySelectorAll('.cp-de-label')].map(x => x.textContent.trim()) : [];
+  return { titles: titles, labels: labels };
 });
 check('编辑器能按指定日期打开', E3.titles.some(t => /写日记|编辑日记/.test(t)), E3.titles);
+// 写的是历史某天，标题不能还说「今天的心情」——那会让人以为改的是今天的记录
+check('非今天的日期，标签写「这一天」', E3.labels.some(x => /^这一天的心情/.test(x)), E3.labels);
 // 白天（4 点以后）保存不应弹出「算哪天的」
 const isDay = E.hourNow >= 4;
 if (isDay) {

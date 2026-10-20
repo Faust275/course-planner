@@ -137,11 +137,15 @@
     Store.MOODS.forEach(function (m) {
       var n = st.counts[m.key] || 0;
       if (!n) return;
+      // 不在色块里放 emoji：条高只有 26px，字形缩到 13px 后糊成一团，
+      // 且部分系统只有单色 emoji 字体，压在饱和底色上更难认。色块负责比例，
+      // 紧挨着的图例负责「颜色→心情」的对应。
       bar.appendChild(el('div', {
         class: 'cp-mood-bar',
         style: { flex: String(n), background: m.color },
-        title: m.name + ' ' + n + ' 天'
-      }, [el('span', { text: m.emoji })]));
+        title: m.name + ' ' + n + ' 天',
+        'aria-label': m.name + ' ' + n + ' 天'
+      }));
     });
     card.appendChild(bar);
 
@@ -156,10 +160,12 @@
     });
     card.appendChild(legend);
 
-    // 冷暖倾向：只并列数字，不给因果结论
+    // 冷暖倾向：只并列数字，不给因果结论。
+    // 门槛比平均分更严（14 天）：冷暖是「分布形状」层面的结论，
+    // 一周的数据画出来的形状几乎必然偏到某一边，那是指纹不是规律。
     var t = st.tones;
     var toneTotal = t.warm + t.neutral + t.cold;
-    if (toneTotal) {
+    if (toneTotal && st.rated >= Store.MOOD_CROSS_MIN_DAYS) {
       var warmPct = Math.round(t.warm / toneTotal * 100);
       var coldPct = Math.round(t.cold / toneTotal * 100);
       card.appendChild(el('div', {
@@ -416,7 +422,7 @@
           }
         })
       ]),
-      el('div', { class: 'cp-de-label', text: '今天的心情（选填）' }),
+      el('div', { class: 'cp-de-label', text: (dateStr === todayStr() ? '今天' : '这一天') + '的心情（选填）' }),
       moodBar,
       el('div', { class: 'cp-de-label', text: '正文' }),
       ta,
