@@ -187,6 +187,8 @@
     }
 
     window.Pet.init();
+    // 页面内上课提醒：只在页面可见时跑，不申请任何权限
+    if (global.Remind) Remind.start();
     if (global.Theme) { Theme.apply(); Theme.applyBackground(); }
     sortViews();
     buildNav();

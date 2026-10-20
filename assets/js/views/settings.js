@@ -29,6 +29,7 @@
     fav: { name: '收藏的词句', desc: '收藏过的每日一句与每日一词' },
     diet: { name: '饮食与热量', desc: '每日热量目标、三餐配比与营养素' },
     data: { name: '数据管理', desc: '同步码、备份文件与清空' },
+    remind: { name: '上课提醒', desc: '页面内提醒，以及导出到系统日历' },
     about: { name: '使用提示', desc: '各模块的用法说明' },
     pet: { name: '桌宠（开发）', desc: '龙泡泡桌宠：开发者开关与本地素材注入，仅自用' }
   };
@@ -693,6 +694,8 @@
         root.appendChild(presetCard);
       }
 
+      if (SUB === 'remind') { this.renderRemind(root); return; }
+
       if (SUB === 'nav') {
   /* ===================== 模块显示 ===================== */
         var navCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
@@ -1052,10 +1055,99 @@
     { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981' },
     { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
     { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
+    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b' },
     { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
     { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
     { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b' }
   ];
+
+  /* ===================== 上课提醒 ===================== */
+  view.renderRemind = function (root) {
+    var o = global.Remind ? Remind.opts() : { on: true, lead: 15, sound: true };
+    function save() { Store.save(); }
+
+    function row(label, hint, node) {
+      return el('div', {
+        class: 'setting-row',
+        style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0' }
+      }, [
+        el('div', { style: { flex: '1' } }, [
+          el('b', { style: { fontSize: '13px' }, text: label }),
+          el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '2px' }, text: hint })
+        ]),
+        node
+      ]);
+    }
+
+    /* --- 页面内提醒 --- */
+    var inPage = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    inPage.appendChild(el('div', { class: 'section-title' }, ['页面内提醒']));
+    inPage.appendChild(el('p', {
+      class: 'ocr-hint',
+      text: '页面开着、并且是你在看的那个标签页时，上课前会弹一条提示（可选一声轻响）。' +
+            '它是「兜底」，不是推送 —— 手机锁屏或切到别的 App 就不会响。'
+    }));
+    inPage.appendChild(row('开启页面内提醒', '关掉后只在课表页看，不弹提示', el('input', {
+      type: 'checkbox', checked: !!o.on,
+      onchange: function (e) { o.on = e.target.checked; save(); }
+    })));
+    inPage.appendChild(row('提前多久', '课表类 App 普遍是课前 15 分钟', el('select', {
+      class: 'input', style: { width: '120px' },
+      onchange: function (e) { o.lead = +e.target.value; save(); }
+    }, [0, 5, 10, 15, 20, 30].map(function (v) {
+      return el('option', {
+        value: String(v), selected: o.lead === v,
+        text: v === 0 ? '上课时刻' : ('提前 ' + v + ' 分钟')
+      });
+    }))));
+    inPage.appendChild(row('提示音', '一声很短的正弦音，不会打断别人', el('input', {
+      type: 'checkbox', checked: !!o.sound,
+      onchange: function (e) { o.sound = e.target.checked; save(); }
+    })));
+    if (global.Remind) {
+      var today = Remind.todayLessons();
+      inPage.appendChild(el('div', {
+        class: 'ocr-hint',
+        text: today.length
+          ? ('今天有 ' + today.length + ' 节课：' + today.map(function (t) {
+              return t.period.start + ' ' + t.course.name;
+            }).join('、'))
+          : '今天没有课。'
+      }));
+    }
+    root.appendChild(inPage);
+
+    /* --- 导出到系统日历 --- */
+    var cal = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    cal.appendChild(el('div', { class: 'section-title' }, ['导出到系统日历（推荐）']));
+    cal.appendChild(el('p', {
+      class: 'ocr-hint',
+      text: '生成一个 .ics 文件，双击导入手机或电脑的日历后，提醒就由系统负责 —— ' +
+            '锁屏会响、关机也准、不用挂着这个页面，数据也不经过任何服务器。' +
+            '课程按周重复导出，单双周会自动拆成隔周重复。'
+    }));
+    cal.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } }, [
+      el('button', {
+        class: 'btn btn-primary',
+        onclick: function () { if (global.Remind) Remind.exportDialog(); }
+      }, [V.svg(V.icons.download, 16), '导出 .ics'])
+    ]));
+    root.appendChild(cal);
+
+    /* --- 为什么不弹系统通知 --- */
+    var why = el('div', { class: 'card', style: { padding: '16px 18px' } });
+    why.appendChild(el('div', { class: 'section-title' }, ['为什么不直接弹系统通知']));
+    why.appendChild(el('ul', {
+      class: 'ocr-hint',
+      style: { margin: 0, paddingLeft: '18px', lineHeight: '1.8' }
+    }, [
+      el('li', { text: '预定未来时刻弹通知的 Notification Triggers，Chrome 已停止开发且从未发布，没有它就只能靠服务器推送。' }),
+      el('li', { text: '直接双击打开的单文件是 file:// 协议，不是安全上下文，通知权限根本申请不了。' }),
+      el('li', { text: 'iOS Safari 要 16.4 以上、且必须先把页面「添加到主屏幕」才给权限，而后台标签页 5–10 秒就停止执行。' }),
+      el('li', { text: '所以定时那部分交给系统日历更可靠，页面内这条只负责「你正看着它」的时候。' })
+    ]));
+    root.appendChild(why);
+  };
 
   view.renderPet = function (root) {
     window.Pet.ensureStyle();

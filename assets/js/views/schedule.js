@@ -574,6 +574,12 @@
       );
       host.appendChild(
         el('button', {
+          class: 'btn',
+          onclick: function () { if (global.Remind) Remind.exportDialog(); }
+        }, [V.svg(V.icons.clock, 16), '导出日历'])
+      );
+      host.appendChild(
+        el('button', {
           class: 'btn btn-primary',
           onclick: function () { CourseDialog.open(); }
         }, [V.svg(V.icons.plus, 16), '自定义添加'])

@@ -25,6 +25,7 @@ course-planner-web/
 │   ├── ak_ops.js             干员数据
 │   ├── quotes-data.js        诗词 / 词库语料
 │   ├── quotes.js             每日一句 / 每日一词 UI
+│   ├── remind.js              上课提醒：.ics 生成（纯函数）+ 页面内轮询提醒
 │   ├── foods.js / speech.js / ocr.js / theme.js / onboard.js
 │   └── views/*.js            各页面（课表、今日、日历、日程、象限、待办、计划、
 │                             笔记、记账、抽卡、专注、收集、成绩、设置、ocr-dialog）
@@ -39,8 +40,9 @@ course-planner-web/
 ├── verify_parts2.mjs         分片乱序 / 噪音 / 缺片拼回验证
 ├── verify_batch.mjs          课表批量导入端到端验证
 ├── verify_conflict.mjs       课表时间冲突检测验证
+├── verify_ics.mjs            上课提醒：.ics 导出内容 + 页面内提醒触发
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（72 条）
+└── tests/run.mjs             纯函数单测（185 条）
 ```
 
 ## 构建
@@ -62,7 +64,8 @@ python3 build.py
 ## 测试
 
 ```bash
-node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析）
+node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析、
+                             #             时间冲突、.ics 生成与折行）
 
 # UI 回归（需 playwright；先起本地静态服务）
 python3 -m http.server 8137 &
@@ -73,6 +76,7 @@ node verify_sync_scope.mjs   # 同步码三档
 node verify_parts2.mjs       # 同步码分片
 node verify_batch.mjs        # 课表批量导入
 node verify_conflict.mjs     # 课表时间冲突
+node verify_ics.mjs          # .ics 导出内容 + 页面内提醒
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
