@@ -2507,6 +2507,32 @@ input[type="range"]::-moz-range-thumb {
 .op-card.r6 { border-color: #ff9300; box-shadow: 0 0 0 1px #ff930055, 0 0 12px #ff930033; }
 .op-card.r5 { border-color: #f7d54788; }
 
+/* ---- 满潜高亮（五星 / 六星） ---- */
+.op-card.op-maxpot { border-color: #ff4d4f; box-shadow: 0 0 0 2px #ff4d4f55, 0 0 14px #ff4d4f44; }
+/* ---- 干员标签：限定 / 预备 / 满潜（覆盖头像左上角） ---- */
+.op-tags {
+  position: absolute; left: 2px; top: 2px; display: flex; gap: 2px; flex-wrap: wrap;
+  max-width: calc(100% - 4px);
+}
+.op-tag {
+  font-size: 7.5px; font-weight: 700; line-height: 1; padding: 2px 3px; border-radius: 5px;
+  color: #fff; white-space: nowrap; text-shadow: 0 0 2px rgba(0,0,0,.5);
+}
+.op-tag-limited { background: #c9971f; }
+.op-tag-reserve { background: #3a7afe; }
+.op-tag-maxpot { background: #ff4d4f; }
+
+/* ---- 按阵营分组 ---- */
+.ops-groups { display: flex; flex-direction: column; gap: 16px; }
+.ops-group-title {
+  display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700;
+  margin-bottom: 8px; color: var(--text-1);
+}
+.ops-group-title .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; }
+.ops-group-title .cnt { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.ops-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
+@media (max-width: 640px) { .ops-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
 /* ---- 首页干员墙 ---- */
 .ops-wall { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
 @media (max-width: 640px) { .ops-wall { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

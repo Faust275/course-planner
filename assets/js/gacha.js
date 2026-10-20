@@ -16,6 +16,67 @@
 
   function starColor(r) { return STAR_COLOR[r] || '#c4cbd6'; }
 
+  /** 干员元数据：名称 → { faction, limited, reserve }（来源 ak_ops.js 的扩展字段） */
+  var OP_META = (function () {
+    var m = {};
+    (global.AK_OPS || []).forEach(function (o) {
+      m[o[0]] = { faction: o[4], limited: !!o[6], reserve: !!o[5] };
+    });
+    return m;
+  })();
+
+  /** 由阵营名生成一个稳定的颜色（用于分组小圆点） */
+  function facColor(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return 'hsl(' + h + ', 52%, 56%)';
+  }
+
+  /** 把已获得干员按阵营分组（按人数降序），返回 [{name, ops}] */
+  function groupByFaction(owned) {
+    var groups = {};
+    owned.forEach(function (o) {
+      var f = (OP_META[o.n] && OP_META[o.n].faction) || '其他';
+      (groups[f] = groups[f] || []).push(o);
+    });
+    var names = Object.keys(groups).sort(function (a, b) {
+      return groups[b].length - groups[a].length || (a < b ? -1 : 1);
+    });
+    return names.map(function (f) {
+      return {
+        name: f,
+        ops: groups[f].sort(function (x, y) {
+          return (y.r - x.r) || (String(x.n) < String(y.n) ? -1 : 1);
+        })
+      };
+    });
+  }
+
+  /** 阵营分组后的干员墙 DOM */
+  function factionGroupsEl(owned, opts) {
+    opts = opts || {};
+    var wrap = el('div', { class: 'ops-groups' });
+    if (!owned.length) {
+      wrap.appendChild(el('div', { class: 'q-empty', text: opts.empty || '还没有寻访到干员' }));
+      return wrap;
+    }
+    groupByFaction(owned).forEach(function (g) {
+      var section = el('div', { class: 'ops-group' });
+      section.appendChild(el('div', { class: 'ops-group-title' }, [
+        el('span', { class: 'dot', style: { background: facColor(g.name) } }),
+        el('span', { text: g.name }),
+        el('span', { class: 'cnt', text: g.ops.length + ' 名' })
+      ]));
+      var grid = el('div', { class: 'ops-grid' });
+      g.ops.forEach(function (o) {
+        grid.appendChild(opCard(o, { onclick: function () { opDetail(o); } }));
+      });
+      section.appendChild(grid);
+      wrap.appendChild(section);
+    });
+    return wrap;
+  }
+
   function stars(r) { return '★'.repeat(Math.max(0, Math.min(6, r))); }
 
   /** 合成玉图标 + 数字 */
@@ -29,11 +90,16 @@
   /** 一张干员卡 */
   function opCard(op, opts) {
     opts = opts || {};
+    var meta = OP_META[op.n] || {};
+    var pot = Math.max(0, Math.min((op.count || 1) - 1, POMO.POT_MAX));
+    var maxpot = op.r >= 5 && pot >= POMO.POT_MAX;
     var box = el('div', {
-      class: 'op-card r' + op.r + (opts.big ? ' big' : ''),
+      class: 'op-card r' + op.r + (maxpot ? ' op-maxpot' : '') + (opts.big ? ' big' : ''),
       style: { '--sc': starColor(op.r) },
       onclick: opts.onclick || null,
-      title: op.n + '（' + op.r + '★ · ' + (op.p || '') + '）'
+      title: op.n + '（' + op.r + '★ · ' + (op.p || '') +
+        (meta.faction ? ' · ' + meta.faction : '') +
+        (meta.limited ? ' · 限定' : '') + (meta.reserve ? ' · 预备' : '') + '）'
     });
 
     if (op.img) {
@@ -54,7 +120,6 @@
     box.appendChild(el('span', { class: 'op-name', text: op.n }));
     if (op.count > 1) box.appendChild(el('span', { class: 'op-count', text: '×' + op.count }));
     // 潜能（右下角）：潜能 = max(0, min(复制数-1, 上限))
-    var pot = Math.max(0, Math.min((op.count || 1) - 1, POMO.POT_MAX));
     if (pot > 0) {
       box.appendChild(el('span', {
         class: 'op-pot',
@@ -62,6 +127,12 @@
         text: '★'.repeat(pot)
       }));
     }
+    // 标签：限定 / 预备 / 满潜（覆盖在头像左上角）
+    var tags = [];
+    if (meta.limited) tags.push(el('span', { class: 'op-tag op-tag-limited', title: '限定干员', text: '限定' }));
+    if (meta.reserve) tags.push(el('span', { class: 'op-tag op-tag-reserve', title: '预备干员', text: '预备' }));
+    if (maxpot) tags.push(el('span', { class: 'op-tag op-tag-maxpot', title: '已满潜能（满潜）', text: '满潜' }));
+    if (tags.length) box.appendChild(el('div', { class: 'op-tags' }, tags));
     return box;
   }
 
@@ -161,29 +232,12 @@
   }
 
   /* ==========================================================
-   * 已获得干员墙
+   * 已获得干员墙（按阵营分组）
    * ========================================================== */
   function opsWall(limit) {
-    var owned = Store.gachaOwned();
-    var wrap = el('div', { class: 'ops-wall' });
-
-    if (!owned.length) {
-      wrap.appendChild(el('div', { class: 'q-empty', text: '还没有寻访到干员，先去专注攒合成玉吧' }));
-      return wrap;
-    }
-
-    var shown = limit ? owned.slice(0, limit) : owned;
-    shown.forEach(function (o) {
-      wrap.appendChild(opCard(o, { onclick: function () { opDetail(o); } }));
+    return factionGroupsEl(Store.gachaOwned(), {
+      empty: '还没有寻访到干员，先去专注攒合成玉吧'
     });
-
-    if (limit && owned.length > limit) {
-      wrap.appendChild(el('button', {
-        class: 'ops-more',
-        onclick: function () { global.Gacha.openOps(); }
-      }, ['+' + (owned.length - limit)]));
-    }
-    return wrap;
   }
 
   /** 干员大图详情 */
@@ -191,6 +245,15 @@
     var got = null;
     Store.pomodoro.gacha.ops.forEach(function (o) { if (o.n === op.n) got = o; });
     var rec = got || op;
+    var meta = OP_META[rec.n] || {};
+    var pot = Math.max(0, Math.min((rec.count || 1) - 1, POMO.POT_MAX));
+    var maxpot = rec.r >= 5 && pot >= POMO.POT_MAX;
+
+    var tags = [];
+    if (meta.faction) tags.push(meta.faction);
+    if (meta.limited) tags.push('限定');
+    if (meta.reserve) tags.push('预备');
+    if (maxpot) tags.push('满潜');
 
     var body = el('div', { class: 'op-detail' }, [
       el('div', {
@@ -201,8 +264,8 @@
       ]),
       el('div', { class: 'od-info' }, [
         el('b', { text: rec.n }),
-        el('span', { text: rec.r + '★ · ' + (rec.p || '—') }),
-        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + Math.max(0, Math.min((rec.count || 1) - 1, POMO.POT_MAX)) + (rec.dupPts ? ' · 已转化 ' + rec.dupPts + ' 积分' : '') })
+        el('span', { text: rec.r + '★ · ' + (rec.p || '—') + (tags.length ? ' · ' + tags.join(' / ') : '') }),
+        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + pot + (maxpot ? '（满潜）' : '') + (rec.dupPts ? ' · 已转化 ' + rec.dupPts + ' 积分' : '') })
       ])
     ]);
 
@@ -216,7 +279,7 @@
     });
   }
 
-  /** 全部干员图鉴弹窗 */
+  /** 全部干员图鉴弹窗（按阵营分组） */
   function openOps() {
     var s = Store.gachaStats();
     var owned = Store.gachaOwned();
@@ -227,24 +290,23 @@
         r + '★ ' + g[0] + '/' + g[1] + '</span>';
     }).join('');
 
-    var box = el('div', { class: 'ops-all' });
-    if (!owned.length) {
-      box.appendChild(el('div', { class: 'q-empty', text: '还没有寻访到干员' }));
-    } else {
-      owned.forEach(function (o) {
-        box.appendChild(opCard(o, { onclick: function () { opDetail(o); } }));
-      });
-    }
+    var box = factionGroupsEl(owned, { empty: '还没有寻访到干员' });
+
+    var limitedCount = owned.filter(function (o) { var m = OP_META[o.n]; return m && m.limited; }).length;
+    var reserveCount = owned.filter(function (o) { var m = OP_META[o.n]; return m && m.reserve; }).length;
+    var statKids = [
+      el('b', { text: s.owned + ' / ' + s.total }),
+      el('span', { text: '已收集' }),
+      el('span', { class: 'ops-pulls', text: '累计 ' + s.pulls + ' 抽' })
+    ];
+    if (limitedCount) statKids.push(el('span', { class: 'ops-pulls', text: '限定 ' + limitedCount }));
+    if (reserveCount) statKids.push(el('span', { class: 'ops-pulls', text: '预备 ' + reserveCount }));
 
     V.modal({
       title: '我的干员',
-      width: '600px',
+      width: '640px',
       body: [
-        el('div', { class: 'ops-stat' }, [
-          el('b', { text: s.owned + ' / ' + s.total }),
-          el('span', { text: '已收集' }),
-          el('span', { class: 'ops-pulls', text: '累计 ' + s.pulls + ' 抽' })
-        ]),
+        el('div', { class: 'ops-stat' }, statKids),
         el('div', { class: 'dp-macros', html: rows }),
         box
       ],

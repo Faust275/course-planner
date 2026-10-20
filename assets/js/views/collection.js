@@ -99,7 +99,7 @@
       } else {
         card.appendChild(el('div', {
           style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '8px' },
-          text: '累计 ' + s.pulls + ' 抽 · 距上次六星 ' + s.pity + ' 抽 · 当前六星概率 ' + s.rate6 + '%'
+          text: '累计 ' + s.pulls + ' 抽 · 距上次六星 ' + s.pity + ' 抽 · 当前六星概率 ' + s.rate6 + '%　·　按阵营分组 · 满潜五星/六星高亮'
         }));
         card.appendChild(Gacha.wall());
       }

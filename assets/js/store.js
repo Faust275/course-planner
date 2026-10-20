@@ -636,12 +636,14 @@
    * - 事件型：带 check() 函数（一次十连的特定结果，判定依据 gacha.lastTen） */
   var ACH_DEF = [
     /* —— 抽卡 —— */
-    { id: 'gacha_all3', group: '抽卡', name: '十连皆三星', desc: '一次十连抽出的干员全部为三星', icon: 'star', tier: 'silver', points: 60,
+    { id: 'gacha_all3', group: '抽卡', name: '绝世非皇', desc: '一次十连抽出的干员全部为三星', icon: 'star', tier: 'silver', points: 60,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.all3); } },
-    { id: 'gacha_max4', group: '抽卡', name: '最高仅四星', desc: '一次十连中最高星级仅为四星（不出五/六星）', icon: 'sparkle', tier: 'silver', points: 60,
+    { id: 'gacha_max4', group: '抽卡', name: '紫气东来', desc: '一次十连中最高星级仅为四星（不出五/六星）', icon: 'sparkle', tier: 'silver', points: 60,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.max4); } },
-    { id: 'gacha_3six', group: '抽卡', name: '六星三连', desc: '一次十连中抽出超过两个六星（≥3）', icon: 'sun', tier: 'gold', points: 200,
-      check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.threeSix); } },
+    { id: 'gacha_2six', group: '抽卡', name: '双黄蛋', desc: '一次十连中恰好抽出两个六星', icon: 'sun', tier: 'gold', points: 200,
+      check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.twoSix); } },
+    { id: 'gacha_4six', group: '抽卡', name: '绝世欧皇', desc: '一次十连中抽出超过三个六星（≥4）', icon: 'crown', tier: 'gold', points: 250,
+      check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.fourSix); } },
     { id: 'gacha_no6_70', group: '抽卡', name: '七秩未逢星', desc: '连续 70 抽未出六星', icon: 'clock', tier: 'gold', points: 150,
       metric: 'streakNo6', threshold: 70 },
     { id: 'gacha_no5_30', group: '抽卡', name: '三十非五星', desc: '连续 30 抽未出五星', icon: 'moon', tier: 'silver', points: 50,
@@ -2114,7 +2116,12 @@
           if (o.r === 6) sixN++;
           if (o.r !== 3) isAll3 = false;
         });
-        pm.gacha.lastTen = { all3: isAll3, max4: (maxR === 4), threeSix: (sixN > 2) };
+        pm.gacha.lastTen = {
+          all3: isAll3,
+          max4: (maxR === 4),
+          twoSix: (sixN === 2),     // 恰好两个六星 → 双黄蛋
+          fourSix: (sixN > 3)       // 超过三个六星（≥4）→ 绝世欧皇
+        };
       } else {
         pm.gacha.lastTen = null;
       }
