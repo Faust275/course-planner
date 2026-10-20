@@ -3435,7 +3435,54 @@ window.AK_OPS = [
         catch (e2) { return Promise.reject(e2); }
       });
     }
-    return { load: load, save: save, idbOK: idbOK };
+    /** 列出带指定前缀的 key（备份管理用）；IDB 与 localStorage 都支持 */
+    function keys(prefix) {
+      if (!idbOK()) {
+        try {
+          var out = [];
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(prefix) === 0) out.push(k);
+          }
+          return Promise.resolve(out);
+        } catch (e) { return Promise.resolve([]); }
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve) {
+          try {
+            var req = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys();
+            req.onsuccess = function () {
+              resolve((req.result || []).filter(function (k) {
+                return typeof k === 'string' && k.indexOf(prefix) === 0;
+              }));
+            };
+            req.onerror = function () { resolve([]); };
+          } catch (e) { resolve([]); }
+        });
+      }).catch(function () { return Promise.resolve([]); });
+    }
+
+    function remove(key) {
+      if (!idbOK()) {
+        try { localStorage.removeItem(key); } catch (e) {}
+        return Promise.resolve();
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { resolve(); };
+            tx.onabort = function () { resolve(); };
+          } catch (e) { resolve(); }
+        });
+      }).catch(function () {
+        try { localStorage.removeItem(key); } catch (e) {}
+      });
+    }
+
+    return { load: load, save: save, remove: remove, keys: keys, idbOK: idbOK };
   })();
 
   /* ---------- 预设 ---------- */
@@ -4420,6 +4467,111 @@ window.AK_OPS = [
     },
 
     persist: Persist,
+
+    /* ===== 自动备份：破坏性操作前的回滚点 ===== */
+    BK_PREFIX: 'cp-backup-',
+    BK_INDEX: 'cp-backup-index',
+    BK_MAX: 5,
+
+    /** 存一份当前数据的快照；返回备份元信息（异步，不阻塞调用方） */
+    backupNow: function (reason) {
+      var self = this;
+      var ts = Date.now();
+      var key = this.BK_PREFIX + ts;
+      var str;
+      try { str = this.exportJSON('full'); } catch (e) { return Promise.resolve(null); }
+      // 空数据没必要占备份位
+      var probe = null;
+      try { probe = JSON.parse(str); } catch (e) { probe = null; }
+      if (!probe) return Promise.resolve(null);
+      var n = (probe.courses || []).length + (probe.tasks || []).length +
+              (probe.ledger || []).length + (probe.notes || []).length +
+              (probe.plans || []).length + (probe.events || []).length;
+      if (n === 0) return Promise.resolve(null);
+
+      var meta = {
+        key: key, ts: ts, reason: reason || '手动',
+        bytes: str.length,
+        courses: (probe.courses || []).length,
+        tasks: (probe.tasks || []).length,
+        ledger: (probe.ledger || []).length,
+        notes: (probe.notes || []).length
+      };
+      return Persist.save(key, str).then(function () {
+        return self._bkAddIndex(meta);
+      }).then(function () {
+        return self._bkTrim();
+      }).catch(function (e) {
+        console.warn('备份失败', e);
+        return null;
+      }).then(function () { return meta; });
+    },
+
+    _bkReadIndex: function () {
+      return Persist.load(this.BK_INDEX).then(function (raw) {
+        if (!raw) return [];
+        try { var a = JSON.parse(raw); return Array.isArray(a) ? a : []; }
+        catch (e) { return []; }
+      }).catch(function () { return []; });
+    },
+
+    _bkAddIndex: function (meta) {
+      var self = this;
+      return this._bkReadIndex().then(function (list) {
+        list.push(meta);
+        list.sort(function (a, b) { return b.ts - a.ts; });   // 新的在前
+        return Persist.save(self.BK_INDEX, JSON.stringify(list));
+      });
+    },
+
+    /** 只保留最近 BK_MAX 份，删掉更老的 */
+    _bkTrim: function () {
+      var self = this;
+      return this._bkReadIndex().then(function (list) {
+        if (list.length <= self.BK_MAX) return list;
+        var keep = list.slice(0, self.BK_MAX);
+        var drop = list.slice(self.BK_MAX);
+        return Promise.all(drop.map(function (m) { return Persist.remove(m.key); }))
+          .then(function () { return Persist.save(self.BK_INDEX, JSON.stringify(keep)); })
+          .then(function () { return keep; });
+      });
+    },
+
+    /** 列出备份（新的在前） */
+    listBackups: function () {
+      return this._bkReadIndex();
+    },
+
+    /** 读取某份备份的 JSON 文本 */
+    loadBackup: function (key) {
+      if (!key || key.indexOf(this.BK_PREFIX) !== 0) return Promise.reject(new Error('备份不存在'));
+      return Persist.load(key).then(function (raw) {
+        if (!raw) throw new Error('备份内容已丢失');
+        return raw;
+      });
+    },
+
+    /** 从某份备份恢复：先把当前状态也存一份，再覆盖 */
+    restoreBackup: function (key) {
+      var self = this;
+      return this.backupNow('恢复前').then(function () {
+        return self.loadBackup(key);
+      }).then(function (text) {
+        self.importJSON(text);
+        return true;
+      });
+    },
+
+    /** 删除单份备份 */
+    deleteBackup: function (key) {
+      var self = this;
+      return Persist.remove(key).then(function () {
+        return self._bkReadIndex();
+      }).then(function (list) {
+        var keep = list.filter(function (m) { return m.key !== key; });
+        return Persist.save(self.BK_INDEX, JSON.stringify(keep)).then(function () { return keep; });
+      });
+    },
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () {
       this.save();
@@ -8010,6 +8162,267 @@ window.AK_OPS = [
     view.render();
   }
 
+  /* ==========================================================
+   * 批量导入：粘贴教务系统 / Excel 的课表文本
+   * 设计取向是「宽容」——不要求用户按规定格式写，尽量自动认列。
+   * ========================================================== */
+  var DAY_CN = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7 };
+
+  // 表头关键词：命中即认为该列是对应字段
+  var HEAD_KEYS = {
+    name: ['课程名', '课程名称', '课程', '科目'],
+    teacher: ['任课教师', '授课教师', '教师', '老师'],
+    location: ['上课地点', '教室', '地点', '位置'],
+    day: ['星期', '上课日', '日期'],
+    period: ['节次', '节数', '上课时间', '课时', '时间'],
+    week: ['上课周', '周次', '起止周']
+  };
+
+  function splitRow(line) {
+    if (line.indexOf('\t') >= 0) return line.split('\t');            // Excel 直接复制
+    if (line.indexOf(',') >= 0) return line.split(',');
+    if (line.indexOf('，') >= 0) return line.split('，');
+    var parts = line.split(/\s{2,}/);                                // 先按对齐用的多空格切
+    // 只用单个空格分隔时也别整行当一格（例：周一 第1-2节 高等数学）
+    if (parts.length < 2 && /\s/.test(line)) parts = line.split(/\s+/);
+    return parts;
+  }
+
+  /** 星期：周一 / 星期天 / 3 -> 1..7；认不出返回 0 */
+  function parseDay(text) {
+    var t = String(text || '').trim();
+    var m = /(?:星期|周)\s*([一二三四五六日天])/.exec(t);
+    if (m) return DAY_CN[m[1]] || 0;
+    m = /(?:星期|周)\s*([1-7])/.exec(t);
+    if (m) return +m[1];
+    if (/^[一二三四五六日天]$/.test(t)) return DAY_CN[t] || 0;
+    if (/^[1-7]$/.test(t)) return +t;
+    return 0;
+  }
+
+  /** 节次：第1-2节 / 1,2 / 3节 -> [1,2]；认不出返回 [] */
+  function parsePeriodNums(text) {
+    var t = String(text || '').trim();
+    var out = [];
+    var m = /(\d+)\s*[-~－至]\s*(\d+)/.exec(t);        // 1-2 这样的连续区间
+    if (m) {
+      var a = +m[1], b = +m[2];
+      if (a >= 1 && b >= a && b - a < 12) { for (var i = a; i <= b; i++) out.push(i); }
+    } else {
+      var nums = t.match(/\d+/g) || [];
+      nums.forEach(function (n) { var v = +n; if (v >= 1 && v <= 20) out.push(v); });
+    }
+    return out;
+  }
+
+  /** 周次：1-16周 / 1-16 -> {start,end}；认不出返回 null */
+  function parseWeeks(text) {
+    var t = String(text || '').trim();
+    if (!t) return null;
+    var m = /(\d+)\s*[-~－至]\s*(\d+)/.exec(t);
+    if (m) return { start: +m[1], end: +m[2] };
+    var n = t.match(/\d+/g);
+    if (n && n.length) return { start: +n[0], end: +n[0] };
+    return null;
+  }
+
+  function looksLikeWeekField(text) {
+    var t = String(text || '');
+    return /周\s*$/.test(t.trim()) && /\d+\s*[-~－至]\s*\d+/.test(t);
+  }
+
+  /**
+   * 解析课表文本。
+   * 返回 { rows:[{name,teacher,location,day,periods,weeks}], skipped:[原行], cols }。
+   * rows 里 day/periods 缺失的行会带 missing 标记，交给 UI 提示。
+   */
+  function parseCourseTable(text) {
+    var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); })
+      .filter(function (l) { return l; });
+    var rows = [], skipped = [], cols = null;
+
+    // 1) 探表头：首行里能匹配到两个及以上关键词就当表头
+    var first = splitRow(lines[0] || '');
+    var hit = {};
+    first.forEach(function (c, i) {
+      var t = String(c || '').trim();
+      Object.keys(HEAD_KEYS).forEach(function (k) {
+        if (hit[k] != null) return;
+        for (var j = 0; j < HEAD_KEYS[k].length; j++) {
+          if (t.indexOf(HEAD_KEYS[k][j]) >= 0) { hit[k] = i; return; }
+        }
+      });
+    });
+    var isHead = Object.keys(hit).length >= 2;
+    if (isHead) { cols = hit; lines = lines.slice(1); }
+
+    // 2) 逐行解析
+    lines.forEach(function (line) {
+      var p = splitRow(line).map(function (x) { return String(x || '').trim(); })
+        .filter(function (x) { return x; });
+      if (!p.length) return;
+      var r = { name: '', teacher: '', location: '', day: 0, periods: [], weeks: null, raw: line };
+
+      if (cols) {
+        if (cols.name != null) r.name = p[cols.name] || '';
+        if (cols.teacher != null) r.teacher = p[cols.teacher] || '';
+        if (cols.location != null) r.location = p[cols.location] || '';
+        if (cols.day != null) r.day = parseDay(p[cols.day]);
+        if (cols.period != null) r.periods = parsePeriodNums(p[cols.period]);
+        if (cols.week != null) r.weeks = parseWeeks(p[cols.week]);
+      } else {
+        // 无表头：逐格猜
+        p.forEach(function (cell) {
+          var d = parseDay(cell);
+          if (d && !r.day) { r.day = d; return; }
+          if (looksLikeWeekField(cell)) { r.weeks = parseWeeks(cell); return; }
+          var pn = parsePeriodNums(cell);
+          // 「节次」特征：带「节」字，或纯数字且值不大
+          if (pn.length && (/节/.test(cell) || /^\d+(\s*[-~－至]\s*\d+)?$/.test(cell)) && !r.periods.length) {
+            r.periods = pn; return;
+          }
+          if (!r.name) { r.name = cell; return; }
+          if (/[楼室馆场]|[\d]+[号]|[A-Za-z]-?\d/.test(cell) && !r.location) { r.location = cell; return; }
+          if (!r.teacher && cell.length <= 6) { r.teacher = cell; return; }
+          if (!r.location) r.location = cell;
+        });
+      }
+
+      r.missing = (!r.name || !r.day || !r.periods.length);
+      if (r.missing) skipped.push(line);
+      else rows.push(r);
+    });
+
+    return { rows: rows, skipped: skipped, cols: cols };
+  }
+
+  /** 批量导入弹窗：粘贴 → 预览 → 确认 */
+  function batchImportDialog() {
+    var ta = V.textarea({
+      class: 'textarea sync-code', rows: 8,
+      placeholder: '把教务系统或 Excel 里的课表整段粘进来，一行一门课。\n' +
+                   '示例：高等数学\t张老师\t教学楼A301\t周一\t1-2节\t1-16周\n' +
+                   '也可以写：周一 第1-2节 高等数学 张老师 A301'
+    });
+    var m = V.modal({
+      title: '批量导入课表',
+      width: '620px',
+      autofocus: true,
+      body: [
+        el('p', {
+          class: 'ocr-hint',
+          text: '支持 Tab（Excel 直接复制）、逗号或空格分隔。会自动跳过表头，' +
+                '认出课程名、星期、节次即可导入，老师和地点认不出会留空，导入后还能逐门改。'
+        }),
+        ta,
+        el('div', { id: 'cpBatchPreview', style: { marginTop: '10px' } })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '解析并预览',
+          onclick: function () { preview(ta.value); }
+        })
+      ])
+    });
+
+    function preview(text) {
+      var host = m.el ? m.el.querySelector('#cpBatchPreview') : document.getElementById('cpBatchPreview');
+      if (!host) return;
+      host.innerHTML = '';
+      var res = parseCourseTable(text);
+      if (!res.rows.length) {
+        host.appendChild(el('div', {
+          class: 'ocr-hint',
+          text: '没解析出课程。至少要能看出「课程名 + 星期 + 节次」，比如：高等数学 周一 1-2节'
+        }));
+        if (res.skipped.length) {
+          host.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '跳过了 ' + res.skipped.length + ' 行（信息不全）：' + res.skipped.slice(0, 3).join(' / ')
+          }));
+        }
+        return;
+      }
+
+      host.appendChild(el('div', { class: 'section-title' },
+        ['认出 ' + res.rows.length + ' 门课' + (res.skipped.length ? '（跳过 ' + res.skipped.length + ' 行）' : '')]));
+
+      var list = el('div', { style: { maxHeight: '260px', overflow: 'auto' } });
+      res.rows.forEach(function (r) {
+        var dayName = '周' + '一二三四五六日'.charAt(r.day - 1);
+        list.appendChild(el('div', {
+          class: 'setting-row',
+          style: { display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }
+        }, [
+          el('input', {
+            class: 'input', value: r.name,
+            style: { flex: '2', minWidth: '90px' },
+            oninput: function (e) { r.name = e.target.value; }
+          }),
+          el('input', {
+            class: 'input', value: dayName,
+            style: { width: '62px' },
+            oninput: function (e) { r.day = parseDay(e.target.value) || r.day; }
+          }),
+          el('input', {
+            class: 'input', value: r.periods.join('-'),
+            style: { width: '58px' },
+            oninput: function (e) { var n = parsePeriodNums(e.target.value); if (n.length) r.periods = n; }
+          }),
+          el('input', {
+            class: 'input', value: r.teacher || '', placeholder: '老师',
+            style: { flex: '1', minWidth: '60px' },
+            oninput: function (e) { r.teacher = e.target.value; }
+          }),
+          el('input', {
+            class: 'input', value: r.location || '', placeholder: '地点',
+            style: { flex: '1', minWidth: '60px' },
+            oninput: function (e) { r.location = e.target.value; }
+          })
+        ]));
+      });
+      host.appendChild(list);
+
+      host.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          text: '导入这 ' + res.rows.length + ' 门课',
+          onclick: function () { doImport(res.rows, m); }
+        })
+      ]));
+    }
+
+    function doImport(rows, modal) {
+      // 用节次表按序号取 id，这样就算用户自定义过节次（id 不一定是 p1/p2…）也能对上
+      var periods = Store.periods || [];
+      var ok = 0;
+      rows.forEach(function (r) {
+        if (!r.name || !r.day) return;
+        var slots = [];
+        (r.periods || []).forEach(function (n) {
+          var p = periods[n - 1];
+          // 节次超出当前节次表就不排，避免课表上出现空白格
+          if (!p) return;
+          slots.push({ day: r.day, timeMode: 'period', periodId: p.id, location: r.location || '' });
+        });
+        if (!slots.length) return;
+        Store.addCourse({
+          name: r.name,
+          teacher: r.teacher || '',
+          location: r.location || '',
+          slots: slots,
+          startWeek: r.weeks ? r.weeks.start : 1,
+          endWeek: r.weeks ? r.weeks.end : undefined
+        });
+        ok++;
+      });
+      modal.close();
+      UI.toast(ok ? ('已导入 ' + ok + ' 门课') : '没有可导入的课程');
+      if (ok && global.App) App.go('schedule');
+    }
+  }
+
   /** 选格模式底部的操作条 */
   function pickBar() {
     var n = pickCount();
@@ -8075,6 +8488,12 @@ window.AK_OPS = [
           class: 'btn',
           onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); }
         }, [V.svg(V.icons.camera, 16), '导入课表'])
+      );
+      host.appendChild(
+        el('button', {
+          class: 'btn',
+          onclick: function () { batchImportDialog(); }
+        }, [V.svg(V.icons.upload || V.icons.download, 16), '批量导入'])
       );
       host.appendChild(
         el('button', {
@@ -16309,16 +16728,99 @@ window.AK_OPS = [
               class: 'btn btn-danger', onclick: function () {
                 V.confirm({
                   title: '清空全部数据',
-                  message: '将删除所有课程、作业与设置，且无法恢复。建议先导出备份。',
+                  message: '将删除所有课程、作业与设置。清空前会自动存一份本地备份，可在下方「自动备份」里恢复。',
                   danger: true, okText: '清空'
                 }).then(function (ok) {
-                  if (ok) { Store.reset(); UI.toast('已重置为初始状态'); App.go('today'); }
+                  if (!ok) return;
+                  Store.backupNow('清空数据前').then(function () {
+                    Store.reset();
+                    UI.toast('已重置为初始状态（原数据已自动备份）');
+                    App.go('today');
+                  });
                 });
               }
             }, [V.svg(V.icons.trash, 16), '清空数据'])
           ])
         ]);
         root.appendChild(dataCard);
+
+        /* ---- 自动备份（清空 / 覆盖前的回滚点） ---- */
+        var bkCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['自动备份']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '清空数据、导入备份或粘贴同步码覆盖前，会自动在本机存一份快照（最多保留 ' +
+                  Store.BK_MAX + ' 份）。误操作后可以回到上一份，不用手动先导出。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, [
+            el('button', {
+              class: 'btn', onclick: function () {
+                Store.backupNow('手动').then(function (meta) {
+                  UI.toast(meta ? '已创建备份' : '当前没有数据可备份');
+                  renderBackups();
+                });
+              }
+            }, [V.svg(V.icons.download, 16), '立即备份'])
+          ]),
+          el('div', { id: 'cpBackupList' })
+        ]);
+        root.appendChild(bkCard);
+
+        function renderBackups() {
+          var host = bkCard.querySelector('#cpBackupList');
+          if (!host) return;
+          host.innerHTML = '';
+          Store.listBackups().then(function (list) {
+            if (!list.length) {
+              host.appendChild(el('div', { class: 'ocr-hint', text: '还没有自动备份。' }));
+              return;
+            }
+            list.forEach(function (m) {
+              var d = new Date(m.ts);
+              var when = (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
+                         String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+              var desc = [m.courses + ' 课', m.tasks + ' 待办', m.ledger + ' 账', m.notes + ' 笔记']
+                .filter(function (x) { return !/^0 /.test(x); }).join(' · ');
+              host.appendChild(el('div', {
+                class: 'setting-row',
+                style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--line)' }
+              }, [
+                el('div', { style: { flex: '1', minWidth: '0' } }, [
+                  el('div', { style: { fontSize: '13px', fontWeight: '600' }, text: when + '（' + m.reason + '）' }),
+                  el('div', { class: 'ocr-hint', text: desc || '（空数据）' })
+                ]),
+                el('button', {
+                  class: 'btn btn-sm',
+                  onclick: function () {
+                    V.confirm({
+                      title: '恢复这份备份',
+                      message: '将用 ' + when + ' 的备份覆盖当前数据（当前状态也会先自动备份一次）。',
+                      danger: true, okText: '恢复'
+                    }).then(function (ok) {
+                      if (!ok) return;
+                      Store.restoreBackup(m.key).then(function () {
+                        UI.toast('已恢复');
+                        App.go('schedule');
+                      }).catch(function (e) {
+                        UI.toast('恢复失败：' + e.message, 'err');
+                      });
+                    });
+                  }
+                }, ['恢复']),
+                el('button', {
+                  class: 'btn btn-sm',
+                  onclick: function () {
+                    Store.deleteBackup(m.key).then(function () {
+                      UI.toast('已删除该备份');
+                      renderBackups();
+                    });
+                  }
+                }, ['删除'])
+              ]));
+            });
+          });
+        }
+        renderBackups();
 
         /* ---- 开发者选项 ---- */
         var devInput = V.input({ placeholder: '输入开发者口令', class: 'input', style: { maxWidth: '220px' } });
@@ -16634,13 +17136,15 @@ window.AK_OPS = [
             danger: true, okText: '覆盖导入'
           }).then(function (ok) {
             if (!ok) return;
-            try {
-              Store.importJSON(String(reader.result));
-              UI.toast('导入成功');
-              App.go('schedule');
-            } catch (err) {
-              UI.toast('导入失败：' + err.message, 'err');
-            }
+            Store.backupNow('导入备份前').then(function () {
+              try {
+                Store.importJSON(String(reader.result));
+                UI.toast('导入成功（已自动备份原数据）');
+                App.go('schedule');
+              } catch (err) {
+                UI.toast('导入失败：' + err.message, 'err');
+              }
+            });
           });
         } catch (e) {
           UI.toast('文件不是有效的 JSON', 'err');
@@ -16685,26 +17189,116 @@ window.AK_OPS = [
     return Promise.resolve('CP1R' + bytesToB64(raw));
   }
 
+  /* ---------- 分片：长码切成几段，方便微信分段发送 ---------- */
+  var PART_HEAD = 'CP1P';     // 分片头：CP1P + 总数(2位) + 序号(2位)
+  var PART_SIZE = 700;        // 每片字符数（微信单条消息轻松容纳）
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /** 同步码 → 分片数组；码不长时返回 null（表示无需分片，保持旧格式） */
+  function splitSyncCode(code) {
+    if (!code || code.length <= PART_SIZE) return null;
+    var n = Math.ceil(code.length / PART_SIZE);
+    if (n > 99) return null;                 // 超出 2 位序号上限，不分片
+    var parts = [];
+    for (var i = 0; i < n; i++) {
+      parts.push(PART_HEAD + pad2(n) + pad2(i + 1) + code.substr(i * PART_SIZE, PART_SIZE));
+    }
+    return parts;
+  }
+
+  /**
+   * 从粘贴内容里提取并拼回同步码。
+   * 支持一次粘多片（顺序任意、可夹杂换行与「【1/3】」这类标注）。
+   * 返回 null 表示不是分片格式；否则返回 { total, missing, code }。
+   */
+  function joinSyncParts(text) {
+    var s = String(text || '');
+    var pos = [], idx = 0;
+    while (true) {
+      var at = s.indexOf(PART_HEAD, idx);
+      if (at < 0) break;
+      pos.push(at);
+      idx = at + PART_HEAD.length;
+    }
+    if (!pos.length) return null;
+
+    var total = 0, got = {};
+    for (var i = 0; i < pos.length; i++) {
+      var seg = s.slice(pos[i], i + 1 < pos.length ? pos[i + 1] : s.length);
+      var tn = parseInt(seg.substr(4, 2), 10);
+      var sq = parseInt(seg.substr(6, 2), 10);
+      if (!tn || !sq) continue;
+      total = tn;
+      // 只取紧随其后的连续 base64 字符：遇到中文、【标注】、换行或微信的
+      // "上午10:30" 之类的附加文字就停止，避免把噪音数字当成内容拼进去
+      var m = /^[A-Za-z0-9+/=]+/.exec(seg.substr(8));
+      got[sq] = m ? m[0] : '';
+    }
+    if (!total) return null;
+    var missing = [];
+    for (var k = 1; k <= total; k++) if (!got[k]) missing.push(k);
+    var code = null;
+    if (!missing.length) {
+      code = Object.keys(got).sort(function (a, b) { return a - b; })
+        .map(function (k2) { return got[k2]; }).join('');
+    }
+    return { total: total, missing: missing, code: code };
+  }
+
   /** 同步码 → 备份 JSON */
   function unpackSync(code) {
     var s = String(code || '').replace(/\s+/g, '');
     if (!s) return Promise.reject(new Error('请先粘贴同步码'));
     if (s.charAt(0) === '{') return Promise.resolve(String(code));   // 直接粘了原始 JSON
+
+    // 分片格式：先拼回完整码再走原来的解析
+    if (s.indexOf(PART_HEAD) >= 0) {
+      var j = joinSyncParts(s);
+      if (j && j.total) {
+        if (j.missing.length) {
+          return Promise.reject(new Error(
+            '还差第 ' + j.missing.join('、') + ' 片（共 ' + j.total + ' 片），' +
+            '请把缺的那几片也一起粘贴进来'
+          ));
+        }
+        s = j.code;
+      }
+    }
     var head = s.slice(0, 4), body = s.slice(4);
     var bytes;
     try { bytes = b64ToBytes(body); }
     catch (e) { return Promise.reject(new Error('同步码不完整或已损坏')); }
-    if (head === 'CP1R') return Promise.resolve(new TextDecoder().decode(bytes));
+    if (head === 'CP1R') {
+      var txt = new TextDecoder().decode(bytes);
+      // 未压缩档内容是裸 JSON，先自检，别等到覆盖时才报错
+      try { JSON.parse(txt); }
+      catch (e) {
+        return Promise.reject(new Error('同步码不完整（收到 ' + s.length + ' 字符），多半是复制时被截断了，请重新完整复制一遍'));
+      }
+      return Promise.resolve(txt);
+    }
     if (head === 'CP1G') {
       if (typeof DecompressionStream === 'undefined') {
-        return Promise.reject(new Error('这台设备不支持解压，请改用文件备份'));
+        return Promise.reject(new Error('这台设备不支持解压，请改用「导出备份」传文件'));
       }
       return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')))
         .arrayBuffer()
-        .then(function (buf) { return new TextDecoder().decode(buf); })
-        .catch(function () { return Promise.reject(new Error('同步码损坏，请重新复制')); });
+        .then(function (buf) {
+          var txt = new TextDecoder().decode(buf);
+          try { JSON.parse(txt); }      // 解压成功也要校验，避免导入半份 JSON
+          catch (e) { throw new Error('内容不完整'); }
+          return txt;
+        })
+        .catch(function () {
+          // 压缩档自带校验，解压失败几乎只可能是复制漏了开头或结尾
+          return Promise.reject(new Error(
+            '同步码不完整（收到 ' + s.length + ' 字符），多半是复制时漏了开头或结尾。' +
+            '请回到原来那台设备重新完整复制，微信里建议分段发送。'
+          ));
+        });
     }
-    return Promise.reject(new Error('不是有效的同步码，请整段复制'));
+    return Promise.reject(new Error('不是有效的同步码（开头应为 CP1G 或 CP1R），请整段复制'));
   }
 
   function copyToClipboard(text, ta) {
@@ -16741,6 +17335,7 @@ window.AK_OPS = [
     var code = '';
     var ta = V.textarea({ class: 'textarea sync-code', rows: 5, readonly: 'readonly' });
     var sizeTip = el('div', { class: 'ocr-hint', text: '' });
+    var partHost = el('div');
     var scopeTip = el('p', { class: 'ocr-hint', text: '' });
     var chipBar = el('div', { class: 'tag-bar' });
     var m = V.modal({
@@ -16756,7 +17351,8 @@ window.AK_OPS = [
         chipBar,
         scopeTip,
         ta,
-        sizeTip
+        sizeTip,
+        partHost
       ],
       footer: el('div', { class: 'modal-foot' }, [
         el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
@@ -16785,17 +17381,40 @@ window.AK_OPS = [
     function refresh() {
       sizeTip.textContent = '正在生成…';
       ta.value = '';
+      partHost.innerHTML = '';
       packSync(Store.exportJSON(scope)).then(function (c) {
         code = c;
-        ta.value = c;
         var kb = (c.length / 1024).toFixed(1);
-        var big = c.length > 80000;
-        sizeTip.textContent = '大小约 ' + kb + ' KB（' + c.length + ' 字符）' +
-          (big ? '，偏大，建议改用「导出备份」传文件' : '');
+        var parts = splitSyncCode(c);
+        if (parts) {
+          // 太长就分片：文本框给出带序号的全部内容，便于一条条发
+          ta.value = parts.map(function (p, i) {
+            return '【' + (i + 1) + '/' + parts.length + '】' + p;
+          }).join('\n');
+          sizeTip.textContent = '共 ' + c.length + ' 字符，已分成 ' + parts.length +
+            ' 片（每片约 ' + PART_SIZE + ' 字符）。微信里建议一条一片发送。';
+          renderPartButtons(parts);
+        } else {
+          ta.value = c;
+          sizeTip.textContent = '大小约 ' + kb + ' KB（' + c.length + ' 字符）' +
+            (c.length > 80000 ? '，偏大，建议改用「导出备份」传文件' : '');
+        }
       }).catch(function (e) {
         code = '';
         sizeTip.textContent = '生成失败：' + e.message;
       });
+    }
+
+    function renderPartButtons(parts) {
+      var bar = el('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } });
+      parts.forEach(function (p, i) {
+        bar.appendChild(el('button', {
+          class: 'btn btn-sm',
+          text: '复制第 ' + (i + 1) + ' 片',
+          onclick: function () { copyToClipboard(p, ta); }
+        }));
+      });
+      partHost.appendChild(bar);
     }
 
     renderChips();
@@ -16815,7 +17434,8 @@ window.AK_OPS = [
       body: [
         el('p', {
           class: 'ocr-hint',
-          text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。'
+          text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。' +
+                '如果对方发来的是多片，把几片全部粘进来即可，顺序乱了也没关系；少粘了会提示还差哪几片。'
         }),
         ta
       ],
@@ -16847,10 +17467,12 @@ window.AK_OPS = [
         danger: true, okText: '覆盖同步'
       }).then(function (ok) {
         if (!ok) return;
-        Store.importJSON(json);
-        m.close();
-        UI.toast('同步完成');
-        App.go('schedule');
+        Store.backupNow('同步覆盖前').then(function () {
+          Store.importJSON(json);
+          m.close();
+          UI.toast('同步完成（已自动备份原数据）');
+          App.go('schedule');
+        });
       });
     }).catch(function (e) {
       UI.toast('同步失败：' + e.message, 'err');

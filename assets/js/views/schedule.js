@@ -31,6 +31,267 @@
     view.render();
   }
 
+  /* ==========================================================
+   * 批量导入：粘贴教务系统 / Excel 的课表文本
+   * 设计取向是「宽容」——不要求用户按规定格式写，尽量自动认列。
+   * ========================================================== */
+  var DAY_CN = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 7, '天': 7 };
+
+  // 表头关键词：命中即认为该列是对应字段
+  var HEAD_KEYS = {
+    name: ['课程名', '课程名称', '课程', '科目'],
+    teacher: ['任课教师', '授课教师', '教师', '老师'],
+    location: ['上课地点', '教室', '地点', '位置'],
+    day: ['星期', '上课日', '日期'],
+    period: ['节次', '节数', '上课时间', '课时', '时间'],
+    week: ['上课周', '周次', '起止周']
+  };
+
+  function splitRow(line) {
+    if (line.indexOf('\t') >= 0) return line.split('\t');            // Excel 直接复制
+    if (line.indexOf(',') >= 0) return line.split(',');
+    if (line.indexOf('，') >= 0) return line.split('，');
+    var parts = line.split(/\s{2,}/);                                // 先按对齐用的多空格切
+    // 只用单个空格分隔时也别整行当一格（例：周一 第1-2节 高等数学）
+    if (parts.length < 2 && /\s/.test(line)) parts = line.split(/\s+/);
+    return parts;
+  }
+
+  /** 星期：周一 / 星期天 / 3 -> 1..7；认不出返回 0 */
+  function parseDay(text) {
+    var t = String(text || '').trim();
+    var m = /(?:星期|周)\s*([一二三四五六日天])/.exec(t);
+    if (m) return DAY_CN[m[1]] || 0;
+    m = /(?:星期|周)\s*([1-7])/.exec(t);
+    if (m) return +m[1];
+    if (/^[一二三四五六日天]$/.test(t)) return DAY_CN[t] || 0;
+    if (/^[1-7]$/.test(t)) return +t;
+    return 0;
+  }
+
+  /** 节次：第1-2节 / 1,2 / 3节 -> [1,2]；认不出返回 [] */
+  function parsePeriodNums(text) {
+    var t = String(text || '').trim();
+    var out = [];
+    var m = /(\d+)\s*[-~－至]\s*(\d+)/.exec(t);        // 1-2 这样的连续区间
+    if (m) {
+      var a = +m[1], b = +m[2];
+      if (a >= 1 && b >= a && b - a < 12) { for (var i = a; i <= b; i++) out.push(i); }
+    } else {
+      var nums = t.match(/\d+/g) || [];
+      nums.forEach(function (n) { var v = +n; if (v >= 1 && v <= 20) out.push(v); });
+    }
+    return out;
+  }
+
+  /** 周次：1-16周 / 1-16 -> {start,end}；认不出返回 null */
+  function parseWeeks(text) {
+    var t = String(text || '').trim();
+    if (!t) return null;
+    var m = /(\d+)\s*[-~－至]\s*(\d+)/.exec(t);
+    if (m) return { start: +m[1], end: +m[2] };
+    var n = t.match(/\d+/g);
+    if (n && n.length) return { start: +n[0], end: +n[0] };
+    return null;
+  }
+
+  function looksLikeWeekField(text) {
+    var t = String(text || '');
+    return /周\s*$/.test(t.trim()) && /\d+\s*[-~－至]\s*\d+/.test(t);
+  }
+
+  /**
+   * 解析课表文本。
+   * 返回 { rows:[{name,teacher,location,day,periods,weeks}], skipped:[原行], cols }。
+   * rows 里 day/periods 缺失的行会带 missing 标记，交给 UI 提示。
+   */
+  function parseCourseTable(text) {
+    var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); })
+      .filter(function (l) { return l; });
+    var rows = [], skipped = [], cols = null;
+
+    // 1) 探表头：首行里能匹配到两个及以上关键词就当表头
+    var first = splitRow(lines[0] || '');
+    var hit = {};
+    first.forEach(function (c, i) {
+      var t = String(c || '').trim();
+      Object.keys(HEAD_KEYS).forEach(function (k) {
+        if (hit[k] != null) return;
+        for (var j = 0; j < HEAD_KEYS[k].length; j++) {
+          if (t.indexOf(HEAD_KEYS[k][j]) >= 0) { hit[k] = i; return; }
+        }
+      });
+    });
+    var isHead = Object.keys(hit).length >= 2;
+    if (isHead) { cols = hit; lines = lines.slice(1); }
+
+    // 2) 逐行解析
+    lines.forEach(function (line) {
+      var p = splitRow(line).map(function (x) { return String(x || '').trim(); })
+        .filter(function (x) { return x; });
+      if (!p.length) return;
+      var r = { name: '', teacher: '', location: '', day: 0, periods: [], weeks: null, raw: line };
+
+      if (cols) {
+        if (cols.name != null) r.name = p[cols.name] || '';
+        if (cols.teacher != null) r.teacher = p[cols.teacher] || '';
+        if (cols.location != null) r.location = p[cols.location] || '';
+        if (cols.day != null) r.day = parseDay(p[cols.day]);
+        if (cols.period != null) r.periods = parsePeriodNums(p[cols.period]);
+        if (cols.week != null) r.weeks = parseWeeks(p[cols.week]);
+      } else {
+        // 无表头：逐格猜
+        p.forEach(function (cell) {
+          var d = parseDay(cell);
+          if (d && !r.day) { r.day = d; return; }
+          if (looksLikeWeekField(cell)) { r.weeks = parseWeeks(cell); return; }
+          var pn = parsePeriodNums(cell);
+          // 「节次」特征：带「节」字，或纯数字且值不大
+          if (pn.length && (/节/.test(cell) || /^\d+(\s*[-~－至]\s*\d+)?$/.test(cell)) && !r.periods.length) {
+            r.periods = pn; return;
+          }
+          if (!r.name) { r.name = cell; return; }
+          if (/[楼室馆场]|[\d]+[号]|[A-Za-z]-?\d/.test(cell) && !r.location) { r.location = cell; return; }
+          if (!r.teacher && cell.length <= 6) { r.teacher = cell; return; }
+          if (!r.location) r.location = cell;
+        });
+      }
+
+      r.missing = (!r.name || !r.day || !r.periods.length);
+      if (r.missing) skipped.push(line);
+      else rows.push(r);
+    });
+
+    return { rows: rows, skipped: skipped, cols: cols };
+  }
+
+  /** 批量导入弹窗：粘贴 → 预览 → 确认 */
+  function batchImportDialog() {
+    var ta = V.textarea({
+      class: 'textarea sync-code', rows: 8,
+      placeholder: '把教务系统或 Excel 里的课表整段粘进来，一行一门课。\n' +
+                   '示例：高等数学\t张老师\t教学楼A301\t周一\t1-2节\t1-16周\n' +
+                   '也可以写：周一 第1-2节 高等数学 张老师 A301'
+    });
+    var m = V.modal({
+      title: '批量导入课表',
+      width: '620px',
+      autofocus: true,
+      body: [
+        el('p', {
+          class: 'ocr-hint',
+          text: '支持 Tab（Excel 直接复制）、逗号或空格分隔。会自动跳过表头，' +
+                '认出课程名、星期、节次即可导入，老师和地点认不出会留空，导入后还能逐门改。'
+        }),
+        ta,
+        el('div', { id: 'cpBatchPreview', style: { marginTop: '10px' } })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '解析并预览',
+          onclick: function () { preview(ta.value); }
+        })
+      ])
+    });
+
+    function preview(text) {
+      var host = m.el ? m.el.querySelector('#cpBatchPreview') : document.getElementById('cpBatchPreview');
+      if (!host) return;
+      host.innerHTML = '';
+      var res = parseCourseTable(text);
+      if (!res.rows.length) {
+        host.appendChild(el('div', {
+          class: 'ocr-hint',
+          text: '没解析出课程。至少要能看出「课程名 + 星期 + 节次」，比如：高等数学 周一 1-2节'
+        }));
+        if (res.skipped.length) {
+          host.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '跳过了 ' + res.skipped.length + ' 行（信息不全）：' + res.skipped.slice(0, 3).join(' / ')
+          }));
+        }
+        return;
+      }
+
+      host.appendChild(el('div', { class: 'section-title' },
+        ['认出 ' + res.rows.length + ' 门课' + (res.skipped.length ? '（跳过 ' + res.skipped.length + ' 行）' : '')]));
+
+      var list = el('div', { style: { maxHeight: '260px', overflow: 'auto' } });
+      res.rows.forEach(function (r) {
+        var dayName = '周' + '一二三四五六日'.charAt(r.day - 1);
+        list.appendChild(el('div', {
+          class: 'setting-row',
+          style: { display: 'flex', gap: '8px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--line)' }
+        }, [
+          el('input', {
+            class: 'input', value: r.name,
+            style: { flex: '2', minWidth: '90px' },
+            oninput: function (e) { r.name = e.target.value; }
+          }),
+          el('input', {
+            class: 'input', value: dayName,
+            style: { width: '62px' },
+            oninput: function (e) { r.day = parseDay(e.target.value) || r.day; }
+          }),
+          el('input', {
+            class: 'input', value: r.periods.join('-'),
+            style: { width: '58px' },
+            oninput: function (e) { var n = parsePeriodNums(e.target.value); if (n.length) r.periods = n; }
+          }),
+          el('input', {
+            class: 'input', value: r.teacher || '', placeholder: '老师',
+            style: { flex: '1', minWidth: '60px' },
+            oninput: function (e) { r.teacher = e.target.value; }
+          }),
+          el('input', {
+            class: 'input', value: r.location || '', placeholder: '地点',
+            style: { flex: '1', minWidth: '60px' },
+            oninput: function (e) { r.location = e.target.value; }
+          })
+        ]));
+      });
+      host.appendChild(list);
+
+      host.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          text: '导入这 ' + res.rows.length + ' 门课',
+          onclick: function () { doImport(res.rows, m); }
+        })
+      ]));
+    }
+
+    function doImport(rows, modal) {
+      // 用节次表按序号取 id，这样就算用户自定义过节次（id 不一定是 p1/p2…）也能对上
+      var periods = Store.periods || [];
+      var ok = 0;
+      rows.forEach(function (r) {
+        if (!r.name || !r.day) return;
+        var slots = [];
+        (r.periods || []).forEach(function (n) {
+          var p = periods[n - 1];
+          // 节次超出当前节次表就不排，避免课表上出现空白格
+          if (!p) return;
+          slots.push({ day: r.day, timeMode: 'period', periodId: p.id, location: r.location || '' });
+        });
+        if (!slots.length) return;
+        Store.addCourse({
+          name: r.name,
+          teacher: r.teacher || '',
+          location: r.location || '',
+          slots: slots,
+          startWeek: r.weeks ? r.weeks.start : 1,
+          endWeek: r.weeks ? r.weeks.end : undefined
+        });
+        ok++;
+      });
+      modal.close();
+      UI.toast(ok ? ('已导入 ' + ok + ' 门课') : '没有可导入的课程');
+      if (ok && global.App) App.go('schedule');
+    }
+  }
+
   /** 选格模式底部的操作条 */
   function pickBar() {
     var n = pickCount();
@@ -96,6 +357,12 @@
           class: 'btn',
           onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); }
         }, [V.svg(V.icons.camera, 16), '导入课表'])
+      );
+      host.appendChild(
+        el('button', {
+          class: 'btn',
+          onclick: function () { batchImportDialog(); }
+        }, [V.svg(V.icons.upload || V.icons.download, 16), '批量导入'])
       );
       host.appendChild(
         el('button', {

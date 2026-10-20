@@ -68,7 +68,54 @@
         catch (e2) { return Promise.reject(e2); }
       });
     }
-    return { load: load, save: save, idbOK: idbOK };
+    /** 列出带指定前缀的 key（备份管理用）；IDB 与 localStorage 都支持 */
+    function keys(prefix) {
+      if (!idbOK()) {
+        try {
+          var out = [];
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf(prefix) === 0) out.push(k);
+          }
+          return Promise.resolve(out);
+        } catch (e) { return Promise.resolve([]); }
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve) {
+          try {
+            var req = db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys();
+            req.onsuccess = function () {
+              resolve((req.result || []).filter(function (k) {
+                return typeof k === 'string' && k.indexOf(prefix) === 0;
+              }));
+            };
+            req.onerror = function () { resolve([]); };
+          } catch (e) { resolve([]); }
+        });
+      }).catch(function () { return Promise.resolve([]); });
+    }
+
+    function remove(key) {
+      if (!idbOK()) {
+        try { localStorage.removeItem(key); } catch (e) {}
+        return Promise.resolve();
+      }
+      return openDB().then(function (db) {
+        return new Promise(function (resolve) {
+          try {
+            var tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(key);
+            tx.oncomplete = function () { resolve(); };
+            tx.onerror = function () { resolve(); };
+            tx.onabort = function () { resolve(); };
+          } catch (e) { resolve(); }
+        });
+      }).catch(function () {
+        try { localStorage.removeItem(key); } catch (e) {}
+      });
+    }
+
+    return { load: load, save: save, remove: remove, keys: keys, idbOK: idbOK };
   })();
 
   /* ---------- 预设 ---------- */
@@ -1053,6 +1100,111 @@
     },
 
     persist: Persist,
+
+    /* ===== 自动备份：破坏性操作前的回滚点 ===== */
+    BK_PREFIX: 'cp-backup-',
+    BK_INDEX: 'cp-backup-index',
+    BK_MAX: 5,
+
+    /** 存一份当前数据的快照；返回备份元信息（异步，不阻塞调用方） */
+    backupNow: function (reason) {
+      var self = this;
+      var ts = Date.now();
+      var key = this.BK_PREFIX + ts;
+      var str;
+      try { str = this.exportJSON('full'); } catch (e) { return Promise.resolve(null); }
+      // 空数据没必要占备份位
+      var probe = null;
+      try { probe = JSON.parse(str); } catch (e) { probe = null; }
+      if (!probe) return Promise.resolve(null);
+      var n = (probe.courses || []).length + (probe.tasks || []).length +
+              (probe.ledger || []).length + (probe.notes || []).length +
+              (probe.plans || []).length + (probe.events || []).length;
+      if (n === 0) return Promise.resolve(null);
+
+      var meta = {
+        key: key, ts: ts, reason: reason || '手动',
+        bytes: str.length,
+        courses: (probe.courses || []).length,
+        tasks: (probe.tasks || []).length,
+        ledger: (probe.ledger || []).length,
+        notes: (probe.notes || []).length
+      };
+      return Persist.save(key, str).then(function () {
+        return self._bkAddIndex(meta);
+      }).then(function () {
+        return self._bkTrim();
+      }).catch(function (e) {
+        console.warn('备份失败', e);
+        return null;
+      }).then(function () { return meta; });
+    },
+
+    _bkReadIndex: function () {
+      return Persist.load(this.BK_INDEX).then(function (raw) {
+        if (!raw) return [];
+        try { var a = JSON.parse(raw); return Array.isArray(a) ? a : []; }
+        catch (e) { return []; }
+      }).catch(function () { return []; });
+    },
+
+    _bkAddIndex: function (meta) {
+      var self = this;
+      return this._bkReadIndex().then(function (list) {
+        list.push(meta);
+        list.sort(function (a, b) { return b.ts - a.ts; });   // 新的在前
+        return Persist.save(self.BK_INDEX, JSON.stringify(list));
+      });
+    },
+
+    /** 只保留最近 BK_MAX 份，删掉更老的 */
+    _bkTrim: function () {
+      var self = this;
+      return this._bkReadIndex().then(function (list) {
+        if (list.length <= self.BK_MAX) return list;
+        var keep = list.slice(0, self.BK_MAX);
+        var drop = list.slice(self.BK_MAX);
+        return Promise.all(drop.map(function (m) { return Persist.remove(m.key); }))
+          .then(function () { return Persist.save(self.BK_INDEX, JSON.stringify(keep)); })
+          .then(function () { return keep; });
+      });
+    },
+
+    /** 列出备份（新的在前） */
+    listBackups: function () {
+      return this._bkReadIndex();
+    },
+
+    /** 读取某份备份的 JSON 文本 */
+    loadBackup: function (key) {
+      if (!key || key.indexOf(this.BK_PREFIX) !== 0) return Promise.reject(new Error('备份不存在'));
+      return Persist.load(key).then(function (raw) {
+        if (!raw) throw new Error('备份内容已丢失');
+        return raw;
+      });
+    },
+
+    /** 从某份备份恢复：先把当前状态也存一份，再覆盖 */
+    restoreBackup: function (key) {
+      var self = this;
+      return this.backupNow('恢复前').then(function () {
+        return self.loadBackup(key);
+      }).then(function (text) {
+        self.importJSON(text);
+        return true;
+      });
+    },
+
+    /** 删除单份备份 */
+    deleteBackup: function (key) {
+      var self = this;
+      return Persist.remove(key).then(function () {
+        return self._bkReadIndex();
+      }).then(function (list) {
+        var keep = list.filter(function (m) { return m.key !== key; });
+        return Persist.save(self.BK_INDEX, JSON.stringify(keep)).then(function () { return keep; });
+      });
+    },
     subscribe: function (fn) { listeners.push(fn); },
     emit: function () {
       this.save();

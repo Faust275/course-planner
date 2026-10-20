@@ -32,7 +32,14 @@ course-planner-web/
 ├── sync_from_index.py        从任意历史单文件反向抽取模块
 ├── namespace_cp.py           批量加 cp- 类名前缀（一次性迁移脚本）
 ├── verify_build.mjs          Playwright 冒烟回归
-└── eq_check.mjs              Playwright 跨视图计算样式等价对比
+├── verify_sync_scope.mjs     同步码三档导出验证
+├── verify_sync_ui.mjs        同步码弹窗交互验证
+├── verify_backup.mjs         自动备份 / 恢复 / 裁剪验证
+├── verify_parts.mjs          同步码分片切分验证
+├── verify_parts2.mjs         分片乱序 / 噪音 / 缺片拼回验证
+├── verify_batch.mjs          课表批量导入端到端验证
+├── eq_check.mjs              Playwright 跨视图计算样式等价对比
+└── tests/run.mjs             纯函数单测（72 条）
 ```
 
 ## 构建
@@ -54,13 +61,19 @@ python3 build.py
 ## 测试
 
 ```bash
-node ../tests/run.mjs        # 纯函数单测（区间合并、周次展开等）
+node tests/run.mjs           # 纯函数单测（区间合并、周次解析、同步码分片、课表文本解析）
 
 # UI 回归（需 playwright；先起本地静态服务）
 python3 -m http.server 8137 &
 node verify_build.mjs        # 启动、路由、桌宠、IndexedDB、控制台报错
 node eq_check.mjs            # 12 个视图全量类名计算样式对比
+node verify_backup.mjs       # 自动备份
+node verify_sync_scope.mjs   # 同步码三档
+node verify_parts2.mjs       # 同步码分片
+node verify_batch.mjs        # 课表批量导入
 ```
+
+各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
 
 ## 工程约定
 
