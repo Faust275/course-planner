@@ -161,7 +161,7 @@ const compareRangeSrc = extractFnFrom('compareRange', STATS_ANCHOR);
 const perDaySrc = extractFnFrom('perDay', STATS_ANCHOR);
 // sleepByNight 定义在 RANGES 之前（紧跟 expandRange），所以从头找
 const sleepByNightSrc = extractFnFrom('sleepByNight', 0);
-const heatLevelSrc = extractFnFrom('heatLevel', sliceFrom("id: 'stats'"));
+const heatLevelSrc = extractFn('heatLevel');   // stats.js 已改为 StatsPane，全局唯一
 
 // 日记 / 心情：MOODS 枚举 + 归属判定 + 统计
 const MOODS_ANCHOR = sliceFrom('var MOODS = [');
