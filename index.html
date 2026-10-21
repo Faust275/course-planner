@@ -16,7 +16,6 @@
 <link color="#4f46e5" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f46e5'/%3E%3Crect x='12' y='16' width='40' height='34' rx='5' fill='%23fff'/%3E%3Crect x='12' y='16' width='40' height='9' fill='%236366f1'/%3E%3Cg fill='%234f46e5'%3E%3Crect x='18' y='29' width='11' height='6' rx='2'/%3E%3Crect x='35' y='29' width='11' height='6' rx='2'/%3E%3Crect x='18' y='39' width='11' height='6' rx='2'/%3E%3Crect x='35' y='39' width='11' height='6' rx='2'/%3E%3C/g%3E%3C/svg%3E" rel="mask-icon">
 <title>课表 Course Planner</title>
 </head>
-</head>
 <body>
 
 <div class="cp-app-bg" id="appBg"></div>
@@ -9806,6 +9805,125 @@ window.AK_OPS = [
 
 </script>
 <script>
+/* ==========================================================
+ * Router：URL hash 深链接
+ * ----------------------------------------------------------
+ * 目的：把网页「添加到主屏幕」后，快捷方式能直接落到某个模块；
+ *       也方便把「今日课表」「写日记」单独存成书签或发给别人。
+ *
+ * 地址形态：
+ *   index.html#/today          今日
+ *   index.html#/tasks          待办
+ *   index.html#/tasks/diary    待办页的「日记」分页
+ *   index.html#/diary          同上（别名，给快捷方式用的短名字）
+ *
+ * 为什么用 hash 而不是路径：交付是一个可以直接双击打开的单文件，
+ * file:// 下没有服务器做 history 回退，hash 是唯一两种打开方式都稳的做法。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  /* 别名：好记的短名字 → 真实的「视图 / 分页」。
+     日记和灵感都住在「待办」页里，单独给个入口才符合直觉。 */
+  var ALIAS = {
+    diary: { id: 'tasks', tab: 'diary' },
+    notes: { id: 'tasks', tab: 'notes' },
+    inspiration: { id: 'tasks', tab: 'notes' }
+  };
+
+  /** 取一段地址并做最宽松的规整：去掉 #、/ 与首尾空白 */
+  function segOf(s) {
+    try { return decodeURIComponent(s).trim().toLowerCase(); }
+    catch (e) { return String(s).trim().toLowerCase(); }
+  }
+
+  /**
+   * '#/tasks/diary' → { id: 'tasks', tab: 'diary' }
+   * 认不出来（空、没有 #/、只有 #/）一律返回 null，交回默认视图
+   */
+  function parse(hash) {
+    var s = String(hash == null ? '' : hash).trim();
+    if (s.charAt(0) === '#') s = s.slice(1);
+    // 只认 #/xxx：裸 #anchor 留给页面内跳转，不去抢它的语义
+    if (s.charAt(0) !== '/') return null;
+    var seg = s.slice(1).split('/').filter(function (x) { return x; });
+    if (!seg.length) return null;
+    var id = segOf(seg[0]);
+    if (!id) return null;
+    var alias = ALIAS[id];
+    if (alias) return { id: alias.id, tab: alias.tab };
+    return { id: id, tab: seg[1] ? segOf(seg[1]) || null : null };
+  }
+
+  /** 反过来：('tasks', 'diary') → '#/tasks/diary' */
+  function build(id, tab) {
+    return '#/' + String(id) + (tab ? '/' + String(tab) : '');
+  }
+
+  /**
+   * 解析并校验视图是否存在。ids 传当前所有视图 id 的数组。
+   * 不存在就返回 null——地址栏里手改出来的错字不该把页面搞白。
+   */
+  function resolve(hash, ids) {
+    var r = parse(hash);
+    if (!r) return null;
+    if (ids && ids.indexOf(r.id) < 0) return null;
+    return r;
+  }
+
+  var R = {
+    last: null,       // 上一次落地过的路由，用来区分「自己写的地址」和「用户真的改了地址」
+    apply: null,      // 由 app.js 注入的回调：function (route) { ... }
+    onInvalid: null   // 地址认不出来时的兜底（把地址修回当前页）
+  };
+
+  R.parse = parse;
+  R.build = build;
+  R.resolve = resolve;
+
+  /** 启动时读一次：地址里带合法深链接就从那里开始 */
+  R.initial = function (ids) {
+    return resolve(global.location && location.hash, ids);
+  };
+
+  /**
+   * 导航落地后回写地址栏。
+   * 用 replaceState：返回键应该退出应用/回上一页，而不是在模块之间来回跳。
+   * file:// 下部分浏览器不允许改地址，此时静默放弃——功能本身不受影响。
+   */
+  R.set = function (id, tab) {
+    var want = build(id, tab || null);
+    R.last = { id: id, tab: tab || null };
+    if (!global.location) return want;
+    if (location.hash === want) return want;
+    try {
+      if (global.history && history.replaceState) history.replaceState(null, '', want);
+      else location.hash = want.slice(1);
+    } catch (e) {
+      try { location.hash = want.slice(1); } catch (e2) { /* 改不了就算了 */ }
+    }
+    return want;
+  };
+
+  /** 挂上监听：用户手改地址、点浏览器前进/后退时切视图 */
+  R.start = function (ids, apply) {
+    R.apply = apply;
+    function onUrl() {
+      var r = resolve(location.hash, ids());
+      if (!r) { if (R.onInvalid) R.onInvalid(location.hash); return; }
+      // 自己刚写进去的地址会回声一次，比对 last 后直接跳过
+      if (R.last && R.last.id === r.id && (R.last.tab || null) === (r.tab || null)) return;
+      apply(r);
+    }
+    global.addEventListener('hashchange', onUrl);
+    global.addEventListener('popstate', onUrl);
+  };
+
+  global.Router = R;
+})(window);
+
+</script>
+<script>
 
 /* ==========================================================
  * 上课提醒
@@ -16110,7 +16228,15 @@ window.AK_OPS = [
   /* ==========================================================
    * 列表视图
    * ========================================================== */
+  /** 分页变化后把地址栏对齐（#/tasks/diary）；默认分页不写尾巴 */
+  function syncRoute() {
+    if (!global.Router || !global.App || App.currentId !== 'tasks') return;
+    Router.set('tasks', state.tab === 'tasks' ? null : state.tab);
+  }
+
   var state = { status: 'all', course: 'all', tag: '', q: '', tab: 'tasks' };
+  /** 三个分页的可选值；深链接 / 搜索跳转都要按这个列表收口 */
+  var TABS = ['tasks', 'notes', 'diary'];
   var searchTimer = null;
 
   var view = {
@@ -16143,19 +16269,26 @@ window.AK_OPS = [
       if (App.currentId === 'tasks') App.badge('tasks', Store.rootPending().length);
     },
 
+    /** 当前分页：写进地址栏用（#/tasks/diary），复制出去的链接才对得上 */
+    getTab: function () { return state.tab; },
+
+    /** 默认分页：在这个分页上时地址就写 #/tasks，不拖 /tasks 的尾巴 */
+    defaultTab: 'tasks',
+
+    /* 搜索跳转 / 深链接用：把分页切到指定 tab。
+       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
+       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
+    setTab: function (tab) {
+      state.tab = TABS.indexOf(tab) >= 0 ? tab : 'tasks';
+      if (this.root) this.render();
+      syncRoute();
+    },
+
     /**
      * 全局搜索跳转过来时定位到某条待办。
      * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
      * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
      */
-    /* 搜索跳转用：把分页切到指定 tab。
-       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
-       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
-    setTab: function (tab) {
-      state.tab = tab;
-      if (this.root) this.render();
-    },
-
     focusRecord: function (type, id) {
       if (type !== 'task' || !global.Search) return false;
       var dirty = false;
@@ -16173,8 +16306,6 @@ window.AK_OPS = [
       return Search.flash(Search.findRec(type, id));
     },
 
-    /* 搜索跳转用：把分页切到指定 tab。视图还没挂载时先记下，
-       等 render 时自然生效（否则 setTab 找不到 root 就静默失败） */
     render: function () {
       var root = this.root;
       root.innerHTML = '';
@@ -16191,7 +16322,11 @@ window.AK_OPS = [
         paneBar.appendChild(el('button', {
           class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
           text: x.l,
-          onclick: function () { state.tab = x.v; view.render(); }
+          onclick: function () {
+            state.tab = x.v;
+            view.render();
+            syncRoute();
+          }
         }));
       });
       root.appendChild(paneBar);
@@ -20726,6 +20861,7 @@ window.AK_OPS = [
     look: { name: '外观', desc: '主题配色与背景图片' },
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
+    desktop: { name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块的链接' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
     subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
@@ -20796,9 +20932,23 @@ window.AK_OPS = [
 
     onEnter: function () { SUB = ''; this.render(); },
 
+    /** 深链接（#/settings/desktop）直接落到某个二级页；进来时 onEnter 已清过 SUB */
+    setTab: function (sub) {
+      if (!sub || !SUB_META[sub]) return;
+      SUB = sub;
+      this.render();
+    },
+
+    getTab: function () { return SUB || null; },
+
     render: function () {
       var root = this.root;
       root.innerHTML = '';
+
+      // 二级页也进地址（#/settings/desktop）：刷新、分享都能回到同一页
+      if (global.Router && global.App && App.currentId === 'settings') {
+        Router.set('settings', SUB || null);
+      }
 
       // 「新手教程」没有独立页面，直接弹引导
       if (SUB === 'guide') {
@@ -21604,6 +21754,129 @@ window.AK_OPS = [
 
             }
 
+      if (SUB === 'desktop') {
+  /* ===================== 桌面与快捷 ===================== */
+        var online = /^https?:$/.test(location.protocol || '');
+        var installed = !!(global.App && App.isStandalone && App.isStandalone());
+        var canInstall = !!(global.App && App.installReady && App.installReady());
+
+        function absLink(hash) { return location.href.split('#')[0] + hash; }
+
+        function copyLink(text) {
+          function done() { UI.toast('链接已复制'); }
+          function fallback() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            if (ok) done();
+            else UI.toast('复制失败：长按上面的链接手动复制', 'err');
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, fallback);
+          } else fallback();
+        }
+
+        /* ---- 安装 ---- */
+        var installCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['安装到桌面']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+            text: '装到桌面后是个独立窗口：没有地址栏和标签页，点图标就像开一个 App。数据仍然只存在这台设备的浏览器里，不会因为「安装」上传到任何地方。'
+          })
+        ]);
+
+        if (installed) {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '当前已经是从桌面图标启动的独立窗口了。'
+          }));
+        } else if (canInstall) {
+          installCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () {
+                if (!App.promptInstall()) { UI.toast('浏览器暂时没有再给安装入口，请用菜单里的「安装应用」', 'err'); return; }
+                UI.toast('已弹出安装确认');
+              }
+            }, [V.svg(V.icons.download, 16), '立即安装'])
+          ]));
+        } else if (!online) {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '现在是以本地文件（file://）打开的：浏览器不允许把本地文件装成应用，加书签也只会记住这个路径。把 index.html 和 manifest.webmanifest、两个图标一起放到任意静态托管（或局域网地址）再打开，才会有完整的安装效果。'
+          }));
+        } else {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '这台浏览器还没给出安装入口。Chrome / Edge 看地址栏右侧的安装图标，或「⋮ → 安装应用」；iOS Safari 用「分享 → 添加到主屏幕」。'
+          }));
+        }
+
+        installCard.appendChild(el('ul', {
+          style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.9', marginTop: '12px', paddingLeft: '18px' }
+        }, [
+          el('li', { text: '· Android / 桌面 Chrome、Edge：地址栏右侧「安装」图标，或菜单 →「安装应用 / 添加到主屏幕」。' }),
+          el('li', { text: '· iOS / iPadOS Safari：底部分享按钮 →「添加到主屏幕」（Safari 不认 manifest 里的快捷方式，只能装图标）。' }),
+          el('li', { text: '· 装好后长按桌面图标，会多出「今日课表 / 写日记 / 待办」三个快捷入口，一按直达。' })
+        ]));
+        root.appendChild(installCard);
+
+        /* ---- 直达链接 ---- */
+        var linkCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['直达链接']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '6px', lineHeight: '1.7' },
+            text: '每个模块都有自己的地址（#/today、#/tasks/diary 这种）。复制下来存成书签、发给自己，或者做成手机桌面的快捷指令，打开就是那一个页面。'
+          })
+        ]);
+
+        [
+          { hash: '#/today', label: '今日课表', icon: V.icons.today },
+          { hash: '#/tasks', label: '作业与待办', icon: V.icons.check },
+          { hash: '#/diary', label: '写日记', icon: V.icons.book }
+        ].forEach(function (x) {
+          var url = absLink(x.hash);
+          linkCard.appendChild(el('div', {
+            style: {
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '9px 0', borderBottom: '1px solid var(--line)'
+            }
+          }, [
+            el('span', {
+              style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600' }
+            }, [V.svg(x.icon, 16), x.label]),
+            el('code', {
+              style: {
+                flex: '1 1 auto', minWidth: '0', margin: '0 4px',
+                fontSize: '11.5px', color: 'var(--text-2)',
+                background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: '6px',
+                padding: '3px 8px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              },
+              title: url,
+              text: x.hash
+            }),
+            el('button', {
+              class: 'btn btn-sm',
+              onclick: function () { copyLink(url); }
+            }, [V.svg(V.icons.copy, 14), '复制'])
+          ]));
+        });
+
+        linkCard.appendChild(el('div', {
+          class: 'ocr-hint',
+          style: { marginTop: '10px' },
+          text: '页面内切换模块时，地址栏会跟着变，所以随手复制地址栏也是准的。地址里的 # 后面只是「看哪一页」，不影响数据。'
+        }));
+        root.appendChild(linkCard);
+      }
+
       if (SUB === 'data') {
   /* ===================== 数据 ===================== */
         /* ---- 设备间同步 ---- */
@@ -21806,7 +22079,8 @@ window.AK_OPS = [
           el('li', { text: '· 设置按分类整理，点「课程时间」可改每天节数与上下课时间。' }),
           el('li', { text: '· 「模块显示」里可以开关模块，也能用上下箭头调整它们在导航里的顺序。' }),
           el('li', { text: '· 手机竖屏用底部导航，横屏自动收到左侧，网页宽屏变成两栏。' }),
-            el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App。' })
+            el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App；装好后长按图标能直接进「今日课表」「写日记」。' }),
+            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' })
           ])
         ]);
         root.appendChild(about);
@@ -21826,6 +22100,7 @@ window.AK_OPS = [
     { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899' },
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
+    { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
@@ -23459,9 +23734,11 @@ window.AK_OPS = [
   /** 供其它页面直接跳到某个设置子页 */
   global.SettingsView = {
     go: function (key) {
-      SUB = key;
-      if (global.App && App.currentId === 'settings') view.render();
-      else if (global.App) App.go('settings');
+      // 不在设置页时不能只改 SUB：go() 会先走 onEnter 把 SUB 清掉，
+      // 所以交给深链接参数带过去
+      if (global.App && App.currentId === 'settings') { SUB = key; view.render(); }
+      else if (global.App) App.go('settings', { tab: key });
+      else { SUB = key; view.render(); }
     }
   };
 
@@ -31628,6 +31905,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   var root = null;
   var card = null;
   var fromView = null;
+  var fromTab = null;      // 挂着深链接进来时，教程结束后要落回同一个分页
 
   function build() {
     root = el('div', { class: 'ob-mask' });
@@ -31709,18 +31987,20 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   function finish(skipped) {
     Store.updateSettings({ guided: true });
     remove();
-    if (global.App && App.go) App.go(fromView || 'schedule');
+    if (global.App && App.go) App.go(fromView || 'schedule', fromTab ? { tab: fromTab } : null);
     fromView = null;
+    fromTab = null;
     V.toast(skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧');
   }
 
   /**
    * 开始教程
-   * @param {Object} opts { from: 结束后回到哪个页面 }
+   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页 }
    */
   function start(opts) {
     opts = opts || {};
     fromView = opts.from || null;
+    fromTab = opts.fromTab || null;
     idx = 0;
     if (!root) build();
     go(0);
@@ -32035,7 +32315,13 @@ window.Pet = (function () {
   }
 
   /* ---------- 路由 ---------- */
-  function go(id) {
+  /**
+   * 切到某个视图
+   * @param {string} id  视图 id
+   * @param {Object} [opts] { tab: 'diary' } —— 深链接进来时顺带切到某个分页
+   */
+  function go(id, opts) {
+    opts = opts || {};
     var v = App.views.filter(function (x) { return x.id === id; })[0];
     if (!v) return;
 
@@ -32049,6 +32335,11 @@ window.Pet = (function () {
     if (v.onEnter) v.onEnter();
     else if (v.render) v.render();
 
+    // 深链接带分页（#/tasks/diary）：先渲染再切分页，setTab 内部会再渲染一次。
+    // 地址里没带分页（#/tasks）则回到该页默认分页——地址写得越明确，越该按它来。
+    if (opts.tab && v.setTab) v.setTab(opts.tab);
+    else if (opts.fromUrl && v.setTab) v.setTab(null);
+
     markActive(id);
 
     UI.$('#viewTitle').textContent = v.title || v.name;
@@ -32058,8 +32349,19 @@ window.Pet = (function () {
     actions.innerHTML = '';
     if (v.actions) v.actions(actions);
 
+    // 地址栏同步：视图自己知道当前分页就带上，链接复制出去才对得上
+    if (global.Router) {
+      var tab = (opts.tab && v.setTab) ? opts.tab : (v.getTab ? v.getTab() : null);
+      Router.set(id, routeTab(v, tab));
+    }
+
     closeDrawer();
     UI.$('#views').scrollTop = 0;
+  }
+
+  /** 地址栏里该带哪个分页：默认分页不写尾巴（#/tasks 比 #/tasks/tasks 干净） */
+  function routeTab(v, tab) {
+    return (tab && v && tab === v.defaultTab) ? null : (tab || null);
   }
 
   /* ---------- 抽屉 ---------- */
@@ -32095,6 +32397,22 @@ window.Pet = (function () {
   }
 
   /* ---------- 启动 ---------- */
+  /**
+   * manifest 与图标是可选伴侣文件（和 sw.js 一样），单文件转发时并不在场。
+   * 直接写死 <link rel="manifest"> 会在控制台留一条 404，所以在 http(s) 下先探一下。
+   */
+  function installManifest() {
+    if (!/^https?:$/.test(location.protocol || '')) return;
+    if (document.querySelector('link[rel="manifest"]')) return;
+    fetch('manifest.webmanifest', { method: 'HEAD' }).then(function (res) {
+      if (!res || !res.ok) return;
+      var link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = 'manifest.webmanifest';
+      document.head.appendChild(link);
+    }).catch(function () {});
+  }
+
   async function boot() {
     await Store.init();
 
@@ -32105,6 +32423,7 @@ window.Pet = (function () {
         navigator.serviceWorker.register('sw.js').catch(function () {});
       });
     }
+    installManifest();
 
     window.Pet.init();
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
@@ -32151,12 +32470,30 @@ window.Pet = (function () {
 
     renderTermCard();
     badge('tasks', Store.rootPending().length);
-    var first = App.views[0] ? App.views[0].id : null;
-    if (first) go(first);
 
-    // 第一次打开：走一遍新手教程（结束后停在课程表，方便直接排课）
+    // 深链接：地址里带 #/today 之类的就从那个视图开始，否则用排序后的第一个
+    var ids = App.views.map(function (v) { return v.id; });
+    var startRoute = global.Router ? Router.initial(ids) : null;
+    var startId = startRoute ? startRoute.id : (App.views[0] ? App.views[0].id : null);
+    if (startId) go(startId, { tab: startRoute && startRoute.tab, fromUrl: true });
+
+    // 地址栏被手改、或点了前进/后退时切视图
+    if (global.Router) {
+      Router.start(function () { return App.views.map(function (v) { return v.id; }); }, function (r) {
+        go(r.id, { tab: r.tab, fromUrl: true });
+      });
+      // 地址认不出来（手改错字）：把地址修回当前页，免得复制出去还是坏的
+      Router.onInvalid = function () {
+        var v = App.current;
+        Router.set(App.currentId, v ? routeTab(v, v.getTab ? v.getTab() : null) : null);
+      };
+    }
+
+    // 第一次打开：走一遍新手教程，结束后回到进来时那一页（默认课程表，方便直接排课）
     if (!Store.state.settings.guided && global.Onboard) {
-      setTimeout(function () { Onboard.start(); }, 420);
+      setTimeout(function () {
+        Onboard.start(startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {});
+      }, 420);
     }
   }
 
@@ -32180,6 +32517,31 @@ window.Pet = (function () {
   
 
   App.renderTermCard = renderTermCard;
+
+  /* ---------- 安装到桌面 ---------- */
+  // Chrome / Edge 会抛 beforeinstallprompt，先拦下来，设置页的按钮再放行；
+  // iOS Safari 没有这个事件，只能靠「分享 → 添加到主屏幕」，所以那边给文字引导。
+  var installEvent = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installEvent = e;
+  });
+  App.installReady = function () { return !!installEvent; };
+  App.promptInstall = function () {
+    if (!installEvent) return false;
+    var e = installEvent;
+    installEvent = null;
+    e.prompt();
+    return true;
+  };
+  /** 已经以「独立窗口」跑着（装到桌面后从图标启动） */
+  App.isStandalone = function () {
+    try {
+      if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+    } catch (e) { /* 老浏览器不支持 matchMedia 的该查询 */ }
+    return !!(navigator && navigator.standalone);
+  };
+
   global.App = App;
 
   if (document.readyState === 'loading') {

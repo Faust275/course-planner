@@ -146,6 +146,7 @@
   var root = null;
   var card = null;
   var fromView = null;
+  var fromTab = null;      // 挂着深链接进来时，教程结束后要落回同一个分页
 
   function build() {
     root = el('div', { class: 'ob-mask' });
@@ -227,18 +228,20 @@
   function finish(skipped) {
     Store.updateSettings({ guided: true });
     remove();
-    if (global.App && App.go) App.go(fromView || 'schedule');
+    if (global.App && App.go) App.go(fromView || 'schedule', fromTab ? { tab: fromTab } : null);
     fromView = null;
+    fromTab = null;
     V.toast(skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧');
   }
 
   /**
    * 开始教程
-   * @param {Object} opts { from: 结束后回到哪个页面 }
+   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页 }
    */
   function start(opts) {
     opts = opts || {};
     fromView = opts.from || null;
+    fromTab = opts.fromTab || null;
     idx = 0;
     if (!root) build();
     go(0);

@@ -7,7 +7,8 @@
 ## 快速使用
 
 - **直接用**：双击 `index.html`，或把它发到任意设备用浏览器打开。
-- **托管**：放到任意静态服务器根目录即可；此时可额外放 `sw.js` 启用离线缓存。
+- **托管**：放到任意静态服务器根目录即可；此时可额外放 `sw.js` 启用离线缓存，
+  以及 `manifest.webmanifest` + `icon-192.png` / `icon-512.png` 启用「安装到桌面」与长按快捷方式。
 
 数据保存在**各自设备的浏览器**里（优先 IndexedDB，`file://` 或隐私模式自动回退 `localStorage`），不随文件复制。跨设备迁移用应用内的「同步码」。
 
@@ -20,7 +21,8 @@ course-planner-web/
 ├── assets/js/
 │   ├── store.js              数据模型 + 持久化（IndexedDB / localStorage）+ 迁移
 │   ├── ui.js                 元素创建 el() / 弹窗 / Toast（含 cp- 运行时前缀钩子）
-│   ├── app.js                启动 boot、导航、Service Worker 注册
+│   ├── app.js                启动 boot、导航、Service Worker 注册、安装提示
+│   ├── router.js             hash 深链接（#/today、#/tasks/diary）+ 别名
 │   ├── pet.js                桌宠（独立模块，可整块删除）
 │   ├── ak_ops.js             干员数据
 │   ├── quotes-data.js        诗词 / 词库语料
@@ -31,6 +33,8 @@ course-planner-web/
 │                             笔记、日记、记账、抽卡、专注、收集、成绩、设置、
 │                             统计、ocr-dialog）
 ├── build.py                  构建：内联 CSS/JS → 单文件 index.html
+├── make_icons.py             生成 PWA 图标 icon-192.png / icon-512.png
+├── manifest.webmanifest      PWA manifest（含 今日/待办/写日记 三个 shortcuts）
 ├── sync_from_index.py        从任意历史单文件反向抽取模块
 ├── namespace_cp.py           批量加 cp- 类名前缀（一次性迁移脚本）
 ├── verify_build.mjs          Playwright 冒烟回归
@@ -49,8 +53,9 @@ course-planner-web/
 ├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径
 ├── verify_stats.mjs          统计复盘：自然口径、日均对比、热力条刻度、区间缓存失效
 ├── verify_diary.mjs          日记：一天一篇、心情统计、凌晨归属、灵感互拷、同步码不含日记
+├── verify_pwa.mjs            深链接：地址解析、落地、地址栏同步、manifest、file:// 模式
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（461 条）
+└── tests/run.mjs             纯函数单测（487 条）
 ```
 
 ## 构建
@@ -94,9 +99,30 @@ node verify_export.mjs       # 课表导出图片
 node verify_subtask.mjs      # 子任务（含设置页联动开关）
 node verify_stats.mjs       # 统计与复盘（自然口径、对比、热力条、缓存）
 node verify_diary.mjs       # 日记（一天一篇、心情、凌晨归属、互拷、同步码不含日记）
+node verify_pwa.mjs         # 深链接与装到桌面（manifest / 快捷方式 / file:// 模式）
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
+
+## 深链接（装到桌面后一键直达）
+
+每个模块都有自己的 hash 地址，打开就是那一页：
+
+| 地址 | 落到哪里 |
+|---|---|
+| `#/today` | 今日 |
+| `#/tasks` | 待办（任务分页） |
+| `#/tasks/diary`、`#/diary` | 待办 → 日记分页（后者是给快捷方式用的别名） |
+| `#/notes`、`#/inspiration` | 待办 → 灵感分页 |
+| `#/settings/desktop` | 设置 → 桌面与快捷 |
+
+页面内切换模块时地址栏会跟着更新，所以直接复制地址栏就是可用的链接。
+`manifest.webmanifest` 里的 `shortcuts` 用的就是这几个地址，装到 Android / 桌面 Chrome 后
+长按图标会出现「今日课表 / 写日记 / 待办」。
+
+- manifest 与图标是**可选伴侣文件**（和 `sw.js` 一样）：单文件转发时它们不在场，
+  代码会先探测再挂 `<link rel="manifest">`，不会在控制台留下 404。
+- `file://` 打开时不会注册 SW、也不挂 manifest，但**深链接照常生效**（自己拼一个带 `#/today` 的路径即可）。
 
 ## 工程约定
 

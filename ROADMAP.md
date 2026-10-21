@@ -218,8 +218,18 @@
 - [x] **课表导出为图片** —— 已实施：`assets/js/schedule-export.js`，
       Canvas 2D 自绘（不引 html2canvas），顶栏「导出图片」→ 预览弹窗 → 保存 PNG。
       布局与页面**共用 `ScheduleLayout.build()`**，改一处两边同步
-- [ ] **桌面小组件**：PWA 做不了真 widget，但可做「添加到主屏幕 + 打开直达今日课表」；
-      现有 `AndroidBridge` 快照推送仅安卓壳生效，可扩展
+- [x] **桌面小组件** —— 已实施（只做网页能做到的那半截，真 widget 需要原生壳）：
+      `assets/js/router.js` 提供 hash 深链接（`#/today`、`#/tasks`、`#/tasks/diary`，
+      `#/diary` / `#/notes` 是给快捷方式用的别名）；页面内切模块时地址栏同步，
+      手改地址能切视图，认不出来的地址自动修回当前页；`#/settings/desktop` 能直达设置二级页。
+      `manifest.webmanifest` + `icon-192/512.png`（`make_icons.py` 生成）声明三个 shortcuts
+      （今日课表 / 写日记 / 待办），Android 与桌面 Chrome 装到桌面后长按图标直达。
+      设置页新增「桌面与快捷」分区：分平台安装文案、`beforeinstallprompt` 的一键安装按钮、
+      三条直达链接一键复制。
+      **两个必须处理的边界**：manifest 与图标是可选伴侣文件（和 `sw.js` 同性质），
+      单文件转发时先 HEAD 探测再挂 `<link rel="manifest">`，否则控制台留 404；
+      `file://` 下不注册 SW、不挂 manifest，但深链接照常生效。
+      真 widget、以及 `AndroidBridge` 快照推送要的原生能力，不在网页侧解决——那是壳的事
 
 ### P1 —— 待办 / 计划的通用能力缺口
 - [x] **重复任务** —— 已实施：`repeat {type, interval, until}`，**展开式**
@@ -264,6 +274,20 @@
 
 自检：`Lunar.selfTest()` 每次单测都会跑；另有一条「2486 个初一日序与 sxtwl 原始值比对，
 0 不一致」的生成期校验。
+
+### 桌面与快捷（已实施）—— 几个刻意的选择
+
+- **用 hash 而不是 path**：交付物是可以直接双击的单文件，`file://` 下没有服务器做 history 回退，
+  hash 是 http 与 file 两种打开方式都稳的唯一写法。代价是 URL 不如 `/today` 好看，认了。
+- **写地址用 `replaceState`**：返回键应该退出应用或回上一页，而不是在模块之间来回跳。
+  `file://` 下个别浏览器不让改地址，代码里 try/catch 兜住，功能本身不受影响。
+- **默认分页不写尾巴**：待办停在「任务」分页时地址是 `#/tasks`，不是 `#/tasks/tasks`。
+  视图用 `defaultTab` 声明自己的默认分页，`getTab()` 报告当前分页——
+  两者分开，链接才既短又能还原现场。
+- **别名只给用户看**：`#/diary` 落在 `#/tasks/diary` 后会自动归一成规范地址，
+  免得同一个页面在聊天里传成两种链接。
+- **设置二级页也算一页**：`#/settings/desktop` 直接落到分区页，顺带修掉了
+  `SettingsView.go()` 从别的页面调用时会被 `onEnter` 清掉 SUB 的老问题。
 
 ### 第二批决策记录（① ② 已实施，③ 已决策待开工）
 

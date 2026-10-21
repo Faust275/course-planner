@@ -116,7 +116,13 @@
   }
 
   /* ---------- 路由 ---------- */
-  function go(id) {
+  /**
+   * 切到某个视图
+   * @param {string} id  视图 id
+   * @param {Object} [opts] { tab: 'diary' } —— 深链接进来时顺带切到某个分页
+   */
+  function go(id, opts) {
+    opts = opts || {};
     var v = App.views.filter(function (x) { return x.id === id; })[0];
     if (!v) return;
 
@@ -130,6 +136,11 @@
     if (v.onEnter) v.onEnter();
     else if (v.render) v.render();
 
+    // 深链接带分页（#/tasks/diary）：先渲染再切分页，setTab 内部会再渲染一次。
+    // 地址里没带分页（#/tasks）则回到该页默认分页——地址写得越明确，越该按它来。
+    if (opts.tab && v.setTab) v.setTab(opts.tab);
+    else if (opts.fromUrl && v.setTab) v.setTab(null);
+
     markActive(id);
 
     UI.$('#viewTitle').textContent = v.title || v.name;
@@ -139,8 +150,19 @@
     actions.innerHTML = '';
     if (v.actions) v.actions(actions);
 
+    // 地址栏同步：视图自己知道当前分页就带上，链接复制出去才对得上
+    if (global.Router) {
+      var tab = (opts.tab && v.setTab) ? opts.tab : (v.getTab ? v.getTab() : null);
+      Router.set(id, routeTab(v, tab));
+    }
+
     closeDrawer();
     UI.$('#views').scrollTop = 0;
+  }
+
+  /** 地址栏里该带哪个分页：默认分页不写尾巴（#/tasks 比 #/tasks/tasks 干净） */
+  function routeTab(v, tab) {
+    return (tab && v && tab === v.defaultTab) ? null : (tab || null);
   }
 
   /* ---------- 抽屉 ---------- */
@@ -176,6 +198,22 @@
   }
 
   /* ---------- 启动 ---------- */
+  /**
+   * manifest 与图标是可选伴侣文件（和 sw.js 一样），单文件转发时并不在场。
+   * 直接写死 <link rel="manifest"> 会在控制台留一条 404，所以在 http(s) 下先探一下。
+   */
+  function installManifest() {
+    if (!/^https?:$/.test(location.protocol || '')) return;
+    if (document.querySelector('link[rel="manifest"]')) return;
+    fetch('manifest.webmanifest', { method: 'HEAD' }).then(function (res) {
+      if (!res || !res.ok) return;
+      var link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = 'manifest.webmanifest';
+      document.head.appendChild(link);
+    }).catch(function () {});
+  }
+
   async function boot() {
     await Store.init();
 
@@ -186,6 +224,7 @@
         navigator.serviceWorker.register('sw.js').catch(function () {});
       });
     }
+    installManifest();
 
     window.Pet.init();
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
@@ -232,12 +271,30 @@
 
     renderTermCard();
     badge('tasks', Store.rootPending().length);
-    var first = App.views[0] ? App.views[0].id : null;
-    if (first) go(first);
 
-    // 第一次打开：走一遍新手教程（结束后停在课程表，方便直接排课）
+    // 深链接：地址里带 #/today 之类的就从那个视图开始，否则用排序后的第一个
+    var ids = App.views.map(function (v) { return v.id; });
+    var startRoute = global.Router ? Router.initial(ids) : null;
+    var startId = startRoute ? startRoute.id : (App.views[0] ? App.views[0].id : null);
+    if (startId) go(startId, { tab: startRoute && startRoute.tab, fromUrl: true });
+
+    // 地址栏被手改、或点了前进/后退时切视图
+    if (global.Router) {
+      Router.start(function () { return App.views.map(function (v) { return v.id; }); }, function (r) {
+        go(r.id, { tab: r.tab, fromUrl: true });
+      });
+      // 地址认不出来（手改错字）：把地址修回当前页，免得复制出去还是坏的
+      Router.onInvalid = function () {
+        var v = App.current;
+        Router.set(App.currentId, v ? routeTab(v, v.getTab ? v.getTab() : null) : null);
+      };
+    }
+
+    // 第一次打开：走一遍新手教程，结束后回到进来时那一页（默认课程表，方便直接排课）
     if (!Store.state.settings.guided && global.Onboard) {
-      setTimeout(function () { Onboard.start(); }, 420);
+      setTimeout(function () {
+        Onboard.start(startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {});
+      }, 420);
     }
   }
 
@@ -261,6 +318,31 @@
   
 
   App.renderTermCard = renderTermCard;
+
+  /* ---------- 安装到桌面 ---------- */
+  // Chrome / Edge 会抛 beforeinstallprompt，先拦下来，设置页的按钮再放行；
+  // iOS Safari 没有这个事件，只能靠「分享 → 添加到主屏幕」，所以那边给文字引导。
+  var installEvent = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installEvent = e;
+  });
+  App.installReady = function () { return !!installEvent; };
+  App.promptInstall = function () {
+    if (!installEvent) return false;
+    var e = installEvent;
+    installEvent = null;
+    e.prompt();
+    return true;
+  };
+  /** 已经以「独立窗口」跑着（装到桌面后从图标启动） */
+  App.isStandalone = function () {
+    try {
+      if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+    } catch (e) { /* 老浏览器不支持 matchMedia 的该查询 */ }
+    return !!(navigator && navigator.standalone);
+  };
+
   global.App = App;
 
   if (document.readyState === 'loading') {

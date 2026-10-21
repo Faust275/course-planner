@@ -21,6 +21,7 @@
     look: { name: '外观', desc: '主题配色与背景图片' },
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
+    desktop: { name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块的链接' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
     subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
@@ -91,9 +92,23 @@
 
     onEnter: function () { SUB = ''; this.render(); },
 
+    /** 深链接（#/settings/desktop）直接落到某个二级页；进来时 onEnter 已清过 SUB */
+    setTab: function (sub) {
+      if (!sub || !SUB_META[sub]) return;
+      SUB = sub;
+      this.render();
+    },
+
+    getTab: function () { return SUB || null; },
+
     render: function () {
       var root = this.root;
       root.innerHTML = '';
+
+      // 二级页也进地址（#/settings/desktop）：刷新、分享都能回到同一页
+      if (global.Router && global.App && App.currentId === 'settings') {
+        Router.set('settings', SUB || null);
+      }
 
       // 「新手教程」没有独立页面，直接弹引导
       if (SUB === 'guide') {
@@ -899,6 +914,129 @@
 
             }
 
+      if (SUB === 'desktop') {
+  /* ===================== 桌面与快捷 ===================== */
+        var online = /^https?:$/.test(location.protocol || '');
+        var installed = !!(global.App && App.isStandalone && App.isStandalone());
+        var canInstall = !!(global.App && App.installReady && App.installReady());
+
+        function absLink(hash) { return location.href.split('#')[0] + hash; }
+
+        function copyLink(text) {
+          function done() { UI.toast('链接已复制'); }
+          function fallback() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            if (ok) done();
+            else UI.toast('复制失败：长按上面的链接手动复制', 'err');
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, fallback);
+          } else fallback();
+        }
+
+        /* ---- 安装 ---- */
+        var installCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['安装到桌面']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+            text: '装到桌面后是个独立窗口：没有地址栏和标签页，点图标就像开一个 App。数据仍然只存在这台设备的浏览器里，不会因为「安装」上传到任何地方。'
+          })
+        ]);
+
+        if (installed) {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '当前已经是从桌面图标启动的独立窗口了。'
+          }));
+        } else if (canInstall) {
+          installCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () {
+                if (!App.promptInstall()) { UI.toast('浏览器暂时没有再给安装入口，请用菜单里的「安装应用」', 'err'); return; }
+                UI.toast('已弹出安装确认');
+              }
+            }, [V.svg(V.icons.download, 16), '立即安装'])
+          ]));
+        } else if (!online) {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '现在是以本地文件（file://）打开的：浏览器不允许把本地文件装成应用，加书签也只会记住这个路径。把 index.html 和 manifest.webmanifest、两个图标一起放到任意静态托管（或局域网地址）再打开，才会有完整的安装效果。'
+          }));
+        } else {
+          installCard.appendChild(el('div', {
+            class: 'ocr-hint',
+            text: '这台浏览器还没给出安装入口。Chrome / Edge 看地址栏右侧的安装图标，或「⋮ → 安装应用」；iOS Safari 用「分享 → 添加到主屏幕」。'
+          }));
+        }
+
+        installCard.appendChild(el('ul', {
+          style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.9', marginTop: '12px', paddingLeft: '18px' }
+        }, [
+          el('li', { text: '· Android / 桌面 Chrome、Edge：地址栏右侧「安装」图标，或菜单 →「安装应用 / 添加到主屏幕」。' }),
+          el('li', { text: '· iOS / iPadOS Safari：底部分享按钮 →「添加到主屏幕」（Safari 不认 manifest 里的快捷方式，只能装图标）。' }),
+          el('li', { text: '· 装好后长按桌面图标，会多出「今日课表 / 写日记 / 待办」三个快捷入口，一按直达。' })
+        ]));
+        root.appendChild(installCard);
+
+        /* ---- 直达链接 ---- */
+        var linkCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['直达链接']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '6px', lineHeight: '1.7' },
+            text: '每个模块都有自己的地址（#/today、#/tasks/diary 这种）。复制下来存成书签、发给自己，或者做成手机桌面的快捷指令，打开就是那一个页面。'
+          })
+        ]);
+
+        [
+          { hash: '#/today', label: '今日课表', icon: V.icons.today },
+          { hash: '#/tasks', label: '作业与待办', icon: V.icons.check },
+          { hash: '#/diary', label: '写日记', icon: V.icons.book }
+        ].forEach(function (x) {
+          var url = absLink(x.hash);
+          linkCard.appendChild(el('div', {
+            style: {
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '9px 0', borderBottom: '1px solid var(--line)'
+            }
+          }, [
+            el('span', {
+              style: { flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600' }
+            }, [V.svg(x.icon, 16), x.label]),
+            el('code', {
+              style: {
+                flex: '1 1 auto', minWidth: '0', margin: '0 4px',
+                fontSize: '11.5px', color: 'var(--text-2)',
+                background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: '6px',
+                padding: '3px 8px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              },
+              title: url,
+              text: x.hash
+            }),
+            el('button', {
+              class: 'btn btn-sm',
+              onclick: function () { copyLink(url); }
+            }, [V.svg(V.icons.copy, 14), '复制'])
+          ]));
+        });
+
+        linkCard.appendChild(el('div', {
+          class: 'ocr-hint',
+          style: { marginTop: '10px' },
+          text: '页面内切换模块时，地址栏会跟着变，所以随手复制地址栏也是准的。地址里的 # 后面只是「看哪一页」，不影响数据。'
+        }));
+        root.appendChild(linkCard);
+      }
+
       if (SUB === 'data') {
   /* ===================== 数据 ===================== */
         /* ---- 设备间同步 ---- */
@@ -1101,7 +1239,8 @@
           el('li', { text: '· 设置按分类整理，点「课程时间」可改每天节数与上下课时间。' }),
           el('li', { text: '· 「模块显示」里可以开关模块，也能用上下箭头调整它们在导航里的顺序。' }),
           el('li', { text: '· 手机竖屏用底部导航，横屏自动收到左侧，网页宽屏变成两栏。' }),
-            el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App。' })
+            el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App；装好后长按图标能直接进「今日课表」「写日记」。' }),
+            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' })
           ])
         ]);
         root.appendChild(about);
@@ -1121,6 +1260,7 @@
     { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899' },
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
+    { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
@@ -2754,9 +2894,11 @@
   /** 供其它页面直接跳到某个设置子页 */
   global.SettingsView = {
     go: function (key) {
-      SUB = key;
-      if (global.App && App.currentId === 'settings') view.render();
-      else if (global.App) App.go('settings');
+      // 不在设置页时不能只改 SUB：go() 会先走 onEnter 把 SUB 清掉，
+      // 所以交给深链接参数带过去
+      if (global.App && App.currentId === 'settings') { SUB = key; view.render(); }
+      else if (global.App) App.go('settings', { tab: key });
+      else { SUB = key; view.render(); }
     }
   };
 

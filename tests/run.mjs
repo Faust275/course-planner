@@ -1376,5 +1376,52 @@ console.log('日记：一天一篇相关');
   ], '2026-10-01').id, 'x1');
 }
 
+
+/* ==========================================================
+ * 14) hash 深链接（router.js 的纯函数）
+ *    地址是「装到桌面后一键直达」的载体，写错一个字符就会落到别的页，
+ *    所以解析、拼装、校验三条都得单独盯住。
+ * ========================================================== */
+console.log('Router：地址解析与拼装');
+{
+  const routerSrc = (() => {
+    const at = sliceFrom('Router：URL hash 深链接');
+    const aliasOpen = html.indexOf('{', html.indexOf('var ALIAS =', at));
+    const aliasSrc = 'var ALIAS = ' + extractBalanced(html, aliasOpen) + ';';
+    const parts = ['segOf', 'parse', 'build', 'resolve'].map(n => extractFnFrom(n, at)).join('\n');
+    return '(function(){' + aliasSrc + '\n' + parts + '\nreturn { parse: parse, build: build, resolve: resolve };})()';
+  })();
+  const R = new Function('return ' + routerSrc)();
+
+  eq('parse #/today', R.parse('#/today'), { id: 'today', tab: null });
+  eq('parse 允许省略 #', R.parse('/today'), { id: 'today', tab: null });
+  eq('parse 大小写归一', R.parse('#/TODAY'), { id: 'today', tab: null });
+  eq('parse 带分页', R.parse('#/tasks/diary'), { id: 'tasks', tab: 'diary' });
+  eq('parse 分页大小写归一', R.parse('#/tasks/DIARY'), { id: 'tasks', tab: 'diary' });
+  eq('parse 末尾斜杠不算分页', R.parse('#/tasks/'), { id: 'tasks', tab: null });
+  eq('别名 diary → tasks/diary', R.parse('#/diary'), { id: 'tasks', tab: 'diary' });
+  eq('别名 notes → tasks/notes', R.parse('#/notes'), { id: 'tasks', tab: 'notes' });
+  eq('别名 inspiration → tasks/notes', R.parse('#/inspiration'), { id: 'tasks', tab: 'notes' });
+  eq('别名后面再挂分页也按别名走', R.parse('#/diary/whatever'), { id: 'tasks', tab: 'diary' });
+  eq('空串 → null', R.parse(''), null);
+  eq('裸 # → null', R.parse('#'), null);
+  eq('只有 #/ → null', R.parse('#/'), null);
+  eq('没有 #/ 的锚点不接管', R.parse('#section'), null);
+  eq('undefined → null', R.parse(undefined), null);
+  eq('空白串 → null', R.parse('   '), null);
+
+  eq('build 单段', R.build('today'), '#/today');
+  eq('build 两段', R.build('tasks', 'diary'), '#/tasks/diary');
+  eq('build 无分页不带斜杠', R.build('tasks', null), '#/tasks');
+  eq('build(空分页) 不带斜杠', R.build('tasks', ''), '#/tasks');
+  eq('parse∘build 往返', R.parse(R.build('tasks', 'diary')), { id: 'tasks', tab: 'diary' });
+
+  eq('resolve 命中', R.resolve('#/today', ['today', 'tasks']), { id: 'today', tab: null });
+  eq('resolve 别名折回真实视图', R.resolve('#/diary', ['today', 'tasks']), { id: 'tasks', tab: 'diary' });
+  eq('resolve 视图不存在 → null', R.resolve('#/nope', ['today', 'tasks']), null);
+  eq('resolve 非法地址 → null', R.resolve('#nope', ['today']), null);
+  eq('resolve 空地址 → null', R.resolve('', ['today']), null);
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

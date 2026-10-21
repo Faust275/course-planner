@@ -448,7 +448,15 @@
   /* ==========================================================
    * 列表视图
    * ========================================================== */
+  /** 分页变化后把地址栏对齐（#/tasks/diary）；默认分页不写尾巴 */
+  function syncRoute() {
+    if (!global.Router || !global.App || App.currentId !== 'tasks') return;
+    Router.set('tasks', state.tab === 'tasks' ? null : state.tab);
+  }
+
   var state = { status: 'all', course: 'all', tag: '', q: '', tab: 'tasks' };
+  /** 三个分页的可选值；深链接 / 搜索跳转都要按这个列表收口 */
+  var TABS = ['tasks', 'notes', 'diary'];
   var searchTimer = null;
 
   var view = {
@@ -481,19 +489,26 @@
       if (App.currentId === 'tasks') App.badge('tasks', Store.rootPending().length);
     },
 
+    /** 当前分页：写进地址栏用（#/tasks/diary），复制出去的链接才对得上 */
+    getTab: function () { return state.tab; },
+
+    /** 默认分页：在这个分页上时地址就写 #/tasks，不拖 /tasks 的尾巴 */
+    defaultTab: 'tasks',
+
+    /* 搜索跳转 / 深链接用：把分页切到指定 tab。
+       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
+       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
+    setTab: function (tab) {
+      state.tab = TABS.indexOf(tab) >= 0 ? tab : 'tasks';
+      if (this.root) this.render();
+      syncRoute();
+    },
+
     /**
      * 全局搜索跳转过来时定位到某条待办。
      * 难点在于列表有分页 / 状态 / 课程 / 关键词四层筛选，
      * 目标那条可能正好被筛掉，所以先把筛选放宽到能看见它，再定位。
      */
-    /* 搜索跳转用：把分页切到指定 tab。
-       若视图还没挂载就先只改 state，等挂载时 render 自然生效——
-       否则 setTab 找不到 root 会静默失败，跳过来还是停在「待办」。 */
-    setTab: function (tab) {
-      state.tab = tab;
-      if (this.root) this.render();
-    },
-
     focusRecord: function (type, id) {
       if (type !== 'task' || !global.Search) return false;
       var dirty = false;
@@ -511,8 +526,6 @@
       return Search.flash(Search.findRec(type, id));
     },
 
-    /* 搜索跳转用：把分页切到指定 tab。视图还没挂载时先记下，
-       等 render 时自然生效（否则 setTab 找不到 root 就静默失败） */
     render: function () {
       var root = this.root;
       root.innerHTML = '';
@@ -529,7 +542,11 @@
         paneBar.appendChild(el('button', {
           class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
           text: x.l,
-          onclick: function () { state.tab = x.v; view.render(); }
+          onclick: function () {
+            state.tab = x.v;
+            view.render();
+            syncRoute();
+          }
         }));
       });
       root.appendChild(paneBar);
