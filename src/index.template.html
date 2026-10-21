@@ -19,6 +19,47 @@
 
 <div class="cp-app-bg" id="appBg"></div>
 
+<!-- 机制主题装饰层：种树（藤蔓/花）/ 抽卡（HUD 标线），按 data-mech 显隐 -->
+<div class="cp-deco" aria-hidden="true">
+  <svg class="deco-tree deco-a" viewBox="0 0 160 200" style="left:-12px;top:-12px;width:150px;height:190px" fill="none" stroke="#3f7d3d" stroke-width="1.6" stroke-linecap="round">
+    <path d="M150 195 C 110 175, 138 140, 96 126 C 58 113, 86 78, 50 64 C 26 54, 34 34, 18 22"/>
+    <g fill="#4c8c4a" stroke="none">
+      <path d="M96 126 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M50 64 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M18 22 q12 -8 20 -3 q-5 10 -20 3 Z"/>
+    </g>
+    <g fill="#ff9ec4" stroke="none">
+      <circle cx="20" cy="20" r="2.4"/><circle cx="14" cy="25" r="2.4"/><circle cx="26" cy="26" r="2.4"/><circle cx="20" cy="30" r="2.4"/>
+    </g>
+    <circle cx="20" cy="25" r="2.6" fill="#ffd866" stroke="none"/>
+  </svg>
+  <svg class="deco-tree deco-b" viewBox="0 0 160 200" style="right:-14px;bottom:-14px;width:140px;height:180px;transform:scaleX(-1)" fill="none" stroke="#3f7d3d" stroke-width="1.6" stroke-linecap="round">
+    <path d="M150 195 C 110 175, 138 140, 96 126 C 58 113, 86 78, 50 64 C 26 54, 34 34, 18 22"/>
+    <g fill="#4c8c4a" stroke="none">
+      <path d="M96 126 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M50 64 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M18 22 q12 -8 20 -3 q-5 10 -20 3 Z"/>
+    </g>
+  </svg>
+  <svg class="deco-tree deco-c" viewBox="0 0 100 100" style="right:18px;top:14px;width:60px;height:60px" fill="#4c8c4a" stroke="none">
+    <path d="M50 90 C50 62 30 52 30 32 C30 16 50 16 50 32 C50 16 70 16 70 32 C70 52 50 62 50 90 Z"/>
+  </svg>
+
+  <svg class="deco-factory deco-a" viewBox="0 0 120 120" style="right:8px;top:8px;width:96px;height:96px" fill="none" stroke="var(--primary)" stroke-width="1.6">
+    <circle cx="60" cy="60" r="34"/>
+    <path d="M60 10 V30 M60 90 V110 M10 60 H30 M90 60 H110"/>
+    <circle cx="60" cy="60" r="3" fill="var(--primary)" stroke="none"/>
+    <path d="M60 46 l8 14 h-16 z" fill="var(--primary)" stroke="none" opacity=".85"/>
+  </svg>
+  <svg class="deco-factory deco-b" viewBox="0 0 120 120" style="left:10px;bottom:10px;width:84px;height:84px" fill="none" stroke="#101418" stroke-width="1.4">
+    <path d="M30 20 L60 4 L90 20 L90 56 L60 72 L30 56 Z"/>
+    <path d="M30 20 L60 36 L90 20 M60 36 V72"/>
+  </svg>
+
+  <!-- 萤火虫：仅深色森林显示 -->
+  <div class="deco-fireflies"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+</div>
+
 <div class="cp-app">
   <!-- 侧边栏（桌面端） -->
   <aside class="cp-sidebar" id="sidebar">

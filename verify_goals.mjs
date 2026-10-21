@@ -396,10 +396,10 @@ const K = await p.evaluate(() => {
   };
 });
 check('建第一个目标解锁「不再只是待办」', K.afterCreate.first === true, K.afterCreate);
-check('这条成就给 20 积分', K.afterCreate.pts === 20, K.afterCreate.pts);
-check('达成归档发 60 积分并记 rewardedAt', K.afterArchive.rewarded === true, K.afterArchive);
+check('成就解锁不发任何积分', K.afterCreate.pts === 0, K.afterCreate.pts);
+check('达成归档发分并记 rewardedAt', K.afterArchive.rewarded === true, K.afterArchive);
 check('顺带解锁「说到做到」', K.afterArchive.achieved === true);
-check('一次归档共 +245（20 建目标 + 60 目标 + 150 成就 + 15 KR 达成）', K.afterArchive.pts === 245, K.afterArchive.pts);
+check('一次归档共 +8（6 目标归档 + 2 KR 达成四舍五入；成就不发分）', K.afterArchive.pts === 8, K.afterArchive.pts);
 check('恢复再归档不重复发', K.again === 0, K.again);
 check('周期不满 7 天：100% 也不发分', K.shortDelta === 0 && K.shortRewarded === false, K);
 

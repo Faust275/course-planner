@@ -475,14 +475,14 @@
           style: { fontSize: '12px', color: '#5a7a4a', marginBottom: '6px' },
           text: nTrees
             ? (nTrees + ' 棵树 · 累计专注 ' + Store.pomodoro.focusMinutes + ' 分钟')
-            : '森林还是空的 · 专注攒够 ' + Store.plantCost('camphor') + ' 分就能种下第一棵树'
+            : '森林还是空的 · 专注满 40 分钟就能在这里种下第一棵树'
         }));
 
         if (nTrees) {
           var strip = el('div', { class: 'forest-strip' });
           Store.pomodoro.trees.slice(-10).forEach(function (tr) {
             var mini = el('div', { class: 'tree-mini', title: speciesOf(tr.species).name });
-            mini.appendChild(TreeArt.svg(treeStage(tr.growth), speciesOf(tr.species)));
+            mini.appendChild(TreeArt.svg(tr.stage || 1, speciesOf(tr.species), tr.withered));
             strip.appendChild(mini);
           });
           if (nTrees > 10) {
@@ -502,7 +502,7 @@
           fc.appendChild(el('div', { class: 'forest-ground' }));
           fc.appendChild(el('div', {
             style: { fontSize: '12.5px', color: '#6b8f57', margin: '8px 0 8px' },
-            text: '先专注一次，攒够积分就能在这里种下第一棵小树。'
+            text: '专注满 40 分钟，就能在这里种下第一棵小树。'
           }));
           fc.appendChild(el('button', {
             class: 'btn btn-sm',

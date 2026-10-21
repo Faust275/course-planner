@@ -221,6 +221,44 @@
         ]));
         lookCard.appendChild(V.field('主题色', grid, '切换会立刻应用到整个界面'));
 
+        /* --- 机制主题皮肤开关 --- */
+        var skinOn = st.themeSkin !== false;
+        var skinSw = el('button', {
+          class: 'switch' + (skinOn ? ' on' : ''),
+          type: 'button',
+          onclick: function () {
+            skinOn = !skinOn;
+            skinSw.classList.toggle('cp-on', skinOn);
+            Theme.setThemeSkin(skinOn);
+            UI.toast(skinOn ? '已开启机制主题皮肤' : '已关闭机制主题皮肤');
+          }
+        }, [el('i')]);
+        lookCard.appendChild(el('div', { class: 'switch-row', style: { marginTop: '2px' } }, [
+          el('div', { class: 'switch-text' }, [
+            el('b', { text: '机制主题皮肤' }),
+            el('span', { text: '开启后自动跟随奖励机制：森林=自然生机、抽卡=工厂硬核；主色仍可自定义覆盖' })
+          ]),
+          skinSw
+        ]));
+
+        /* --- 明暗模式 --- */
+        var modeVal = st.themeMode || 'auto';
+        var modeRow = el('div', { class: 'seg-row' });
+        [['auto', '跟随系统'], ['light', '浅色'], ['dark', '深色']].forEach(function (x) {
+          var seg = el('button', {
+            class: 'seg-btn' + (modeVal === x[0] ? ' on' : ''),
+            type: 'button',
+            onclick: function () {
+              Theme.setThemeMode(x[0]);
+              V.$$('.cp-seg-btn', modeRow).forEach(function (y) { y.classList.remove('cp-on'); });
+              seg.classList.add('cp-on');
+              UI.toast('明暗：' + x[1]);
+            }
+          }, [x[1]]);
+          modeRow.appendChild(seg);
+        });
+        lookCard.appendChild(V.field('明暗模式', modeRow, '「跟随系统」会随手机的深色模式自动切换；机制主题在两种明暗下各有配色'));
+
         /* --- 背景图 --- */
         var bgData = st.background.dataUrl || '';
         var preview = el('div', { class: 'bg-preview' + (bgData ? ' has-img' : '') });
@@ -1386,7 +1424,7 @@
           el('div', { class: 'section-title' }, ['开发者选项']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
-            text: '仅供调试抽卡与奖励机制使用。输入正确口令并点击按钮，可一次性发放 1000 积分及对应合成玉（按当前比例 1 积分 = ' + POMO.JADE_PER_POINT + ' 合成玉）。'
+            text: '仅供调试种树与奖励机制使用。输入正确口令并点击按钮，可一次性发放 100000 养分（积分）。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
             devInput,
@@ -1397,17 +1435,15 @@
                   UI.toast('口令不正确', 'err');
                   return;
                 }
-                var G = 1000;
-                var jade = G * POMO.JADE_PER_POINT;
+                var G = 100000;
                 var pm = Store.state.pomodoro;
                 pm.points += G;
-                pm.jade += jade;
                 pm.earned += G;
                 Store.emit();
-                UI.toast('已发放 ' + G + ' 积分与 ' + jade + ' 合成玉');
+                UI.toast('已发放 ' + G + ' 养分');
                 view.render();
               }
-            }, ['发放测试积分'])
+            }, ['发放养分'])
           ])
         ]);
         root.appendChild(devCard);
@@ -1811,16 +1847,52 @@
   function exportData() {
     try {
       var text = Store.exportJSON();
+      var name = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
       var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      UI.toast('备份已导出');
+      var file = null;
+      try { file = new File([blob], name, { type: 'application/json' }); } catch (e) { /* 老浏览器 */ }
+
+      // 优先拉起系统分享面板（手机上一键发给微信/QQ），不支持时回落到下载
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({
+          files: [file],
+          title: '课表备份',
+          text: '课表备份文件，另一台设备在「设置 → 数据管理 → 导入备份」选择即可恢复（含日记）'
+        }).then(function () { UI.toast('已发起分享', 'ok'); })
+          .catch(function () { download(); });
+        return;
+      }
+      download();
+
+      function download() {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        UI.toast('备份已导出：' + name, 'ok');
+        UI.modal({
+          title: '备份已保存',
+          width: '460px',
+          body: [
+            el('p', {
+              class: 'ocr-hint',
+              text: '文件名「' + name + '」，已存到浏览器的下载目录（手机一般在「文件管理 → 下载」里）。'
+            }),
+            el('p', {
+              class: 'ocr-hint',
+              text: '如何换设备：把这个文件直接用微信 / QQ 发给另一台设备，在那台设备打开' +
+                    '「设置 → 数据管理 → 导入备份」，选择该文件即可恢复。备份文件包含日记正文，存在自己放心的位置。'
+            })
+          ],
+          footer: el('div', { class: 'modal-foot' }, [
+            el('button', { class: 'btn btn-primary', text: '知道了', onclick: function () { this.closest('.modal-wrap').remove(); } })
+          ])
+        });
+      }
     } catch (e) {
       UI.toast('导出失败：' + e.message, 'err');
     }
@@ -2045,6 +2117,26 @@
     '日记不随同步码走。同步码要经剪贴板、聊天工具来回搬运，中途被谁看到无从控制；' +
     '日记只通过「导出备份」传文件，那个通道是你自己的文件。本机已有的日记不会因为导入同步码而丢失。';
 
+  /** 同步码存为 .txt 文件（移动端长文本复制易截断，发文件更稳） */
+  function saveSyncFile(text) {
+    if (!text) { UI.toast('同步码还没生成好', 'err'); return; }
+    try {
+      var blob = new Blob(['课表同步码（在另一台设备：设置 → 数据管理 → 粘贴同步码，整段导入本文件内容）\n\n' + text + '\n'],
+        { type: 'text/plain;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '课表同步码-' + DateUtil.toStr(DateUtil.today()) + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      UI.toast('文件已保存，可以直接分享给另一台设备', 'ok');
+    } catch (e) {
+      UI.toast('保存失败：' + e.message, 'err');
+    }
+  }
+
   /** 生成并展示同步码 */
   function syncCodeDialog() {
     var scope = 'standard';          // 默认推荐标准档
@@ -2060,8 +2152,8 @@
       body: [
         el('p', {
           class: 'ocr-hint',
-          text: '把这段码发到另一台设备（微信「文件传输助手」、备忘录都行），' +
-                '在那台设备打开「设置 → 数据管理 → 粘贴同步码」就同步完成了。'
+          text: '手机上推荐点「存为文件」，把文件直接发给另一台设备（微信 / QQ 都行，长文本不会被截断）；' +
+                '在那台设备打开「设置 → 数据管理 → 粘贴同步码」导入就同步完成了。'
         }),
         el('div', { class: 'section-title', text: '带哪些内容' }),
         chipBar,
@@ -2073,6 +2165,10 @@
       ],
       footer: el('div', { class: 'modal-foot' }, [
         el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn', text: '存为文件',
+          onclick: function () { if (code) saveSyncFile(ta.value); }
+        }),
         el('button', {
           class: 'btn btn-primary', text: '复制同步码',
           onclick: function () { if (code) copyToClipboard(code, ta); }
@@ -3202,6 +3298,7 @@
         onclick: function () {
           if (mode === o.k) return;
           Store.setRewardMode(o.k);
+          if (global.Theme) Theme.applyMech();
           UI.toast('已切换到「' + o.name + '」');
           view.render();
         }
@@ -3222,21 +3319,16 @@
         el('b', { text: String(pm.points) }),
         el('span', { text: '森林积分' })
       ]),
-      el('span', { class: 'rwb-plus', text: '+' }),
+      el('span', { class: 'rwb-plus', text: '｜' }),
       el('div', { class: 'rwb-item' }, [
         el('b', { text: String(pm.jade) }),
         el('span', { text: '合成玉' })
-      ]),
-      el('span', { class: 'rwb-eq', text: '=' }),
-      el('div', { class: 'rwb-item total' }, [
-        el('b', { text: String(Store.totalPoints()) }),
-        el('span', { text: '折合总积分' })
       ])
     ]));
     pickCard.appendChild(el('p', {
       class: 'ocr-hint', style: { marginBottom: '0' },
-      text: '1 积分 = ' + POMO.JADE_PER_POINT + ' 合成玉；累计获得过 ' + pm.earned +
-            ' 积分（不管切到哪种机制，这个数都不会变）。'
+      text: '积分与合成玉不互通，各花各的：森林模式花积分，抽卡模式花合成玉。当前在「' +
+            (pm.mode === 'gacha' ? '抽卡 · 花合成玉' : '森林 · 花积分') + '」。'
     }));
     root.appendChild(pickCard);
 

@@ -66,7 +66,8 @@ const buyRes = await p.evaluate(async () => {
   };
 });
 check('购买月卡成功', buyRes.ok === true);
-check('扣 300 分并返当天 10 分（1000 → 710）', buyRes.points === 710, buyRes.points);
+const CARD = await p.evaluate(() => ({ daily: POMO.CARD_DAILY, week: POMO.CARD_WEEK_BONUS, full: POMO.CARD_FULL_BONUS, days: POMO.CARD_DAYS }));
+check('扣 300 分并返当天 ' + CARD.daily + ' 分（1000 → ' + (1000 - 300 + CARD.daily) + '）', buyRes.points === 1000 - 300 + CARD.daily, buyRes.points);
 check('有效期 30 天', buyRes.info.daysLeft === 30 && buyRes.info.daysTotal === 30, buyRes.info);
 check('当天记为已签', buyRes.info.todaySigned === true && buyRes.info.signedDays === 1, buyRes.info);
 
@@ -114,30 +115,33 @@ const sim = await p.evaluate(() => {
   };
   return { full: run([]), miss5: run([5]), miss1: run([1]) };
 });
-check('30 天全勤总返 390（300 + 4×10 + 50）', sim.full.points === 390, sim.full);
+const expectFull = CARD.daily * 30 + CARD.week * 4 + CARD.full;
+check('30 天全勤总返 ' + expectFull + '（日×30 + 周×4 + 全勤奖）', sim.full.points === expectFull, sim.full);
+check('全勤总返约为售价 3 倍', sim.full.points / 300 > 2.7 && sim.full.points / 300 < 3.3, +(sim.full.points / 300).toFixed(2));
 check('全勤标记已发', sim.full.full === true);
 check('周奖励窗口落在第 28 天', sim.full.weekEnd === '2026-01-28', sim.full.weekEnd);
-check('漏第 5 天：只损失当天 + 该窗口（290 + 30 = 320）', sim.miss5.points === 320, sim.miss5);
+check('漏第 5 天：损失当天 + 该窗口 + 全勤奖', sim.miss5.points === expectFull - CARD.daily - CARD.week - CARD.full, sim.miss5);
 check('漏签不发 30 天全勤奖', sim.miss5.full === false);
-check('漏第 1 天仍能拿 4 次周奖励（290 + 40 = 330）', sim.miss1.points === 330, sim.miss1);
+check('漏第 1 天仍能拿 4 次周奖励', sim.miss1.points === expectFull - CARD.daily - CARD.full, sim.miss1);
 check('月卡返利写入积分流水（30 天 + 5 次奖励 = 35 条）', sim.full.src === 35, sim.full.src);
+const ticketState = await p.evaluate(() => Store.ticketInfo());
+check('全勤后拿到定向券与补签卡', ticketState.selection >= 1 && ticketState.makeUp >= 1, ticketState);
 
-/* ---------- 双币扣款 ---------- */
+/* ---------- 双币不互通 ---------- */
 const dual = await p.evaluate(() => {
   Store.state.pomodoro.points = 100;
-  Store.state.pomodoro.jade = 180 * 250;   // 250 积分
-  const ok1 = Store.spendPoints(300);
-  const r1 = { p: Store.state.pomodoro.points, j: Store.state.pomodoro.jade };
-  Store.state.pomodoro.points = 10;
-  Store.state.pomodoro.jade = 180 * 10;    // 不够 300
-  const ok2 = Store.spendPoints(300);
-  const r2 = { p: Store.state.pomodoro.points, j: Store.state.pomodoro.jade };
-  return { ok1, r1, ok2, r2 };
+  Store.state.pomodoro.jade = 180 * 250;   // 玉很多
+  const okP = Store.spendPoints(300);      // 积分不足：不得从玉补扣
+  const rP = { p: Store.state.pomodoro.points, j: Store.state.pomodoro.jade };
+  Store.state.pomodoro.jade = 180 * 250;
+  const okJ = Store.spendJade(180 * 100);  // 单独扣玉
+  const rJ = { p: Store.state.pomodoro.points, j: Store.state.pomodoro.jade };
+  return { okP, rP, okJ, rJ };
 });
-check('双币扣款成功（100 分 + 200 分等值玉）', dual.ok1 === true && dual.r1.p === 0 && dual.r1.j === 180 * 50, dual.r1);
-check('两池都不够时拒绝且不扣任何币', dual.ok2 === false && dual.r2.p === 10 && dual.r2.j === 1800, dual.r2);
+check('积分不足时不从合成玉补扣（不互通）', dual.okP === false && dual.rP.p === 100 && dual.rP.j === 180 * 250, dual.rP);
+check('合成玉单独扣款成功', dual.okJ === true && dual.rJ.j === 180 * 150, dual.rJ);
 
-/* ---------- 满潜兑换 ---------- */
+/* ---------- 满潜兑换（固定换成合成玉） ---------- */
 const ex = await p.evaluate(() => {
   Store.state.shop.dupPool = [
     { n: 'A', r: 6, pts: 40, at: Date.now() },
@@ -145,20 +149,18 @@ const ex = await p.evaluate(() => {
   ];
   Store.state.pomodoro.jade = 0;
   Store.state.pomodoro.points = 500;
-  const before = Store.totalPoints();
   const info = Store.dupPoolInfo();
   const r = Store.exchangeDup();
   return {
     info, r,
     jade: Store.state.pomodoro.jade,
-    pool: Store.state.shop.dupPool.length,
-    before, after: Store.totalPoints()
+    points: Store.state.pomodoro.points,
+    pool: Store.state.shop.dupPool.length
   };
 });
-check('待兑换 2 份 / 52 积分 / 9360 玉', ex.info.count === 2 && ex.info.points === 52 && ex.info.jade === 9360, ex.info);
-check('一键兑换得到 9360 合成玉', ex.r.ok && ex.jade === 9360, ex);
+check('待兑换 2 份 / 9360 玉', ex.info.count === 2 && ex.info.jade === 9360, ex.info);
+check('兑换为合成玉：+9360 玉、积分不变', ex.r.ok && ex.jade === 9360 && ex.points === 500, ex);
 check('兑换后池子清空', ex.pool === 0);
-check('兑换后等值积分 +52（重复奖励在兑换时才入账）', ex.after === ex.before + 52, { before: ex.before, after: ex.after });
 
 const exUi = await p.evaluate(() => {
   Store.state.shop.dupPool = [{ n: 'C', r: 5, pts: 25, at: Date.now() }];

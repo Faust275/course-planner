@@ -157,11 +157,59 @@
   /* ==========================================================
    * 抽卡弹窗
    * ========================================================== */
+  /** 井兑换：只能在「含当期在内的最近 N 期 UP」里选 */
+  function sparkPicker(poolId, done) {
+    var sp = Store.sparkInfo(poolId);
+    if (!sp.ready) { V.toast('井还没攒够（' + sp.count + '/' + sp.need + '）', 'err'); return; }
+    var list = Store.gachaSparkPool(poolId);
+    if (!list.length) { V.toast('暂时没有可兑换的干员', 'err'); return; }
+    var box = el('div', { class: 'limited-picker' });
+    list.forEach(function (x) {
+      var rec = Store.opByName(x.n);
+      box.appendChild(el('button', {
+        class: 'btn btn-block limited-pick',
+        text: (rec ? rec.r + '★ ' : '') + x.n +
+              (x.periodsAgo === 0 ? '（本期）' : '（' + x.periodsAgo + ' 期前）'),
+        onclick: function () {
+          var w = this.closest('.modal-wrap');
+          if (w) w.remove();
+          V.confirm({
+            title: '井兑换',
+            message: '将消耗攒满的井（计数清零），兑换「' + x.n + '」。确定继续吗？',
+            ok: '兑换',
+            onOk: function () {
+              var r = Store.redeemSpark(poolId, x.n);
+              if (!r.ok) { V.toast(r.msg, 'err'); return; }
+              V.toast('井兑换成功：' + r.n);
+              if (done) done();
+            }
+          });
+        }
+      }));
+    });
+    V.modal({
+      title: '井兑换 · ' + sp.name,
+      width: '420px',
+      body: [
+        el('div', { class: 'ocr-hint', text: '可兑换范围：含当期在内的最近 ' +
+          (POMO.GACHA_POOLS[poolId].sparkHistory || 5) + ' 期 UP。' }),
+        box
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '关闭', onclick: function () { this.closest('.modal-wrap').remove(); } })
+      ])
+    });
+  }
+
   function openGacha() {
     var pm = Store.pomodoro;
 
     var balanceEl = el('div', { class: 'gc-balance' });
+    var poolEl = el('div', { class: 'gc-pool' });
+    var sparkEl = el('div', { class: 'gc-spark' });
+    var previewEl = el('div', { class: 'gc-preview' });
     var rateEl = el('div', { class: 'gc-rate' });
+    var lkBox = el('div', { class: 'gc-rate cp-gc-spark-box' });
     var resultBox = el('div', { class: 'gc-result' });
 
     function drawHead() {
@@ -172,12 +220,92 @@
         text: '≈ ' + (Math.round(pm.jade / POMO.JADE_PER_POINT * 10) / 10) + ' 积分'
       }));
 
+      var poolId = pm.gacha.currentPool || 'standard';
+      var st = Store.gachaPoolState(poolId);
+      var sp = Store.sparkInfo(poolId);
+      var up = Store.gachaCurrentUp(poolId);
+
+      /* 池切换 */
+      poolEl.innerHTML = '';
+      poolEl.appendChild(el('div', { class: 'gc-pool-tabs' }, Object.keys(POMO.GACHA_POOLS).map(function (id) {
+        return el('button', {
+          class: 'gc-pool-tab' + (id === poolId ? ' active' : ''),
+          text: POMO.GACHA_POOLS[id].name,
+          onclick: function () {
+            Store.setGachaPool(id);
+            drawHead();
+            V.toast('已切到' + POMO.GACHA_POOLS[id].name);
+          }
+        });
+      })));
+      poolEl.appendChild(el('div', { class: 'gc-pool-desc', text: POMO.GACHA_POOLS[poolId].desc }));
+      poolEl.appendChild(el('div', { class: 'gc-up-line' }, [
+        el('span', { class: 'gc-up-tag', text: '本期 UP' }),
+        el('b', { class: 'gc-up-six', text: up.six.join(' · ') || '—' })
+      ]));
+      if (up.five.length) {
+        poolEl.appendChild(el('div', { class: 'gc-up-line gc-up-dim' }, [
+          el('span', { text: '五星 UP' }),
+          el('span', { text: up.five.join(' · ') })
+        ]));
+      }
+      if (st.guaranteed) {
+        poolEl.appendChild(el('div', { class: 'gc-guarantee', text: '上次歪了 → 下一个六星必为当期 UP' }));
+      }
+
+      /* 井进度 + 兑换按钮 */
+      sparkEl.innerHTML = '';
+      var pct = Math.min(100, Math.round(sp.count / sp.need * 100));
+      sparkEl.appendChild(el('div', { class: 'gc-up-line' }, [
+        el('span', { text: sp.name + ' 井 ' }),
+        el('b', { text: sp.count + ' / ' + sp.need }),
+        el('span', { class: 'gc-up-dim', text: '　跨期不清零' })
+      ]));
+      var bar = el('div', { class: 'cp-gc-spark' });
+      bar.appendChild(el('i', { style: { width: pct + '%' } }));
+      sparkEl.appendChild(bar);
+      sparkEl.appendChild(el('button', {
+        class: 'btn' + (sp.ready ? ' btn-primary' : ''),
+        text: sp.ready ? '井兑换（近 5 期 UP）' : '井兑换（还差 ' + (sp.need - sp.count) + ' 抽）',
+        onclick: function () { sparkPicker(poolId, function () { drawHead(); }); }
+      }));
+
+      /* 未来 3 期预告 */
+      var soon = Store.gachaUpcoming(poolId, 3);
+      previewEl.innerHTML = '';
+      previewEl.appendChild(el('div', { class: 'gc-prev-title', text: '后续 3 期 UP 预告（每 ' + POMO.GACHA_POOLS[poolId].rotDays + ' 天轮换）' }));
+      soon.forEach(function (p) {
+        previewEl.appendChild(el('div', { class: 'gc-prev-row' }, [
+          el('span', { class: 'gc-prev-day', text: '+' + (p.offset * POMO.GACHA_POOLS[poolId].rotDays) + '天' }),
+          el('span', { text: p.six.join(' · ') })
+        ]));
+      });
+
       var s = Store.gachaStats();
       rateEl.innerHTML =
         '<div class="cp-gcr-line">六星 <b>' + s.rate6 + '%</b>' +
         (s.pity >= POMO.PITY_START ? '<em>保底中</em>' : '') +
         '　·　距上次六星 <b>' + s.pity + '</b> 抽</div>' +
         '<div class="cp-gcr-line cp-gcr-dim">五星 8% · 四星 50% · 三星 40%　每自然天首个十连保底五星</div>';
+
+      // 限定井进度：与抽卡同屏呈现，攒井过程看得见
+      var lk = Store.limitedSparkInfo();
+      lkBox.innerHTML = '';
+      var pct = Math.min(100, Math.round(lk.count / lk.need * 100));
+      lkBox.appendChild(el('div', { class: 'cp-gcr-line' }, [
+        el('span', { text: '限定井 ' }),
+        el('b', { text: lk.count + ' / ' + lk.need }),
+        el('span', { class: 'cp-gcr-dim', text: lk.target ? '　目标 ' + lk.target : '　未登记目标' })
+      ]));
+      var bar = el('div', { class: 'cp-gc-spark' });
+      bar.appendChild(el('i', { style: { width: pct + '%' } }));
+      lkBox.appendChild(bar);
+      if (lk.ready) {
+        lkBox.appendChild(el('div', {
+          class: 'cp-gcr-line cp-gc-spark-ready',
+          text: '已攒满，可到「收集 → 商店 → 限定专区」兑换'
+        }));
+      }
     }
 
     function showResult(list, newSet) {
@@ -282,7 +410,7 @@
       title: '寻访 · 标准池',
       width: '560px',
       body: [
-        el('div', { class: 'gc-head' }, [balanceEl, rateEl]),
+        el('div', { class: 'gc-head' }, [balanceEl, poolEl, sparkEl, rateEl, lkBox, previewEl]),
         resultBox,
         el('p', {
           class: 'ocr-hint',

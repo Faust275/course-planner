@@ -248,7 +248,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   box-shadow: 0 2px 8px var(--primary-shadow-soft);
 }
 .cp-btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
-.cp-btn-danger { color: var(--red); border-color: #fbd5d2; background: #fff; }
+.cp-btn-danger { color: var(--red); border-color: #fbd5d2; background: var(--surface); }
 .cp-btn-danger:hover { background: var(--red-weak); border-color: var(--red); color: var(--red); }
 .cp-btn-sm { height: 29px; padding: 0 10px; font-size: 12.5px; border-radius: 8px; }
 .cp-btn-block { width: 100%; }
@@ -376,7 +376,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cp-tt-body td.cp-col-time span { font-size: 10.5px; }
 .cp-tt-body td.cp-cell { background: var(--surface); cursor: pointer; transition: background .12s; position: relative; }
 .cp-tt-body td.cp-cell:hover { background: var(--surface-2); }
-.cp-tt-body td.cp-cell.cp-we-off { background: #fbfbfd; }
+.cp-tt-body td.cp-cell.cp-we-off { background: var(--surface-2); }
 .cp-tt-body td.cp-cell.cp-we-off:hover { background: var(--surface-2); }
 
 .cp-tcell { position: relative; padding: 4px; width: 100%; min-height: 66px; box-sizing: border-box; }
@@ -385,7 +385,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   position: absolute; left: 4px; right: 4px; top: 4px; bottom: 4px;
   border-radius: 9px; padding: 6px 7px; overflow: hidden;
   border-left: 3px solid var(--c, var(--primary));
-  background: color-mix(in srgb, var(--c, #4f46e5) 11%, #fff);
+  background: color-mix(in srgb, var(--c, #4f46e5) 11%, var(--surface));
   display: flex; flex-direction: column; gap: 1px;
   text-align: left; transition: box-shadow .15s, transform .12s;
   cursor: pointer;
@@ -625,7 +625,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 .cp-task-check {
   width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%;
-  border: 1.8px solid var(--line-strong); background: #fff;
+  border: 1.8px solid var(--line-strong); background: var(--surface);
   display: grid; place-items: center; transition: all .15s;
   color: #fff;
 }
@@ -2808,6 +2808,16 @@ input[type="range"]::-moz-range-thumb {
   font-size: 12px; color: var(--text-3);
 }
 .cp-shop-dot.cp-on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 700; }
+/* 可用补签卡补上的漏签日 */
+.cp-shop-dot.cp-mendable {
+  cursor: pointer; border-style: dashed; border-color: var(--primary); color: var(--primary);
+  background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--primary-weak) 3px, var(--primary-weak) 6px);
+}
+.cp-shop-btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.cp-shop-btn-row .cp-btn { flex: 1 1 auto; }
+.cp-limited-picker { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; }
+.cp-limited-pick { justify-content: flex-start; }
+.cp-limited-pick.cp-owned { opacity: .62; }
 .cp-shop-badge {
   display: inline-block; margin-top: 10px; font-size: 11.5px; color: var(--primary);
   background: var(--primary-weak); padding: 3px 9px; border-radius: 999px;
@@ -2858,7 +2868,7 @@ input[type="range"]::-moz-range-thumb {
 .cp-ach-item.cp-done { opacity: 1; border-color: var(--primary); }
 .cp-ach-icon {
   flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
-  background: #fff; color: #888; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text-3); border: 1px solid var(--line);
 }
 .cp-ach-icon.cp-tier-bronze { color: #cd7f32; border-color: #cd7f32; }
 .cp-ach-icon.cp-tier-silver { color: #9aa7b5; border-color: #9aa7b5; }
@@ -2883,7 +2893,7 @@ input[type="range"]::-moz-range-thumb {
 .cp-ach-pop { text-align: center; padding: 8px 4px; }
 .cp-ach-pop-icon {
   width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
-  background: #fff; color: #888; border: 2px solid var(--line);
+  background: var(--surface); color: var(--text-3); border: 2px solid var(--line);
 }
 .cp-ach-pop-icon.cp-tier-bronze { color: #cd7f32; border-color: #cd7f32; }
 .cp-ach-pop-icon.cp-tier-silver { color: #9aa7b5; border-color: #9aa7b5; }
@@ -3609,3 +3619,301 @@ mark.cp-hit {
 }
 .cp-tb-type:hover { background: var(--surface-2); }
 .cp-tb-type i { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ==========================================================
+ * 机制主题皮肤：种树（自然有生机） / 抽卡（工厂·硬核）
+ * 由 <html data-mech="tree|factory"> 切换；强调色可被用户手动选色覆盖
+ * ========================================================== */
+
+/* 装饰层：固定铺满、不挡操作，按机制显隐对应元素 */
+.cp-deco { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+.cp-deco > * { position: absolute; opacity: 0; transition: opacity .45s var(--ease-out); }
+/* 装饰层位于背景（.cp-app-bg z-index:0）之上、应用内容（.cp-app z-index:1）之下，
+   透明度必须由这里统一控制（原先写在 SVG inline style 里会永久可见，且盖住内容） */
+html[data-mech="tree"] .cp-deco .deco-tree,
+html[data-mech="factory"] .cp-deco .deco-factory { opacity: 1; }
+html[data-mech="tree"] .cp-deco .deco-tree.deco-a { opacity: .5; }
+html[data-mech="tree"] .cp-deco .deco-tree.deco-b { opacity: .42; }
+html[data-mech="tree"] .cp-deco .deco-tree.deco-c { opacity: .4; }
+html[data-mech="factory"] .cp-deco .deco-factory.deco-a { opacity: .5; }
+html[data-mech="factory"] .cp-deco .deco-factory.deco-b { opacity: .32; }
+
+/* ---------- 种树：自然有生机 ---------- */
+html[data-mech="tree"] {
+  --bg: #eef6ec;
+  --surface: #ffffff;
+  --surface-2: #f3f9f1;
+  --line: #e1ece0;
+  --line-strong: #cfe0cc;
+  --radius: 20px;
+  --radius-lg: 26px;
+  --shadow-sm: 0 1px 3px rgba(31, 74, 33, .06);
+  --shadow: 0 6px 20px rgba(31, 74, 33, .08);
+  --shadow-lg: 0 20px 50px rgba(31, 74, 33, .14);
+}
+html[data-mech="tree"] .card,
+html[data-mech="tree"] .cp-card { border-radius: var(--radius-lg); }
+
+/* ---------- 抽卡：工厂·硬核（对标明日方舟浅色终端）---------- */
+html[data-mech="factory"] {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --line: #c7ced6;
+  --line-strong: #101418;
+  --radius: 4px;
+  --radius-lg: 6px;
+  --shadow-sm: 2px 2px 0 #101418;
+  --shadow: 4px 4px 0 #101418;
+  --shadow-lg: 6px 6px 0 #101418;
+}
+/* 蓝图网点底纹 */
+html[data-mech="factory"] body {
+  background-image: radial-gradient(rgba(16, 20, 24, .10) 1px, transparent 1.4px);
+  background-size: 14px 14px;
+}
+/* 卡片：方舟主菜单板块——磨砂白切角面板 + 顶部强调线 + 网点水印
+   （排除 cp-hero：那是主视觉卡，原本是主题色渐变底 + 白字，覆盖成白底会导致白字隐形） */
+html[data-mech="factory"] .card:not(.cp-hero),
+html[data-mech="factory"] .cp-card:not(.cp-hero) {
+  border: 1px solid rgba(16, 20, 24, .55);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .93), rgba(255, 255, 255, .85));
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  box-shadow: none;
+  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px));
+  position: relative;
+}
+/* 顶部强调短线（对应主菜单板块的橙色横线；hero 保留自身渐变，不加短线下划线） */
+html[data-mech="factory"] .card:not(.cp-hero)::before,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::before {
+  content: ''; position: absolute; left: 0; top: 0; width: 36px; height: 3px;
+  background: var(--primary); pointer-events: none; z-index: 1;
+}
+/* 右下淡网点水印（对应板块上的淡色图标水印） */
+html[data-mech="factory"] .card:not(.cp-hero)::after,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::after {
+  content: ''; position: absolute; right: 0; bottom: 0; width: 58px; height: 58px;
+  background-image: radial-gradient(rgba(16, 20, 24, .17) 1px, transparent 1.35px);
+  background-size: 7px 7px;
+  -webkit-mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
+  mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
+  pointer-events: none;
+}
+/* 主按钮前加部署箭头 */
+html[data-mech="factory"] .btn-primary::before { content: '► '; font-family: var(--font-mono, monospace); }
+
+/* ============ 林地 / 树种图鉴 / 枯萎（专注即种树） ============ */
+.cp-grove-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+@media (max-width: 620px) { .cp-grove-grid { grid-template-columns: repeat(2, 1fr); } }
+.cp-grove-slot {
+  border: 1px dashed var(--line-strong); border-radius: 12px;
+  min-height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--text-3); font-size: 11px; background: var(--surface-2);
+}
+.cp-grove-slot-plus { font-size: 24px; line-height: 1; color: var(--text-3); margin-bottom: 4px; }
+
+.cp-grove-pick { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); margin-bottom: 4px; }
+.cp-grove-pick-img { width: 42px; flex: 0 0 42px; }
+.cp-grove-pick-img .cp-tree-svg { height: 44px; }
+.cp-grove-pick-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cp-grove-pick-main b { font-size: 12.5px; }
+.cp-grove-pick-main span { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+
+.cp-tree-card.cp-withered { background: #f1efe9; }
+.cp-tree-card.cp-withered .cp-tree-name { color: #8a7f6f; }
+.cp-tree-svg.cp-withered { filter: grayscale(.3); }
+
+.cp-codex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 10px; margin-top: 8px; }
+.cp-codex-item { border: 1px solid var(--line); border-radius: 10px; padding: 6px 6px 8px; background: var(--surface-2); cursor: pointer; text-align: center; }
+.cp-codex-item:hover { box-shadow: var(--shadow-sm); }
+.cp-codex-img .cp-tree-svg { height: 64px; }
+.cp-codex-item b { font-size: 11px; font-weight: 600; }
+.cp-codex-next { font-size: 11px; color: var(--text-3); margin-top: 10px; }
+
+.cp-codex-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+.cp-codex-strip-cell { text-align: center; }
+.cp-codex-strip-cell .cp-tree-svg { height: 56px; }
+.cp-codex-strip-cell span { font-size: 10px; color: var(--text-3); }
+.cp-codex-info > div { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.cp-codex-info b { flex: 0 0 64px; color: var(--text-2); font-weight: 600; }
+.cp-codex-info span { flex: 1; color: var(--text); line-height: 1.6; }
+
+/* ==========================================================
+ * 深色主题（data-mode="dark"）：基础中性深色 + 两种机制专属深色
+ * ========================================================== */
+html[data-mode="dark"] {
+  --bg: #0f1115;
+  --surface: #181b21;
+  --surface-2: #1f232b;
+  --line: #2a2f38;
+  --line-strong: #3a414d;
+  --text: #e8ecf2;
+  --text-1: #e8ecf2;
+  --text-2: #aab2c0;
+  --text-3: #7b8494;
+  --green-weak: #12301f;
+  --amber-weak: #33260f;
+  --red-weak: #33191a;
+  --blue-weak: #12233a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow: 0 6px 20px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, .65);
+  color-scheme: dark;
+}
+html[data-mode="dark"] .cp-btn-danger { border-color: #5a2a2a; }
+html[data-mode="dark"] input,
+html[data-mode="dark"] select,
+html[data-mode="dark"] textarea { background: var(--surface); color: var(--text); }
+html[data-mode="dark"] .cp-tree-svg > ellipse:first-child { fill: #232a24; }
+html[data-mode="dark"] body.cp-has-bg .cp-sidebar { background: rgba(20, 23, 27, .84); }
+html[data-mode="dark"] body.cp-has-bg .cp-topbar { background: rgba(20, 23, 27, .74); }
+html[data-mode="dark"] body.cp-has-bg .cp-tabbar { background: rgba(20, 23, 27, .8); }
+html[data-mode="dark"] body.cp-has-bg .cp-view-wrap { background: rgba(20, 23, 27, .34); }
+
+/* —— 种树 · 深色：夜晚林间 —— */
+html[data-mode="dark"][data-mech="tree"] {
+  --bg: #0f1712;
+  --surface: #16211a;
+  --surface-2: #1b2a20;
+  --line: #27382c;
+  --line-strong: #35493a;
+  --text: #dce9dd;
+  --text-1: #dce9dd;
+  --text-2: #a7bdaa;
+  --text-3: #7d9583;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, .5);
+  --shadow: 0 8px 26px rgba(0, 0, 0, .5);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, .6);
+}
+
+/* —— 抽卡 · 深色：基建终端（黑砖 + 荧光绿 + 网格 + 扫描线）—— */
+html[data-mode="dark"][data-mech="factory"] {
+  --bg: #0a0c0f;
+  --surface: #14171b;
+  --surface-2: #191d22;
+  --line: #2a2f36;
+  --line-strong: #3a414d;
+  --text: #e8ecf0;
+  --text-1: #e8ecf0;
+  --text-2: #8792a0;
+  --text-3: #6b7585;
+  --shadow-sm: 0 0 0 1px #2a2f36;
+  --shadow: 0 0 0 1px #2a2f36, 0 8px 22px rgba(0, 0, 0, .6);
+  --shadow-lg: 0 0 0 1px #2a2f36, 0 18px 48px rgba(0, 0, 0, .7);
+}
+html[data-mode="dark"][data-mech="factory"] body {
+  background-image:
+    linear-gradient(rgba(184, 230, 83, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(184, 230, 83, .045) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, .02) 1px, transparent 1px);
+  background-size: 30px 30px, 30px 30px, 6px 6px;
+}
+html[data-mode="dark"][data-mech="factory"] .cp-deco::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(184, 230, 83, .35), transparent);
+  animation: cpScan 6s linear infinite;
+}
+/* 深色板块：黑砖切角面板（对齐基建界面的暗色板块） */
+html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero),
+html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero) {
+  border-color: #3a414d;
+  background: linear-gradient(180deg, rgba(30, 34, 40, .94), rgba(22, 26, 31, .9));
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+html[data-mode="dark"][data-mech="factory"] .card::after,
+html[data-mode="dark"][data-mech="factory"] .cp-card::after {
+  background-image: radial-gradient(rgba(184, 230, 83, .14) 1px, transparent 1.35px);
+}
+/* 浅色下扫描线增强：青色高亮带 + 白色高光核，否则白天几乎不可见 */
+html[data-mode="light"][data-mech="factory"] .cp-deco::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, transparent, rgba(31, 159, 184, .5) 30%,
+              rgba(255, 255, 255, .95) 50%, rgba(31, 159, 184, .5) 70%, transparent);
+  box-shadow: 0 0 10px rgba(31, 159, 184, .45);
+  animation: cpScan 7s linear infinite;
+}
+@keyframes cpScan { 0% { top: -2px; } 100% { top: 100%; } }
+
+/* —— 萤火虫（仅深色森林）—— */
+.deco-fireflies { position: absolute; inset: 0; }
+.deco-fireflies span {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: #d6ff7a; box-shadow: 0 0 8px 2px rgba(214, 255, 122, .7); opacity: 0;
+}
+html[data-mode="dark"][data-mech="tree"] .cp-deco .deco-fireflies { opacity: 1; }
+html[data-mode="dark"][data-mech="tree"] .deco-fireflies span { animation: cpFirefly 6s ease-in-out infinite; }
+.deco-fireflies span:nth-child(1) { left: 12%; top: 22%; animation-delay: 0s; }
+.deco-fireflies span:nth-child(2) { left: 26%; top: 58%; animation-delay: 1.2s; }
+.deco-fireflies span:nth-child(3) { left: 41%; top: 34%; animation-delay: 2.4s; }
+.deco-fireflies span:nth-child(4) { left: 63%; top: 70%; animation-delay: .6s; }
+.deco-fireflies span:nth-child(5) { left: 78%; top: 28%; animation-delay: 3.1s; }
+.deco-fireflies span:nth-child(6) { left: 88%; top: 62%; animation-delay: 1.8s; }
+.deco-fireflies span:nth-child(7) { left: 52%; top: 82%; animation-delay: 4.2s; }
+.deco-fireflies span:nth-child(8) { left: 33%; top: 12%; animation-delay: 2.9s; }
+@keyframes cpFirefly {
+  0%, 100% { opacity: 0; transform: translateY(0) scale(.8); }
+  20% { opacity: .9; }
+  50% { opacity: .5; transform: translateY(-10px) scale(1.1); }
+  80% { opacity: .85; }
+}
+
+/* —— 明暗分段控件 —— */
+.cp-seg-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.cp-seg-btn {
+  padding: 7px 14px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--surface); color: var(--text-2); font-size: 13px; cursor: pointer;
+}
+.cp-seg-btn:hover { border-color: var(--line-strong); }
+.cp-seg-btn.cp-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* —— 深色下的硬编码浅色兜底 —— */
+html[data-mode="dark"] .cp-topbar { background: rgba(20, 23, 27, .82); }
+html[data-mode="dark"] .cp-tabbar { background: rgba(20, 23, 27, .94); }
+html[data-mode="dark"] .cp-sum-card { background: var(--surface); }
+html[data-mode="dark"] .cp-dc-poem {
+  background: linear-gradient(140deg, #2a2318, #241d13);
+  border-color: #4a3a22; color: #e2c99a;
+}
+html[data-mode="dark"] .cp-dc-poem .cp-dc-next { color: #e2c99a; }
+html[data-mode="dark"] .cp-forest-card {
+  background: linear-gradient(180deg, #16211a, #121a15);
+  border-color: #27382c;
+}
+html[data-mode="dark"] .cp-tree-card.cp-withered { background: #241f18; }
+html[data-mode="dark"][data-mech="factory"] .cp-forest-card {
+  background: linear-gradient(180deg, #14171b, #101317);
+  border-color: #2a2f36;
+}
+html[data-mode="dark"] body.cp-has-bg .cp-sum-card { background: rgba(24, 27, 33, .94); }
+html[data-mode="dark"] body.cp-has-bg .cp-tt-body td.cp-cell { background: rgba(24, 27, 33, .92); }
+html[data-mode="dark"] body.cp-has-bg .cp-textarea { background: rgba(24, 27, 33, .9); }
+html[data-mode="dark"] body.cp-has-bg .cp-week-bar .cp-btn { background: rgba(24, 27, 33, .82); }
+html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 33, .82); }
+
+/* 抽卡页：限定井进度条 */
+.cp-gc-spark-box { margin-top: 4px; }
+.cp-gc-spark { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin: 4px 0 2px; }
+.cp-gc-spark > i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary-light), var(--primary)); }
+.cp-gc-spark-ready { color: var(--primary); font-weight: 600; }
+
+/* 卡池：切换 / 本期 UP / 井 / 预告 */
+.cp-gc-pool { display: flex; flex-direction: column; gap: 4px; }
+.cp-gc-pool-tabs { display: flex; gap: 6px; }
+.cp-gc-pool-tab {
+  padding: 4px 10px; border: 1px solid var(--line-strong, var(--line)); border-radius: 999px;
+  background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer;
+}
+.cp-gc-pool-tab.cp-active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.cp-gc-pool-desc { font-size: 11.5px; color: var(--text-3); }
+.cp-gc-up-line { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.cp-gc-up-tag { font-size: 11px; color: var(--text-3); }
+.cp-gc-up-six { color: var(--primary); font-weight: 700; }
+.cp-gc-up-dim { font-size: 11.5px; color: var(--text-3); }
+.cp-gc-guarantee { font-size: 12px; color: var(--primary); font-weight: 600; }
+.cp-gc-spark { display: flex; flex-direction: column; gap: 4px; margin: 2px 0; }
+.cp-gc-preview { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.cp-gc-prev-title { font-size: 11px; color: var(--text-3); }
+.cp-gc-prev-row { display: flex; gap: 8px; font-size: 11.5px; color: var(--text-2); }
+.cp-gc-prev-day { color: var(--text-3); min-width: 34px; }

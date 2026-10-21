@@ -178,6 +178,9 @@
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         theme: 'indigo', customColor: '#4f46e5',
+        themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
+        themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
+        themeMode: 'auto',        // 明暗：auto（跟随系统）/ light / dark
         quiz: { right: 0, wrong: 0 },
         nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
@@ -242,13 +245,17 @@
         points: 0,          // 森林积分（种树 / 浇水）
         jade: 0,            // 合成玉（抽卡）
         mode: 'forest',     // 当前奖励机制：forest | gacha
-        gacha: { pity6: 0, total: 0, ops: [], log: [], dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0 },
+        gacha: { pity6: 0, total: 0, ops: [], log: [], dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0,
+                 limited: { target: '', count: 0 } },
         earned: 0,          // 累计获得
         pointLog: [],       // 积分流水：[{date, n, src}]，src ∈ focus/task/plan/goal/ach/sleep/meal/activity
         focusMinutes: 0,    // 累计专注分钟
-        trees: [],
+        trees: [],          // 林地树位（最多 4 棵）
+        treesPlanted: 0,    // 累计种下棵数（种树成就用）
+        harvested: 0,       // 累计收获棵数（收藏）
+        selectedSpecies: 'camphor',  // 下次种下的树种
         sessions: [],
-        timer: { running: false, endAt: 0, left: 0, duration: 25, taskId: '' }
+        timer: { running: false, endAt: 0, left: 0, duration: 45, taskId: '', treeId: '' }
       },
       plans: [],       // 计划（打卡 / 进度）
       goals: [],       // 目标（目标 → 关键结果 → 计划/待办）
@@ -261,10 +268,11 @@
       sleeps: [],      // 睡眠记录
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
-      shop: {                   // 商城：月卡 / 潜能兑换
-        card: null,             // 月卡 { startDate, endDate, days:{}, weekAwardEnd, fullAwarded, paid, gained }
+      shop: {                   // 商城：月卡 / 潜能兑换 / 限定专区
+        card: null,             // 月卡 { startDate, endDate, days:{}, weekAwardEnd, fullAwarded, paid, gained, mode }
         activeDays: {},         // 近 120 天「用过任意功能」的日期：{ 'YYYY-MM-DD': 1 }
         dupPool: [],            // 满潜重复待兑换：[{ n, r, pts, at }]
+        tickets: { selection: 0, makeUp: 0 },  // 定向券（月全勤发）/ 补签卡（周全勤发）
         log: []                 // 最近 100 条商城记录
       }
     };
@@ -613,21 +621,21 @@
 
   /* ===== 番茄钟 / 积分 / 养树：规则与树阶段 ===== */
   var POMO = {
-    POINT_PER_MIN: 1,      // 每专注 1 分钟
-    TASK_DONE: 10,         // 完成一个待办
-    PLAN_CHECKIN: 2,       // 完成一次打卡
-    PLAN_DONE: 30,         // 完成一个计划
-    GOAL_DONE: 60,         // 目标推进到 100% 并归档留档（每目标一次，周期需满 7 天）
-    KR_DONE: 15,           // 单条 KR 首次达成 100%（每 KR 一次）
-    /* —— 记录类发分（睡眠 / 饮食 / 活动）—— */
-    SLEEP_DAY: 4,          // 每天首条睡眠记录
-    MEAL_EACH: 2,          // 每餐
-    MEAL_MAX_DAY: 3,       // 每天封顶几餐
-    ACTIVITY_PER_MIN: 0.25, // 活动每分钟积分
-    ACTIVITY_MAX_DAY: 60,   // 活动每天积分上限
-    PLANT_COST: 100,       // 第一棵树
-    PLANT_STEP: 30,        // 每多一棵，价格递增
-    WATER_COST: 20,        // 浇一次水
+    POINT_PER_MIN: 0.1,    // 每专注 1 分钟（整体下调到原 1/10）
+    TASK_DONE: 1,          // 完成一个待办
+    PLAN_CHECKIN: 0.2,     // 完成一次打卡
+    PLAN_DONE: 3,          // 完成一个计划
+    GOAL_DONE: 6,          // 目标推进到 100% 并归档留档（每目标一次，周期需满 7 天）
+    KR_DONE: 1.5,          // 单条 KR 首次达成 100%（每 KR 一次）
+    /* —— 记录类发分（睡眠 / 饮食 / 活动）：本轮移除积分 —— */
+    SLEEP_DAY: 0,          // 每天首条睡眠记录（已移除积分）
+    MEAL_EACH: 0,          // 每餐（已移除积分）
+    MEAL_MAX_DAY: 3,       // 每天封顶几餐（仅记录用）
+    ACTIVITY_PER_MIN: 0,   // 活动每分钟积分（已移除积分）
+    ACTIVITY_MAX_DAY: 60,   // 活动每天积分上限（仅记录用）
+    PLANT_COST: 10,        // 第一棵树（种树花费整体 ×0.1）
+    PLANT_STEP: 3,         // 每多一棵，价格递增
+    WATER_COST: 2,         // 浇一次水
     /* —— 抽卡机制 —— */
     JADE_PER_POINT: 180,   // 1 积分 = 180 合成玉（PULL_COST 仍为 600，故单抽 ≈ 3.33 积分）
     PULL_COST: 600,        // 单抽 600 合成玉（≈ 3.33 积分）
@@ -639,24 +647,89 @@
     PITY_STEP: 2,          // 每抽 +2%
     TEN_GUARANTEE: 5,      // 十连保底至少五星
     POT_MAX: 5,            // 潜能上限（干员最多 6 份复制，潜能 0~5）
-    DUP_POINTS: { 6: 40, 5: 25, 4: 12, 3: 6 },  // 满潜能后，每多抽一份转化的积分（按星级）
+    DUP_POINTS: { 6: 10, 5: 3, 4: 0.5, 3: 0.2 },  // 满潜能后，每多抽一份转化的积分（按星级，可再换成合成玉）
+    /* —— 专注 —— */
+    FOCUS_REWARD: 10,      // 一次合格专注固定给的养分（积分）
+    FOCUS_MIN_MIN: 40,     // 计入奖励的最短专注分钟（≥40 才算）
+    FOCUS_REMIND_MIN: 60,  // 专注满 60 分钟提醒起来走走
+
+    /* —— 种树 —— */
+    GROVE_SLOTS: 4,        // 树位上限（固定 4）
+    REVIVE_COST: 5,        // 复活枯桩消耗的养分
+
     /* —— 商城 —— */
-    CARD_PRICE: 300,       // 月卡售价（积分）
+    CARD_PRICE: 300,       // 月卡售价（森林积分）
+    CARD_PRICE_GACHA: 54000, // 月卡售价（抽卡模式，合成玉；占位数值，待定）
     CARD_DAYS: 30,         // 月卡有效天数
-    CARD_DAILY: 10,        // 每天用任意功能返还的积分
-    CARD_WEEK_BONUS: 10,   // 滚动 7 天全勤的额外奖励
-    CARD_FULL_BONUS: 50    // 30 天全勤的额外奖励
+    CARD_DAILY: 25,        // 每天用任意功能返还的积分（30 天全勤总返还约为售价的 3 倍）
+    CARD_WEEK_BONUS: 25,   // 滚动 7 天全勤的额外奖励（另发 1 张补签卡）
+    CARD_FULL_BONUS: 50,   // 30 天全勤的额外奖励（另发 1 张定向券）
+    MEND_MAX_PER_WEEK: 3,  // 补签卡：滚动 7 天内最多用 3 张
+
+    /* —— 限定获取通道 —— */
+    LIMITED_SPARK: 200,    // 限定井：累计抽数达到可直接兑换登记的限定（双井并计，但不叠加）
+
+    /* —— 卡池（配置驱动：新增干员只改 ak_ops.js 的 poolTag；新增池只改这里）—— */
+    GACHA_EPOCH: '2026-01-01',   // 轮换基准日：期号按绝对日期算，跨设备一致
+    GACHA_POOLS: {
+      standard: {
+        id: 'standard', name: '标准寻访', tag: 'std',
+        rotDays: 3, up6: 2, up5: 3, spark: 120, sparkHistory: 5, offLimited: 0.15,
+        desc: '常规干员轮换 UP；歪出的是本池其他干员，另有低概率歪到限定'
+      },
+      classic: {
+        id: 'classic', name: '中坚寻访', tag: 'classic',
+        rotDays: 3, up6: 2, up5: 3, spark: 120, sparkHistory: 5, offLimited: 0.15,
+        desc: '早期实装的老牌干员，独立计数，与标准寻访不互通'
+      }
+    }
   };
 
+  /**
+   * 树种：shape 决定树冠形态（round 圆冠 / cone 锥冠 / fan 扇形 / droop 垂枝 / palm 棕榈）
+   * lastK：第 4→5 阶段需要记数（3~6，越珍稀越多）
+   * bloom：成树时的花/果颜色（null 表示无）
+   * unlockH：累计专注满多少小时解锁（0 = 初始可用）
+   * info：图鉴资料卡（学名 / 科属 / 保护级别 / 一句话）
+   */
   var TREE_SPECIES = [
-    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a', price: 100 },
-    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45', price: 130 },
-    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a', price: 160 },
-    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45', price: 200 },
-    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone', price: 140 },
-    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6', price: 120 },
-    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637', price: 220 },
-    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45', price: 180 }
+    { key: 'camphor', name: '樟树', crown: '#4c8c4a', crown2: '#3f7d3d', trunk: '#7a5c3a', shape: 'round', lastK: 3, unlockH: 0, price: 10,
+      info: { sci: 'Cinnamomum camphora', family: '樟科', protect: '常见', note: '常绿乔木，枝叶自带樟脑清香。' } },
+    { key: 'ginkgo', name: '银杏', crown: '#f0c04a', crown2: '#dfa93a', trunk: '#8a6a45', shape: 'fan', lastK: 3, unlockH: 0, price: 13,
+      info: { sci: 'Ginkgo biloba', family: '银杏科', protect: '国家一级', note: '活化石，扇形叶秋日金黄。' } },
+    { key: 'maple', name: '枫树', crown: '#e0703c', crown2: '#c8542a', trunk: '#7a5c3a', shape: 'droop', lastK: 4, unlockH: 0, price: 16,
+      info: { sci: 'Acer', family: '槭树科', protect: '常见', note: '掌状裂叶，秋来满树红霞。' } },
+    { key: 'sakura', name: '樱花', crown: '#f2a3bd', crown2: '#e88aab', trunk: '#8a6a45', shape: 'round', lastK: 4, bloom: '#ffb3c8', unlockH: 0, price: 20,
+      info: { sci: 'Prunus serrulata', family: '蔷薇科', protect: '常见', note: '春日繁花，落英如雪。' } },
+    { key: 'pine', name: '松树', crown: '#3f7d4a', crown2: '#356b3f', trunk: '#6f5637', shape: 'cone', lastK: 3, unlockH: 0, price: 14,
+      info: { sci: 'Pinus', family: '松科', protect: '常见', note: '四季常青，针叶成塔。' } },
+    { key: 'birch', name: '白桦', crown: '#8fc46b', crown2: '#7bb45c', trunk: '#c9c2b6', shape: 'round', lastK: 3, unlockH: 0, price: 12,
+      info: { sci: 'Betula platyphylla', family: '桦木科', protect: '常见', note: '白色树皮，林间如雪。' } },
+    { key: 'oak', name: '橡树', crown: '#4a8f52', crown2: '#3d7f45', trunk: '#6f5637', shape: 'round', lastK: 4, unlockH: 0, price: 22,
+      info: { sci: 'Quercus', family: '壳斗科', protect: '常见', note: '冠幅阔大，结实为橡子。' } },
+    { key: 'plane', name: '梧桐', crown: '#7cb342', crown2: '#6aa83a', trunk: '#8a6a45', shape: 'round', lastK: 3, unlockH: 0, price: 18,
+      info: { sci: 'Platanus', family: '悬铃木科', protect: '常见', note: '叶大荫浓，行道常见。' } },
+    { key: 'willow', name: '垂柳', crown: '#9ccc65', crown2: '#7cb342', trunk: '#7a5c3a', shape: 'droop', lastK: 3, unlockH: 5, price: 16,
+      info: { sci: 'Salix babylonica', family: '杨柳科', protect: '常见', note: '枝条低垂，临水依依。' } },
+    { key: 'palm', name: '椰树', crown: '#5aa86a', crown2: '#3f8f52', trunk: '#8a6a45', shape: 'palm', lastK: 4, unlockH: 10, price: 20,
+      info: { sci: 'Cocos nucifera', family: '棕榈科', protect: '常见', note: '羽状大叶，海滨剪影。' } },
+    /* —— 珍稀（按累计专注时长解锁）—— */
+    { key: 'metasequoia', name: '水杉', crown: '#5fa05a', crown2: '#477f45', trunk: '#8a5a3a', shape: 'cone', lastK: 5, unlockH: 10, price: 0,
+      info: { sci: 'Metasequoia glyptostroboides', family: '柏科', protect: '国家一级', note: '活化石，1940 年代在湖北利川重新发现，曾以为早已灭绝。' } },
+    { key: 'dove', name: '珙桐', crown: '#6a9e58', crown2: '#548a46', trunk: '#8a6a45', shape: 'fan', lastK: 5, bloom: '#f7f7f2', unlockH: 20, price: 0,
+      info: { sci: 'Davidia involucrata', family: '蓝果树科', protect: '国家一级', note: '中国特有「鸽子树」，白色苞片似鸽翼，风起如群鸽振翅。' } },
+    { key: 'taxus', name: '红豆杉', crown: '#3f7d45', crown2: '#2f6236', trunk: '#7a5c3a', shape: 'cone', lastK: 5, bloom: '#e53935', unlockH: 30, price: 0,
+      info: { sci: 'Taxus', family: '红豆杉科', protect: '国家一级', note: '珍稀濒危，树皮可提取抗癌药物紫杉醇，须依法保护。' } },
+    { key: 'liriodendron', name: '鹅掌楸', crown: '#7aa84a', crown2: '#639238', trunk: '#8a6a45', shape: 'fan', lastK: 5, bloom: '#f2d06b', unlockH: 40, price: 0,
+      info: { sci: 'Liriodendron chinense', family: '木兰科', protect: '国家二级', note: '叶似马褂，又名马褂木，中国特有珍稀树种。' } },
+    { key: 'manglietia', name: '华盖木', crown: '#4f8a4a', crown2: '#3d703a', trunk: '#7a5c3a', shape: 'round', lastK: 6, bloom: '#f4e3b0', unlockH: 60, price: 0,
+      info: { sci: 'Manglietiastrum sinicum', family: '木兰科', protect: '国家一级', note: '云南特有，野生植株一度不足十株，极危。' } },
+    { key: 'dracaena', name: '龙血树', crown: '#4a7d52', crown2: '#37613f', trunk: '#9a7a55', shape: 'palm', lastK: 6, bloom: '#c0392b', unlockH: 80, price: 0,
+      info: { sci: 'Dracaena cinnabari', family: '天门冬科', protect: '易危', note: '索科特拉岛特有，伞状树冠，树脂殷红如「龙血」。' } },
+    { key: 'carpinus', name: '普陀鹅耳枥', crown: '#5a9a5a', crown2: '#457d45', trunk: '#8a6a45', shape: 'round', lastK: 6, unlockH: 100, price: 0,
+      info: { sci: 'Carpinus putoensis', family: '桦木科', protect: '国家一级', note: '全球仅一株野生，被称为「地球独子」。' } },
+    { key: 'fir', name: '百山祖冷杉', crown: '#2f6b45', crown2: '#245538', trunk: '#6f5637', shape: 'cone', lastK: 6, unlockH: 150, price: 0,
+      info: { sci: 'Abies beshanzuensis', family: '松科', protect: '国家一级', note: '全球野生不足十株，极度濒危的松科孑遗植物。' } }
   ];
 
   function speciesOf(key) {
@@ -666,12 +739,21 @@
     return TREE_SPECIES[0];
   }
 
+  /** 第 stage 阶段 → 下一阶段所需「记」数（1→2/2→3 各 1 记，3→4 需 2 记，4→5 需 lastK 记） */
+  function stageNeed(sp, stage) {
+    if (stage <= 1) return 1;
+    if (stage === 2) return 1;
+    if (stage === 3) return 2;
+    return (sp && sp.lastK) || 3;
+  }
+
   var TREE_STAGES = [
-    { name: '种子', min: 0 },
-    { name: '幼苗', min: 60 },
-    { name: '小树', min: 120 },
-    { name: '大树', min: 200 },
-    { name: '果树', min: 320 }
+    { name: '—' },
+    { name: '嫩芽' },
+    { name: '幼苗' },
+    { name: '小树' },
+    { name: '大树' },
+    { name: '参天' }
   ];
 
   /* ==========================================================
@@ -844,12 +926,15 @@
     return out.slice(0, 6);
   }
 
-  function treeStage(growth) {
-    var st = 0;
-    for (var i = 0; i < TREE_STAGES.length; i++) {
-      if (growth >= TREE_STAGES[i].min) st = i;
-    }
-    return st;
+  /** 兼容旧调用：传入 0~5 视为阶段直接返回；更大的旧成长值按阈值映射 */
+  function treeStage(v) {
+    v = v || 0;
+    if (v <= 5) return Math.max(0, v);
+    if (v >= 320) return 5;
+    if (v >= 200) return 4;
+    if (v >= 120) return 3;
+    if (v >= 60) return 2;
+    return 1;
   }
 
   /** 截止时间比较：无日期排最后，同日按时间 */
@@ -878,38 +963,44 @@
    * - 事件型：带 check() 函数（一次十连的特定结果，判定依据 gacha.lastTen） */
   var ACH_DEF = [
     /* —— 抽卡 —— */
-    { id: 'gacha_all3', group: '抽卡', name: '绝世非皇', desc: '一次十连抽出的干员全部为三星', icon: 'star', tier: 'silver', points: 60,
+    { id: 'gacha_all3', group: '抽卡', name: '绝世非皇', desc: '一次十连抽出的干员全部为三星', icon: 'star', tier: 'silver', points: 100,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.all3); } },
-    { id: 'gacha_max4', group: '抽卡', name: '紫气东来', desc: '一次十连中最高星级仅为四星（不出五/六星）', icon: 'sparkle', tier: 'silver', points: 60,
+    { id: 'gacha_max4', group: '抽卡', name: '紫气东来', desc: '一次十连中最高星级仅为四星（不出五/六星）', icon: 'sparkle', tier: 'silver', points: 10,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.max4); } },
-    { id: 'gacha_2six', group: '抽卡', name: '双黄蛋', desc: '一次十连中恰好抽出两个六星', icon: 'sun', tier: 'gold', points: 200,
+    { id: 'gacha_2six', group: '抽卡', name: '双黄蛋', desc: '一次十连中恰好抽出两个六星', icon: 'sun', tier: 'gold', points: 10,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.twoSix); } },
-    { id: 'gacha_4six', group: '抽卡', name: '绝世欧皇', desc: '一次十连中抽出超过三个六星（≥4）', icon: 'crown', tier: 'gold', points: 250,
+    { id: 'gacha_4six', group: '抽卡', name: '绝世欧皇', desc: '一次十连中抽出三个及以上六星（≥3）', icon: 'crown', tier: 'gold', points: 100,
       check: function () { var t = state.pomodoro.gacha.lastTen; return !!(t && t.fourSix); } },
-    { id: 'gacha_no6_70', group: '抽卡', name: '七秩未逢星', desc: '连续 70 抽未出六星', icon: 'clock', tier: 'gold', points: 150,
+    { id: 'gacha_no6_70', group: '抽卡', name: '七秩非皇', desc: '连续 70 抽未出六星', icon: 'clock', tier: 'gold', points: 100,
       metric: 'streakNo6', threshold: 70 },
-    { id: 'gacha_no5_30', group: '抽卡', name: '三十非五星', desc: '连续 30 抽未出五星', icon: 'moon', tier: 'silver', points: 50,
+    { id: 'gacha_no5_30', group: '抽卡', name: '卅非皇', desc: '连续 30 抽未出五星', icon: 'moon', tier: 'silver', points: 100,
       metric: 'streakNo5', threshold: 30 },
     /* —— 集卡 —— */
-    { id: 'coll3', group: '集卡', name: '集齐三星', desc: '集齐全部三星干员（共 22 名）', icon: 'box', tier: 'gold', points: 300,
-      metric: 'coll3', threshold: 1 },
+    { id: 'collFaction', group: '集卡', name: '集齐阵营', desc: '集齐任意一个阵营的全部干员（≥6 人）', icon: 'box', tier: 'gold', points: 200,
+      metric: 'collFaction', threshold: 1 },
     /* —— 种树 —— */
-    { id: 'tree3', group: '种树', name: '植树新手', desc: '种下 3 棵树', icon: 'leaf', tier: 'bronze', points: 30,
+    { id: 'tree1', group: '种树', name: '植下一棵树', desc: '种下 1 棵树', icon: 'leaf', tier: 'bronze', points: 3,
+      metric: 'tree', threshold: 1 },
+    { id: 'tree3', group: '种树', name: '植树新手', desc: '种下 3 棵树', icon: 'leaf', tier: 'bronze', points: 6,
       metric: 'tree', threshold: 3 },
-    { id: 'tree6', group: '种树', name: '绿意盎然', desc: '种下 6 棵树', icon: 'tree', tier: 'silver', points: 60,
-      metric: 'tree', threshold: 6 },
-    { id: 'tree9', group: '种树', name: '森之守护', desc: '种下 9 棵树', icon: 'tree', tier: 'gold', points: 120,
-      metric: 'tree', threshold: 9 },
+    { id: 'tree10', group: '种树', name: '绿意盎然', desc: '种下 10 棵树', icon: 'tree', tier: 'silver', points: 12,
+      metric: 'tree', threshold: 10 },
+    { id: 'tree50', group: '种树', name: '森之守护', desc: '种下 50 棵树', icon: 'tree', tier: 'silver', points: 24,
+      metric: 'tree', threshold: 50 },
+    { id: 'tree100', group: '种树', name: '林海苍苍', desc: '种下 100 棵树', icon: 'tree', tier: 'gold', points: 48,
+      metric: 'tree', threshold: 100 },
 
     /* —— 目标 —— */
-    { id: 'goal_first', group: '目标', name: '不再只是待办', desc: '创建第一个目标', icon: 'target', tier: 'bronze', points: 20,
+    { id: 'goal_first', group: '目标', name: '不再只是待办', desc: '创建第一个目标', icon: 'target', tier: 'bronze', points: 10,
       metric: 'goalTotal', threshold: 1 },
-    { id: 'goal_active5', group: '目标', name: '五线并进', desc: '同时在办 5 个目标（达到上限）', icon: 'flag', tier: 'silver', points: 60,
+    { id: 'goal_active5', group: '目标', name: '五线并进', desc: '同时在办 5 个目标（达到上限）', icon: 'flag', tier: 'silver', points: 30,
       metric: 'goalActive', threshold: 5 },
-    { id: 'goal_achieved', group: '目标', name: '说到做到', desc: '有目标推进到 100% 并归档留档', icon: 'check', tier: 'gold', points: 150,
+    { id: 'goal_achieved', group: '目标', name: '说到做到', desc: '有目标推进到 100% 并归档留档', icon: 'check', tier: 'gold', points: 60,
       metric: 'goalAchieved', threshold: 1 },
-    { id: 'goal_review', group: '目标', name: '月末回头看', desc: '用月末复盘把进度写进日记一次', icon: 'book', tier: 'silver', points: 50,
+    { id: 'goal_review', group: '目标', name: '月末回头看', desc: '用月末复盘把进度写进日记一次', icon: 'book', tier: 'silver', points: 20,
       metric: 'goalReview', threshold: 1 },
+    { id: 'goal_archived', group: '目标', name: '厚积薄发', desc: '累计归档 5 个目标', icon: 'crown', tier: 'gold', points: 100,
+      metric: 'goalAchieved', threshold: 5, req: 'goal_achieved' },
 
     /* —— 历练：各功能使用次数成就，分三档逐级解锁（1 / 10 / 100）——
      * 初出茅庐(1) → 小有心得(10, 需初出茅庐) → 炉火纯青(100, 需小有心得)
@@ -982,6 +1073,20 @@
       var have = {};
       (s.pomodoro.gacha.ops || []).forEach(function (o) { if (o.r === 3) have[o.n] = 1; });
       return Object.keys(have).length >= pool.length ? 1 : 0;
+    }
+    if (metric === 'collFaction') {
+      // 集齐任意一个阵营（≥6 人，跳过微型联动组）的全部干员 → 1
+      var ops = global.AK_OPS || [];
+      var byF = {};
+      ops.forEach(function (o) { (byF[o[4]] = byF[o[4]] || []).push(o[0]); });
+      var owned = {};
+      (s.pomodoro.gacha.ops || []).forEach(function (o) { owned[o.n] = 1; });
+      for (var f in byF) {
+        if (byF[f].length < 6) continue;
+        var full = byF[f].every(function (nm) { return owned[nm]; });
+        if (full) return 1;
+      }
+      return 0;
     }
     return 0;
   }
@@ -1605,6 +1710,9 @@
       if (!Array.isArray(state.settings.navOrder)) state.settings.navOrder = [];
       if (!state.settings.ui || typeof state.settings.ui !== 'object') state.settings.ui = { sidebarMini: false };
       if (typeof state.settings.ui.sidebarMini !== 'boolean') state.settings.ui.sidebarMini = false;
+      if (typeof state.settings.themeSkin !== 'boolean') state.settings.themeSkin = true;
+      if (typeof state.settings.themeSkinAuto !== 'boolean') state.settings.themeSkinAuto = true;
+      if (['auto', 'light', 'dark'].indexOf(state.settings.themeMode) < 0) state.settings.themeMode = 'auto';
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
       if (!state.settings.ocr) state.settings.ocr = ds.settings.ocr;
       var defNav = ds.settings.nav;
@@ -1630,6 +1738,20 @@
       if (state.pomodoro.points == null) state.pomodoro.points = 0;
       if (state.pomodoro.jade == null) state.pomodoro.jade = 0;
       if (state.pomodoro.mode !== 'gacha') state.pomodoro.mode = 'forest';
+      if (state.pomodoro.treesPlanted == null) state.pomodoro.treesPlanted = (state.pomodoro.trees || []).length;
+      if (state.pomodoro.harvested == null) state.pomodoro.harvested = 0;
+      if (!state.pomodoro.selectedSpecies) state.pomodoro.selectedSpecies = 'camphor';
+      if (!state.pomodoro.timer.treeId) state.pomodoro.timer.treeId = '';
+      // 旧树（按 growth 成长值）迁移为新模型：阶段 + 阶段内记数
+      (state.pomodoro.trees || []).forEach(function (t) {
+        if (t.stage == null) {
+          var g = t.growth || 0;
+          t.stage = g >= 320 ? 5 : g >= 200 ? 4 : g >= 120 ? 3 : g >= 60 ? 2 : 1;
+          t.prog = 0;
+          t.withered = false;
+          delete t.growth;
+        }
+      });
       if (!state.pomodoro.gacha || typeof state.pomodoro.gacha !== 'object') {
         state.pomodoro.gacha = { pity6: 0, total: 0, ops: [], log: [] };
       }
@@ -1640,6 +1762,23 @@
       if (gc.total == null) gc.total = 0;
       if (gc.streakNo6 == null) gc.streakNo6 = 0;
       if (gc.streakNo5 == null) gc.streakNo5 = 0;
+      // 分池：旧档的单一 pity6 归入标准寻访；两个池各自独立计数
+      if (gc.currentPool !== 'classic') gc.currentPool = 'standard';
+      if (!gc.pools || typeof gc.pools !== 'object') {
+        gc.pools = { standard: { pity6: gc.pity6 || 0, total: 0, spark: 0, guaranteed: false } };
+      }
+      ['standard', 'classic'].forEach(function (id) {
+        var p = gc.pools[id];
+        if (!p || typeof p !== 'object') p = gc.pools[id] = { pity6: 0, total: 0, spark: 0, guaranteed: false };
+        if (p.pity6 == null) p.pity6 = 0;
+        if (p.total == null) p.total = 0;
+        if (p.spark == null) p.spark = 0;
+        if (p.guaranteed == null) p.guaranteed = false;
+      });
+      // 限定井：登记目标 + 累计抽数（与 UP 井双计，但不叠加使用）
+      if (!gc.limited || typeof gc.limited !== 'object') gc.limited = { target: '', count: 0 };
+      if (gc.limited.target == null) gc.limited.target = '';
+      if (gc.limited.count == null) gc.limited.count = 0;
       if (state.pomodoro.earned == null) state.pomodoro.earned = 0;
       if (!state.pomodoro.pointLog) state.pomodoro.pointLog = [];
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
@@ -3365,10 +3504,10 @@
       return pm.mode === 'gacha' ? pm.jade : pm.points;
     },
 
-    /** 折算成积分的总余额：森林积分 + 合成玉 ÷ 180 */
+    /** 当前机制余额：森林=积分，抽卡=合成玉（两币不互通、不再折算） */
     totalPoints: function () {
       var pm = state.pomodoro;
-      return Math.round((pm.points + pm.jade / POMO.JADE_PER_POINT) * 100) / 100;
+      return pm.mode === 'gacha' ? pm.jade : pm.points;
     },
 
     /** 切换奖励机制（余额各自保留，总量不变） */
@@ -3379,21 +3518,22 @@
       return pm.mode;
     },
 
-    /**
-     * 扣积分（双币折算）：优先扣森林积分，不够时按 1 积分 = 180 合成玉 补扣。
-     * 两池都不够则返回 false，且不产生任何变动。
-     */
+    /** 扣森林积分：只动积分池，不与合成玉互通 */
     spendPoints: function (n) {
       n = Math.round(n);
       if (n <= 0) return true;
       var pm = state.pomodoro;
       if (pm.points >= n) { pm.points -= n; return true; }
-      var need = n - pm.points;
-      var jadeNeed = need * POMO.JADE_PER_POINT;
-      if (pm.jade < jadeNeed) return false;
-      pm.points = 0;
-      pm.jade -= jadeNeed;
-      return true;
+      return false;
+    },
+
+    /** 扣合成玉：只动玉池，不与积分互通 */
+    spendJade: function (n) {
+      n = Math.round(n);
+      if (n <= 0) return true;
+      var pm = state.pomodoro;
+      if (pm.jade >= n) { pm.jade -= n; return true; }
+      return false;
     },
 
     /* ===== 商城 ===== */
@@ -3404,7 +3544,8 @@
       return {
         points: pm.points,
         jade: pm.jade,
-        total: Math.round((pm.points + pm.jade / POMO.JADE_PER_POINT) * 100) / 100
+        mode: pm.mode,
+        current: pm.mode === 'gacha' ? pm.jade : pm.points
       };
     },
 
@@ -3438,6 +3579,7 @@
         daysTotal: total,
         signedDays: signed,
         todaySigned: !!(c.days && c.days[today]),
+        mode: c.mode || 'forest',
         paid: c.paid || 0,
         gained: c.gained || 0,
         fullAwarded: !!c.fullAwarded
@@ -3448,11 +3590,16 @@
     buyCard: function () {
       var sh = state.shop;
       var left = this.cardDaysLeft();
-      if (left > 0) return { ok: false, msg: '月卡还剩 ' + left + ' 天，到期后才能再买' };
-      if (this.totalPoints() < POMO.CARD_PRICE) {
-        return { ok: false, msg: '积分不足，还差 ' + Math.ceil(POMO.CARD_PRICE - this.totalPoints()) };
+      if (left > 0) return { ok: false, msg: '当前月卡还剩 ' + left + ' 天，到期后才能换购' };
+      var pm = state.pomodoro;
+      var gacha = pm.mode === 'gacha';
+      var price = gacha ? POMO.CARD_PRICE_GACHA : POMO.CARD_PRICE;
+      var bal = gacha ? pm.jade : pm.points;
+      var unit = gacha ? '合成玉' : '积分';
+      if (bal < price) {
+        return { ok: false, msg: unit + '不足，还差 ' + Math.ceil(price - bal) };
       }
-      if (!this.spendPoints(POMO.CARD_PRICE)) return { ok: false, msg: '积分不足' };
+      if (gacha ? !this.spendJade(price) : !this.spendPoints(price)) return { ok: false, msg: '余额不足' };
       var today = DateUtil.toStr(DateUtil.today());
       sh.card = {
         startDate: today,
@@ -3460,10 +3607,11 @@
         days: {},
         weekAwardEnd: '',
         fullAwarded: false,
-        paid: POMO.CARD_PRICE,
+        mode: gacha ? 'gacha' : 'forest',   // 同一时间只持有一个模式的月卡
+        paid: price,
         gained: 0
       };
-      sh.log.unshift({ at: Date.now(), type: 'card', text: '购买月卡 −' + POMO.CARD_PRICE + ' 积分' });
+      sh.log.unshift({ at: Date.now(), type: 'card', text: '购买月卡 −' + price + ' ' + unit });
       this.trimShopLog();
       this.save();
       this.touchActive();     // 购买当天就用上了，直接结算首日
@@ -3487,25 +3635,43 @@
     },
 
     /**
-     * 结算当天月卡。
-     * 规则：有效期 30 天内，每天首次「用过任意功能」返 10 分；
-     * 任意连续 7 天全勤额外 +10（滚动窗口，发过后窗口不重叠）；
-     * 30 天一天不漏再 +50。漏签只损失当天和该窗口，有效期不顺延。
+     * 结算当天月卡（补签也走同一条路径，见 settleCardFor）。
+     * 规则：有效期 30 天内，每天首次「用过任意功能」返 CARD_DAILY；
+     * 任意连续 7 天全勤额外 +CARD_WEEK_BONUS（滚动窗口，发过后窗口不重叠）；
+     * 30 天一天不漏再 +CARD_FULL_BONUS。漏签只损失当天和该窗口，有效期不顺延。
      */
     settleCard: function () {
+      return this.settleCardFor(DateUtil.toStr(DateUtil.today()));
+    },
+
+    /**
+     * 结算指定日期的月卡签到。补签与当天签到走同一套逻辑（返还、周窗口、全勤判定完全一致），
+     * 因此补签后如果凑满了窗口或 30 天，同样会补发周奖励 / 全勤奖励与对应的卡。
+     */
+    settleCardFor: function (day) {
+      var self = this;
       var sh = state.shop;
       var c = sh.card;
       if (!c) return false;
-      var today = DateUtil.toStr(DateUtil.today());
-      if (today < c.startDate || today > c.endDate) return false;
-      if (c.days[today]) return false;
+      if (day < c.startDate || day > c.endDate) return false;
+      if (c.days[day]) return false;
 
-      c.days[today] = 1;
+      c.days[day] = 1;
+      // 返还到「购买月卡时那个模式」的币种：森林→积分，抽卡→合成玉（按 180:1 等值）
+      var pm = state.pomodoro;
+      var cGacha = c.mode === 'gacha';
+      function pay(amt) {
+        if (cGacha) pm.jade += amt * POMO.JADE_PER_POINT;
+        else pm.points += amt;
+        pm.earned += amt;
+        pm.pointLog.push({ date: day, n: amt, src: 'card' });
+        if (pm.pointLog.length > 2000) pm.pointLog = pm.pointLog.slice(-2000);
+      }
       var gained = POMO.CARD_DAILY;
-      this.addPoints(POMO.CARD_DAILY, 'card');
+      pay(POMO.CARD_DAILY);
 
-      // 滚动 7 天：窗口 = [today-6, today]，与上一次发奖窗口不重叠才发
-      var winStart = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -6));
+      // 滚动 7 天：窗口 = [day-6, day]，与上一次发奖窗口不重叠才发
+      var winStart = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(day), -6));
       var lastEnd = c.weekAwardEnd || '';
       if (!lastEnd || winStart > lastEnd) {
         var all = true;
@@ -3514,9 +3680,11 @@
           if (!c.days[k]) { all = false; break; }
         }
         if (all) {
-          this.addPoints(POMO.CARD_WEEK_BONUS, 'card');
+          pay(POMO.CARD_WEEK_BONUS);
           gained += POMO.CARD_WEEK_BONUS;
-          c.weekAwardEnd = today;
+          c.weekAwardEnd = day;
+          // 周全勤另发 1 张补签卡
+          self.grantTicket('makeUp', '周全勤');
         }
       }
 
@@ -3528,19 +3696,176 @@
           if (!c.days[kk]) { full = false; break; }
         }
         if (full) {
-          this.addPoints(POMO.CARD_FULL_BONUS, 'card');
+          pay(POMO.CARD_FULL_BONUS);
           gained += POMO.CARD_FULL_BONUS;
           c.fullAwarded = true;
+          // 月全勤另发 1 张定向券
+          self.grantTicket('selection', '月全勤');
         }
       }
 
       c.gained = (c.gained || 0) + gained;
       sh.log.unshift({
         at: Date.now(), type: 'card',
-        text: '月卡每日返还 +' + gained + (gained > POMO.CARD_DAILY ? '（含全勤奖励）' : '')
+        text: '月卡签到 ' + day + ' +' + gained + (gained > POMO.CARD_DAILY ? '（含全勤奖励）' : '')
       });
       this.trimShopLog();
       return true;
+    },
+
+    /* ==========================================================
+     * 定向券 / 补签卡 / 限定井（限定获取通道）
+     * ========================================================== */
+    grantTicket: function (kind, from) {
+      var sh = state.shop;
+      if (!sh.tickets) sh.tickets = { selection: 0, makeUp: 0 };
+      sh.tickets[kind] = (sh.tickets[kind] || 0) + 1;
+      sh.log.unshift({
+        at: Date.now(), type: 'ticket',
+        text: (from || '') + '奖励 +1 张' + (kind === 'makeUp' ? '补签卡' : '定向券')
+      });
+      this.trimShopLog();
+    },
+
+    ticketInfo: function () {
+      var t = (state.shop && state.shop.tickets) || {};
+      return { selection: t.selection || 0, makeUp: t.makeUp || 0 };
+    },
+
+    /** 干员名 → 抽卡记录对象（源数据 AK_OPS） */
+    opByName: function (name) {
+      var all = global.AK_OPS || [];
+      for (var i = 0; i < all.length; i++) {
+        if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3], limited: !!all[i][6] };
+      }
+      return null;
+    },
+
+    /** 限定干员列表（star 传 6 则只要六星限定） */
+    limitedOps: function (star) {
+      return (global.AK_OPS || []).filter(function (o) {
+        return o[6] && (!star || o[1] === star);
+      }).map(function (o) {
+        return { n: o[0], r: o[1], p: o[2], img: o[3] };
+      });
+    },
+
+    /** 加入图鉴（已有则 +1 份，超过满潜上限进商城待兑换） */
+    addOwnedOp: function (o) {
+      var pm = state.pomodoro;
+      var hit = null;
+      for (var k = 0; k < pm.gacha.ops.length; k++) {
+        if (pm.gacha.ops[k].n === o.n) { hit = pm.gacha.ops[k]; break; }
+      }
+      if (hit) {
+        hit.count = (hit.count || 1) + 1;
+        if (hit.count > POMO.POT_MAX + 1) {
+          var pts = POMO.DUP_POINTS[o.r] || POMO.DUP_POINTS[3];
+          if (!state.shop) state.shop = { activeDays: {}, dupPool: [], log: [], card: null };
+          if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
+          state.shop.dupPool.push({ n: o.n, r: o.r, pts: pts, at: Date.now() });
+          hit.dupPts = (hit.dupPts || 0) + pts;
+        }
+      } else {
+        pm.gacha.ops.push({ n: o.n, r: o.r, p: o.p, img: o.img, count: 1, at: Date.now() });
+      }
+      this.checkAchievements(true);
+    },
+
+    /** 限定井进度（每抽并计，但与 UP 井不叠加使用） */
+    limitedSparkInfo: function () {
+      var li = state.pomodoro.gacha.limited || {};
+      var n = li.count || 0;
+      return {
+        target: li.target || '',
+        count: Math.min(n, POMO.LIMITED_SPARK),
+        raw: n,
+        need: POMO.LIMITED_SPARK,
+        ready: n >= POMO.LIMITED_SPARK && !!li.target
+      };
+    },
+
+    /** 登记限定井目标（换目标保留已累计的抽数） */
+    setLimitedTarget: function (name) {
+      if (name && !this.opByName(name)) return { ok: false, msg: '没有这名干员' };
+      state.pomodoro.gacha.limited.target = name || '';
+      this.emit();
+      this.save();
+      return { ok: true, target: name || '' };
+    },
+
+    /** 用攒满的限定井兑换登记的限定（兑换后计数清零） */
+    redeemLimitedSpark: function () {
+      var li = state.pomodoro.gacha.limited;
+      if (!li.target) return { ok: false, msg: '先登记一名限定干员' };
+      if ((li.count || 0) < POMO.LIMITED_SPARK) {
+        return { ok: false, msg: '限定井还没攒够（' + (li.count || 0) + '/' + POMO.LIMITED_SPARK + '）' };
+      }
+      var op = this.opByName(li.target);
+      if (!op) return { ok: false, msg: '目标干员不存在' };
+      li.count = 0;
+      this.addOwnedOp(op);
+      state.shop.log.unshift({ at: Date.now(), type: 'limited', text: '限定井兑换：' + op.n });
+      this.trimShopLog();
+      this.emit();
+      this.save();
+      return { ok: true, n: op.n };
+    },
+
+    /** 定向券兑换限定（月全勤发放） */
+    useSelectionTicket: function (name) {
+      var sh = state.shop;
+      if (!(sh.tickets && sh.tickets.selection)) return { ok: false, msg: '没有定向券（月全勤发放）' };
+      var rec = this.opByName(name);
+      if (!rec) return { ok: false, msg: '没有这名干员' };
+      if (!rec.limited) return { ok: false, msg: '定向券只能兑换限定干员' };
+      sh.tickets.selection--;
+      this.addOwnedOp(rec);
+      sh.log.unshift({ at: Date.now(), type: 'limited', text: '定向券兑换：' + name });
+      this.trimShopLog();
+      this.emit();
+      this.save();
+      return { ok: true, n: name };
+    },
+
+    /** 补签卡剩余额度：滚动 7 天内最多用 MEND_MAX_PER_WEEK 张 */
+    makeUpQuota: function () {
+      var sh = state.shop;
+      var log = (sh.tickets && sh.tickets.makeUpLog) || [];
+      var today = DateUtil.today();
+      var from = DateUtil.toStr(DateUtil.addDays(today, -6));
+      var used = 0;
+      log.forEach(function (d) { if (d >= from) used++; });
+      var max = POMO.MEND_MAX_PER_WEEK || 3;
+      return { used: used, left: Math.max(0, max - used), max: max };
+    },
+
+    /** 补签卡补签指定日期：与当天签到完全等价（同一套结算） */
+    useMakeUpCard: function (dateStr) {
+      var sh = state.shop;
+      if (!(sh.tickets && sh.tickets.makeUp)) return { ok: false, msg: '没有补签卡（滚动 7 天全勤发放）' };
+      var c = sh.card;
+      if (!c) return { ok: false, msg: '当前没有生效的月卡' };
+      if (!dateStr || dateStr < c.startDate || dateStr > c.endDate) {
+        return { ok: false, msg: '只能补当前月卡周期内的日期' };
+      }
+      if (dateStr > DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '还没到的日子不用补' };
+      if (c.days[dateStr]) return { ok: false, msg: '这一天已经签到了' };
+      var q = this.makeUpQuota();
+      if (q.left <= 0) {
+        return { ok: false, msg: '最近 7 天已用满 ' + q.max + ' 张补签卡，过几天才能再补' };
+      }
+
+      sh.tickets.makeUp--;
+      if (!sh.tickets.makeUpLog) sh.tickets.makeUpLog = [];
+      sh.tickets.makeUpLog.push(dateStr);
+      var before = c.gained || 0;
+      this.settleCardFor(dateStr);        // 与当天签到同一套结算（含周窗与全勤补发）
+      sh.log.unshift({ at: Date.now(), type: 'card', text: '补签 ' + dateStr + '（与当天签到同等结算）' });
+      this.trimShopLog();
+      this.emit();
+      this.save();
+      return { ok: true, date: dateStr, gained: (c.gained || 0) - before };
     },
 
     /** 满潜重复干员：待兑换份数与可换合成玉 */
@@ -3551,21 +3876,23 @@
       return { count: pool.length, points: pts, jade: pts * POMO.JADE_PER_POINT };
     },
 
-    /** 一键把满潜重复兑换成合成玉（资产形式转换，不计入累计获得） */
+    /** 满潜重复兑换：按 1 积分 = JADE_PER_POINT 玉，固定换成合成玉（两币不互通，满潜是抽卡子系统产物） */
     exchangeDup: function () {
       var sh = state.shop;
       var info = this.dupPoolInfo();
-      if (!info.count) return { ok: false, count: 0, jade: 0 };
-      state.pomodoro.jade += info.jade;
+      if (!info.count) return { ok: false, count: 0, points: 0, jade: 0 };
+      var pm = state.pomodoro;
+      var jade = info.jade;
+      pm.jade += jade;
       sh.dupPool = [];
       sh.log.unshift({
         at: Date.now(), type: 'exchange',
-        text: '兑换 ' + info.count + ' 份重复干员 → ' + info.jade + ' 合成玉'
+        text: '兑换 ' + info.count + ' 份重复干员 → ' + jade + ' 合成玉'
       });
       this.trimShopLog();
       this.save();
       this.emit();
-      return { ok: true, count: info.count, jade: info.jade };
+      return { ok: true, count: info.count, points: 0, jade: jade };
     },
 
     trimShopLog: function () {
@@ -3578,8 +3905,16 @@
       minutes = Math.max(0, Math.floor(minutes));
       var pm = state.pomodoro;
       pm.focusMinutes += minutes;
-      var gain = minutes * POMO.POINT_PER_MIN;
-      this.addPoints(gain, 'focus');
+      // 一次 ≥40 分钟给固定 FOCUS_REWARD（森林→积分，抽卡→等值合成玉）；不足 40 分钟不发
+      var qualified = minutes >= POMO.FOCUS_MIN_MIN;
+      var gain = qualified ? POMO.FOCUS_REWARD : 0;
+      if (gain > 0) this.addPoints(gain, 'focus');
+
+      // 种树：合格专注让当前树长 1~2 记；不合格（中断）让本次播下的种子枯萎
+      if (pm.mode === 'forest') {
+        if (qualified) this.growActiveTree(minutes);
+        else this.witherActiveTree();
+      }
 
       // 记录本次专注（用于统计）
       var dateStr = (extra && extra.date) || DateUtil.toStr(DateUtil.today());
@@ -3619,7 +3954,7 @@
       }
       state.pomodoro.timer = {
         running: false, endAt: 0, left: 0,
-        duration: state.pomodoro.timer.duration || 25, taskId: ''
+        duration: state.pomodoro.timer.duration || 45, taskId: '', treeId: ''
       };
       this.bumpUsage('focus');
       this.emit();
@@ -3635,6 +3970,198 @@
       return (global.AK_OPS || []).filter(function (o) { return o[1] >= 3; });
     },
 
+    /* ==========================================================
+     * 卡池：标准寻访 / 中坚寻访
+     * - 成员来自 ak_ops.js 第 8 位 poolTag：std / classic / limited
+     * - 轮换按「绝对日期」算期号，跨设备一致，不需要服务器
+     * - 6★：UP 占 50%（两名各 25%）；歪 → 下个六星必 UP（大保底）
+     * - 5★：UP 占 50%（三名）；4★ / 3★ 两池共用
+     * - 限定不进轮换，只在「歪」里以低权重出现
+     * ========================================================== */
+    gachaDayIndex: function (dateStr) {
+      var d = dateStr ? DateUtil.parse(dateStr) : DateUtil.today();
+      var e = DateUtil.parse(POMO.GACHA_EPOCH || '2026-01-01');
+      return Math.round((Date.parse(DateUtil.toStr(d)) - Date.parse(DateUtil.toStr(e))) / 86400000);
+    },
+
+    /** 期号（每 rotDays 天推进一期） */
+    gachaRotIndex: function (poolId) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      return Math.floor(this.gachaDayIndex() / pool.rotDays);
+    },
+
+    /** 池成员（按名字排序，保证轮换结果可复现） */
+    gachaPoolMembers: function (poolId, star) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var list = (global.AK_OPS || []).filter(function (o) {
+        return o[1] === star && o[7] === pool.tag;
+      });
+      list.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+      return list;
+    },
+
+    /** 某期的 UP 名单（6★ / 5★）。轮换到底部后整体偏移一格，避免落单的成员永远轮不到 */
+    gachaUpOf: function (poolId, star, rotIdx) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var mem = this.gachaPoolMembers(poolId, star);
+      if (!mem.length) return [];
+      var k = star === 6 ? pool.up6 : pool.up5;
+      var idx = (rotIdx == null) ? this.gachaRotIndex(poolId) : rotIdx;
+      var base = idx * k;
+      var start = (base + Math.floor(base / mem.length)) % mem.length;
+      var out = [];
+      for (var i = 0; i < k && i < mem.length; i++) out.push(mem[(start + i) % mem.length][0]);
+      return out;
+    },
+
+    /** 本期 UP */
+    gachaCurrentUp: function (poolId) {
+      return { six: this.gachaUpOf(poolId, 6), five: this.gachaUpOf(poolId, 5) };
+    },
+
+    /** 未来 N 期的 UP 6★（预告） */
+    gachaUpcoming: function (poolId, n) {
+      var cur = this.gachaRotIndex(poolId);
+      var out = [];
+      for (var i = 1; i <= (n || 3); i++) {
+        out.push({ offset: i, six: this.gachaUpOf(poolId, 6, cur + i), five: this.gachaUpOf(poolId, 5, cur + i) });
+      }
+      return out;
+    },
+
+    /** 井可兑换范围：含当期在内、最近 sparkHistory 期的全部 UP（5★ / 6★） */
+    gachaSparkPool: function (poolId) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var cur = this.gachaRotIndex(poolId);
+      var out = [], seen = {};
+      for (var i = 0; i < pool.sparkHistory; i++) {
+        var idx = cur - i;
+        if (idx < 0) break;
+        var names = this.gachaUpOf(poolId, 6, idx).concat(this.gachaUpOf(poolId, 5, idx));
+        for (var j = 0; j < names.length; j++) {
+          if (!seen[names[j]]) { seen[names[j]] = 1; out.push({ n: names[j], periodsAgo: i }); }
+        }
+      }
+      return out;
+    },
+
+    /** 某个池的抽卡状态（保底 / 井 / 大保底） */
+    gachaPoolState: function (poolId) {
+      var g = state.pomodoro.gacha;
+      if (!g.pools || typeof g.pools !== 'object') {
+        g.pools = {
+          standard: { pity6: g.pity6 || 0, total: 0, spark: 0, guaranteed: false },
+          classic: { pity6: 0, total: 0, spark: 0, guaranteed: false }
+        };
+      }
+      var p = g.pools[poolId];
+      if (!p || typeof p !== 'object') {
+        p = g.pools[poolId] = { pity6: 0, total: 0, spark: 0, guaranteed: false };
+      }
+      if (p.pity6 == null) p.pity6 = 0;
+      if (p.total == null) p.total = 0;
+      if (p.spark == null) p.spark = 0;
+      if (p.guaranteed == null) p.guaranteed = false;
+      return p;
+    },
+
+    /** 切换当前寻访池 */
+    setGachaPool: function (poolId) {
+      if (!POMO.GACHA_POOLS[poolId]) return false;
+      state.pomodoro.gacha.currentPool = poolId;
+      this.emit();
+      this.save();
+      return true;
+    },
+
+    /** 按池出一名干员（UP / 大保底 / 歪 / 共用低星） */
+    pickPoolOp: function (poolId, r) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var st = this.gachaPoolState(poolId);
+      var all = global.AK_OPS || [];
+      var self = this;
+
+      function byName(name) {
+        for (var i = 0; i < all.length; i++) {
+          if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3] };
+        }
+        return null;
+      }
+      function pickFrom(list) {
+        if (!list.length) return null;
+        var it = list[Math.floor(Math.random() * list.length)];
+        return { n: it[0], r: it[1], p: it[2], img: it[3] };
+      }
+
+      var up6 = this.gachaUpOf(poolId, 6);
+      var up5 = this.gachaUpOf(poolId, 5);
+
+      if (r === 6) {
+        if (st.guaranteed) {                      // 大保底：出六星必为 UP
+          st.guaranteed = false;
+          return byName(up6[Math.floor(Math.random() * up6.length)]) || this.pickOp(6);
+        }
+        if (Math.random() < 0.5) {                // UP 占六星出率 50%
+          return byName(up6[Math.floor(Math.random() * up6.length)]) || this.pickOp(6);
+        }
+        // 歪：本池其他干员；另有低概率歪到限定（限定不进轮换，只能这样或定向券拿）
+        var off;
+        if (Math.random() < (pool.offLimited || 0)) {
+          off = all.filter(function (o) { return o[1] === 6 && o[7] === 'limited'; });
+        } else {
+          off = this.gachaPoolMembers(poolId, 6).filter(function (o) { return up6.indexOf(o[0]) < 0; });
+        }
+        st.guaranteed = true;
+        return pickFrom(off) || this.pickOp(6);
+      }
+
+      if (r === 5) {
+        if (up5.length && Math.random() < 0.5) {
+          return byName(up5[Math.floor(Math.random() * up5.length)]) || this.pickOp(5);
+        }
+        var rest5 = this.gachaPoolMembers(poolId, 5).filter(function (o) { return up5.indexOf(o[0]) < 0; });
+        return pickFrom(rest5) || this.pickOp(5);
+      }
+
+      return this.pickOp(r);   // 4★ / 3★ 两池共用
+    },
+
+    /** 井进度（跨期不清零，攒满可兑换历史 5 期内的 UP） */
+    sparkInfo: function (poolId) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var st = this.gachaPoolState(poolId);
+      var n = st.spark || 0;
+      return {
+        pool: poolId, name: pool.name,
+        count: Math.min(n, pool.spark), need: pool.spark,
+        ready: n >= pool.spark,
+        guaranteed: !!st.guaranteed,
+        poolTotal: st.total || 0
+      };
+    },
+
+    /** 井兑换（兑换范围内任一 UP；兑换后计数清零） */
+    redeemSpark: function (poolId, name) {
+      var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+      var st = this.gachaPoolState(poolId);
+      if ((st.spark || 0) < pool.spark) {
+        return { ok: false, msg: '井还没攒够（' + (st.spark || 0) + '/' + pool.spark + '）' };
+      }
+      var list = this.gachaSparkPool(poolId);
+      var hit = null;
+      list.forEach(function (x) { if (x.n === name) hit = x; });
+      if (!hit) return { ok: false, msg: '只能在「含当期在内的最近 ' + pool.sparkHistory + ' 期 UP」里兑换' };
+      var rec = this.opByName(name);
+      if (!rec) return { ok: false, msg: '没有这名干员' };
+      st.spark = 0;
+      this.addOwnedOp(rec);
+      state.shop.log.unshift({ at: Date.now(), type: 'card', text: pool.name + ' 井兑换：' + name });
+      this.trimShopLog();
+      this.emit();
+      this.save();
+      return { ok: true, n: name };
+    },
+
     /** 按星级随机取一个干员 */
     pickOp: function (rarity) {
       var all = this.gachaPool();
@@ -3645,9 +4172,10 @@
       return { n: it[0], r: it[1], p: it[2], img: it[3] };
     },
 
-    /** 当前六星概率（含 50 抽后的递增保底） */
-    gachaRate6: function () {
-      var pity = state.pomodoro.gacha.pity6 || 0;
+    /** 当前六星概率（含 50 抽后的递增保底；按当前池独立计数） */
+    gachaRate6: function (poolId) {
+      var pid = poolId || state.pomodoro.gacha.currentPool || 'standard';
+      var pity = this.gachaPoolState(pid).pity6 || 0;
       var p = POMO.RATE_6;
       if (pity >= POMO.PITY_START) {
         p = POMO.RATE_6 + (pity - POMO.PITY_START + 1) * POMO.PITY_STEP;
@@ -3656,15 +4184,22 @@
     },
 
     /** 单抽一次（forceMin 用于保底时指定最低星级） */
-    gachaOne: function (forceMin) {
+    /**
+     * 抽一次
+     * @param {number} [forceMin] 指定最低星级（保底补抽用）
+     * @param {boolean} [silent]  不计入抽数 / 保底 / 井（十连保底是「替换」最后一抽，不能重复计数）
+     */
+    gachaOne: function (forceMin, silent) {
       var pm = state.pomodoro;
       var g = pm.gacha;
+      var poolId = g.currentPool || 'standard';
+      var st = this.gachaPoolState(poolId);
       var r;
 
       if (forceMin) {
         r = forceMin;
       } else {
-        var p6 = this.gachaRate6();
+        var p6 = this.gachaRate6(poolId);
         var roll = Math.random() * 100;
         if (roll < p6) r = 6;
         else if (roll < p6 + POMO.RATE_5) r = 5;
@@ -3672,10 +4207,18 @@
         else r = 3;
       }
 
-      if (r === 6) g.pity6 = 0;
-      else g.pity6 = (g.pity6 || 0) + 1;
+      if (silent) {
+        // 替换式保底：只产出结果，不重复计入抽数 / 保底 / 井
+        if (r === 6) { st.pity6 = 0; g.pity6 = 0; }
+        return this.pickPoolOp(poolId, r) || this.pickOp(r);
+      }
+      if (r === 6) st.pity6 = 0;
+      else st.pity6 = (st.pity6 || 0) + 1;
+      st.total = (st.total || 0) + 1;
+      st.spark = (st.spark || 0) + 1;      // 井：跨期不清零
+      g.pity6 = st.pity6;                  // 兼容旧字段（统计 / 成就仍读它）
       g.total = (g.total || 0) + 1;
-      return this.pickOp(r);
+      return this.pickPoolOp(poolId, r) || this.pickOp(r);
     },
 
     /**
@@ -3695,13 +4238,16 @@
         if (o) out.push(o);
       }
 
+      /* 限定井：每抽并计入数（与 UP 井双计，但两个井各管各的、不叠加使用） */
+      pm.gacha.limited.count = (pm.gacha.limited.count || 0) + times;
+
       // 十连保底：仅「每自然天第一个十连」保底五星，其余十连不保底
       if (times === 10 && out.length) {
         var todayStr = DateUtil.toStr(DateUtil.today());
         if (pm.gacha.dailyGuaranteeDay !== todayStr) {
           var ok = out.some(function (x) { return x.r >= POMO.TEN_GUARANTEE; });
           if (!ok) {
-            var up = this.gachaOne(POMO.TEN_GUARANTEE);
+            var up = this.gachaOne(POMO.TEN_GUARANTEE, true);
             if (up) out[out.length - 1] = up;
           }
           pm.gacha.dailyGuaranteeDay = todayStr;
@@ -3727,7 +4273,7 @@
           all3: isAll3,
           max4: (maxR === 4),
           twoSix: (sixN === 2),     // 恰好两个六星 → 双黄蛋
-          fourSix: (sixN > 3)       // 超过三个六星（≥4）→ 绝世欧皇
+          fourSix: (sixN >= 3)      // 三个及以上六星（≥3）→ 绝世欧皇
         };
       } else {
         pm.gacha.lastTen = null;
@@ -3778,12 +4324,13 @@
         seen[o.n] = 1;
         if (byR[o.r]) byR[o.r][0]++;
       });
+      var poolId = pm.gacha.currentPool || 'standard';
       return {
         total: all.length,
         owned: Object.keys(seen).length,
         pulls: pm.gacha.total || 0,
-        pity: pm.gacha.pity6 || 0,
-        rate6: this.gachaRate6(),
+        pity: this.gachaPoolState(poolId).pity6 || 0,
+        rate6: this.gachaRate6(poolId),
         byR: byR
       };
     },
@@ -3805,7 +4352,14 @@
     clearGacha: function () {
       state.pomodoro.gacha = {
         pity6: 0, total: 0, ops: [], log: [],
-        dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0, lastTen: null
+        dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0, lastTen: null,
+        currentPool: (state.pomodoro.gacha.currentPool === 'classic') ? 'classic' : 'standard',
+        pools: {
+          standard: { pity6: 0, total: 0, spark: 0, guaranteed: false },
+          classic: { pity6: 0, total: 0, spark: 0, guaranteed: false }
+        },
+        // 限定井进度归零，保留登记目标
+        limited: { target: (state.pomodoro.gacha.limited || {}).target || '', count: 0 }
       };
       // 清掉寻访相关成就（group 为「抽卡」「集卡」）的完成记录
       var ids = {};
@@ -3842,7 +4396,7 @@
           if (!state.achievements) state.achievements = { done: {} };
           if (!state.achievements.done) state.achievements.done = {};
           state.achievements.done[a.id] = { at: Date.now() };
-          self.addPoints(a.points, 'ach');
+          // 成就只发徽章，不再发任何资源（积分 / 合成玉均不发）
           newly.push(a);
         }
       });
@@ -3880,40 +4434,117 @@
       return { set: set, stats: stats, days: days, last100: last100.length };
     },
 
-    plantCost: function (speciesKey) {
-      var sp = speciesOf(speciesKey || 'camphor');
-      return (sp.price || POMO.PLANT_COST) + state.pomodoro.trees.length * POMO.PLANT_STEP;
+    /* ===== 种树（专注即种树）===== */
+
+    /** 累计专注小时数（用于解锁珍稀树种） */
+    focusHours: function () {
+      return (state.pomodoro.focusMinutes || 0) / 60;
     },
 
-    /** 种一棵树，消耗当前价格的积分 */
-    plantTree: function (speciesKey) {
+    /** 已解锁的树种：初始 + 累计专注时长达到 unlockH 的 */
+    unlockedSpecies: function () {
+      var h = this.focusHours();
+      return TREE_SPECIES.filter(function (sp) { return (sp.unlockH || 0) <= h; });
+    },
+
+    isSpeciesUnlocked: function (key) {
+      var sp = speciesOf(key);
+      return (sp.unlockH || 0) <= this.focusHours();
+    },
+
+    /** 选择下一次种下的树种 */
+    setSelectedSpecies: function (key) {
+      if (!this.isSpeciesUnlocked(key)) return false;
+      state.pomodoro.selectedSpecies = key;
+      this.save();
+      this.emit();
+      return true;
+    },
+
+    /** 在空树位播下种子（种植免费）；无空位或未解锁返回 null */
+    seedTree: function (speciesKey) {
       var pm = state.pomodoro;
-      var cost = this.plantCost(speciesKey);
-      if (pm.points < cost) return null;
-      this.spendPoints(cost);
-      var tree = {
-        id: uid('tr'),
-        plantedAt: new Date().toISOString(),
-        growth: cost,
-        species: speciesKey || 'camphor',
-        waterCount: 0
-      };
+      var key = speciesKey || pm.selectedSpecies || 'camphor';
+      if (!this.isSpeciesUnlocked(key)) return null;
+      if (pm.trees.length >= POMO.GROVE_SLOTS) return null;
+      var tree = { id: uid('tr'), species: key, stage: 1, prog: 0, withered: false, plantedAt: new Date().toISOString() };
       pm.trees.push(tree);
-      // 种树成就（3 / 6 / 9 棵）在此检测并弹窗
+      pm.treesPlanted = (pm.treesPlanted || 0) + 1;
       this.checkAchievements(true);
+      this.save();
       this.emit();
       return tree;
     },
 
-    /** 浇水：消耗 WATER_COST，成长值增加 */
-    waterTree: function (id) {
+    /** 给树增加 n 记（自动升阶段，满 5 阶段封顶） */
+    addTreeJi: function (tree, n) {
+      if (!tree || tree.withered) return;
+      var sp = speciesOf(tree.species);
+      for (var i = 0; i < n; i++) {
+        if (tree.stage >= 5) break;
+        tree.prog = (tree.prog || 0) + 1;
+        if (tree.prog >= stageNeed(sp, tree.stage)) { tree.stage++; tree.prog = 0; }
+      }
+    },
+
+    /** 合格专注：让本次种子 / 最近一棵树长 1~2 记 */
+    growActiveTree: function (minutes) {
       var pm = state.pomodoro;
-      if (pm.points < POMO.WATER_COST) return false;
+      var tree = pm.timer && pm.timer.treeId ? this.getTree(pm.timer.treeId) : null;
+      if (!tree) {
+        if (pm.trees.length < POMO.GROVE_SLOTS) tree = this.seedTree(pm.selectedSpecies);
+        if (!tree) {
+          for (var i = pm.trees.length - 1; i >= 0; i--) {
+            var t = pm.trees[i];
+            if (!t.withered && t.stage < 5) { tree = t; break; }
+          }
+        }
+      }
+      if (tree && !tree.withered) this.addTreeJi(tree, minutes >= 60 ? 2 : 1);
+      this.save();
+    },
+
+    /** 中断：本次播下的种子枯萎，阶段内记数归零 */
+    witherActiveTree: function () {
+      var pm = state.pomodoro;
+      var tree = pm.timer && pm.timer.treeId ? this.getTree(pm.timer.treeId) : null;
+      if (tree) { tree.withered = true; tree.prog = 0; }
+      this.save();
+    },
+
+    /** 复活枯桩：扣 REVIVE_COST 养分；阶段保留、阶段内记数归零 */
+    reviveTree: function (id) {
       var tree = this.getTree(id);
-      if (!tree) return false;
-      this.spendPoints(POMO.WATER_COST);
-      tree.growth += POMO.WATER_COST;
+      if (!tree || !tree.withered) return false;
+      if (!this.spendPoints(POMO.REVIVE_COST)) return false;
+      tree.withered = false;
+      tree.prog = 0;
+      this.save();
+      this.emit();
+      return true;
+    },
+
+    /** 浇水：扣 WATER_COST 养分，+1 记加速生长 */
+    waterTree: function (id) {
+      var tree = this.getTree(id);
+      if (!tree || tree.withered || tree.stage >= 5) return false;
+      if (!this.spendPoints(POMO.WATER_COST)) return false;
+      this.addTreeJi(tree, 1);
       tree.waterCount = (tree.waterCount || 0) + 1;
+      this.checkAchievements(true);
+      this.save();
+      this.emit();
+      return true;
+    },
+
+    /** 收获已长成的树：进收藏、腾出树位 */
+    harvestTree: function (id) {
+      var pm = state.pomodoro;
+      var tree = this.getTree(id);
+      if (!tree || tree.withered || tree.stage < 5) return false;
+      pm.trees = pm.trees.filter(function (t) { return t.id !== id; });
+      pm.harvested = (pm.harvested || 0) + 1;
+      this.save();
       this.emit();
       return true;
     },
@@ -5175,6 +5806,7 @@
   global.TREE_SPECIES = TREE_SPECIES;
   global.speciesOf = speciesOf;
   global.treeStage = treeStage;
+  global.stageNeed = stageNeed;
   global.SUBTASK_DEFAULTS = SUBTASK_DEFAULTS;
   global.subOpts = subOpts;
   global.isChild = isChild;

@@ -1238,25 +1238,32 @@ console.log('统计口径：RANGES / weekBounds / monthBounds / rangeDates');
 
 console.log('统计口径：rangeDates 的 to 截到今天，不把未来算进分母');
 {
-  // 今天 = 2026-10-21（周三），学期 8/24 开始
+  // 期望按「今天」动态计算：写死具体日期会在跨天后必然失败（今天 = D，周从周一起算）
+  const today = DateUtil.today();
+  const td = DateUtil.toStr(today);
+  const wbNow = weekBounds(today);
+  const dayCount = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1;
+
   const rw = rangeDates('week');
-  eq('本周 from', rw.from, '2026-10-19');
-  eq('本周 to 今天（不是周日）', rw.to, '2026-10-21');
-  eq('本周天数 3', rw.days, 3);
+  eq('本周 from', rw.from, DateUtil.toStr(wbNow.from));
+  eq('本周 to 今天（不是周日）', rw.to, td);
+  eq('本周天数 = 周一到今天', rw.days, dayCount(rw.from, td));
 
   const rm = rangeDates('month');
-  eq('本月 from 1 号', rm.from, '2026-10-01');
-  eq('本月 to 今天', rm.to, '2026-10-21');
-  eq('本月天数 21', rm.days, 21);
+  const firstOfMonth = td.slice(0, 8) + '01';
+  eq('本月 from 1 号', rm.from, firstOfMonth);
+  eq('本月 to 今天', rm.to, td);
+  eq('本月天数 = 1 号到今天', rm.days, dayCount(firstOfMonth, td));
 
   const rt = rangeDates('term');
   eq('本学期 from 开学日', rt.from, '2026-08-24');
-  eq('本学期 to 今天', rt.to, '2026-10-21');
+  eq('本学期 to 今天', rt.to, td);
 
   const r30 = rangeDates('recent30');
+  const d30 = DateUtil.addDays(today, -29);
   eq('最近 30 天含今天', r30.days, 30);
-  eq('最近 30 天 to', r30.to, '2026-10-21');
-  eq('最近 30 天 from', r30.from, '2026-09-22');
+  eq('最近 30 天 to', r30.to, td);
+  eq('最近 30 天 from', r30.from, DateUtil.toStr(d30));
 
   const rd = rangeDates('day');
   eq('今天 from=to', rd.from, rd.to);
@@ -1267,20 +1274,25 @@ console.log('统计口径：rangeDates 的 to 截到今天，不把未来算进�
 
 console.log('统计口径：compareRange 往前挪一个周期');
 {
+  const today = DateUtil.today();
+  const td = DateUtil.toStr(today);
   const rw = rangeDates('week');
   const pw = compareRange('week', rw);
-  eq('上周 from', pw.from, '2026-10-12');
-  eq('上周 to 周日（完整一周）', pw.to, '2026-10-18');
+  const prevWeekFrom = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(rw.from), -7));
+  eq('上周 from（往前一周）', pw.from, prevWeekFrom);
+  eq('上周 to 周日（完整一周）', pw.to, DateUtil.toStr(DateUtil.addDays(DateUtil.parse(rw.from), -1)));
   eq('上周 7 天', pw.days, 7);
 
   const rd = compareRange('day');
-  eq('今天 → 昨天', [rd.from, rd.to, rd.days], ['2026-10-20', '2026-10-20', 1]);
+  const yesterday = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -1));
+  eq('今天 → 昨天', [rd.from, rd.to, rd.days], [yesterday, yesterday, 1]);
 
-  // 本月只过了 21 天 → 上月也截到 21 天，否则「本月 vs 上月」永远输
+  // 本月只过了 N 天 → 上月也截到 N 天，否则「本月 vs 上月」永远输
   const rm = rangeDates('month');
   const pm = compareRange('month', rm);
-  eq('上月 from', pm.from, '2026-09-01');
-  eq('上月截到同样天数（21 天）', pm.to, '2026-09-21');
+  const prevMonthFirst = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  eq('上月 from', pm.from, DateUtil.toStr(prevMonthFirst));
+  eq('上月截到与本月的天数一致', pm.to.slice(8), rm.to.slice(8));
   eq('上月比较段天数与本月一致', pm.days, rm.days);
 
   // 1 月的上月是去年 12 月
@@ -1296,8 +1308,8 @@ console.log('统计口径：compareRange 往前挪一个周期');
   const r30 = rangeDates('recent30');
   const p30 = compareRange('recent30', r30);
   eq('滑动窗口参照段等长', p30.days, 30);
-  eq('滑动窗口参照段紧邻前一段', p30.to, '2026-09-21');
-  eq('滑动窗口参照段 from', p30.from, '2026-08-23');
+  eq('滑动窗口参照段紧邻前一段', p30.to, DateUtil.toStr(DateUtil.addDays(today, -30)));
+  eq('滑动窗口参照段 from', p30.from, DateUtil.toStr(DateUtil.addDays(today, -59)));
 }
 
 console.log('统计口径：eachDate 区间展开');

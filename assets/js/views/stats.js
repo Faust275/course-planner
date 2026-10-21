@@ -328,7 +328,7 @@
     card.appendChild(el('div', { class: 'section-title' }, ['积分来源']));
     card.appendChild(el('div', {
       style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
-      text: '累计获得 ' + Math.round(Store.totalPoints()) + ' 积分（含合成玉折算）'
+      text: '累计获得 ' + Math.round(Store.pomodoro.earned) + ' 积分（按行为计，不含合成玉折算）'
     }));
     if (!total) {
       card.appendChild(el('div', {

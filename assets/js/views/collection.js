@@ -99,8 +99,36 @@
       else root.appendChild(this.opsPane());
     },
 
+    /** 限定干员选择弹窗（六星在前，标注已拥有） */
+    limitedPicker: function (cb) {
+      var owned = {};
+      (Store.state.pomodoro.gacha.ops || []).forEach(function (o) { owned[o.n] = 1; });
+      var list = Store.limitedOps();
+      list.sort(function (a, b) { return (b.r - a.r) || (a.n < b.n ? -1 : 1); });
+      var body = el('div', { class: 'limited-picker' });
+      list.forEach(function (o) {
+        body.appendChild(el('button', {
+          class: 'btn btn-block limited-pick' + (owned[o.n] ? ' owned' : ''),
+          text: o.r + '★ ' + o.n + (owned[o.n] ? '（已拥有）' : ''),
+          onclick: function () {
+            var w = this.closest('.modal-wrap');
+            if (w) w.remove();
+            cb(o.n);
+          }
+        }));
+      });
+      V.modal({
+        title: '选择限定干员',
+        width: '420px',
+        body: [body],
+        footer: el('div', { class: 'modal-foot' }, [
+          el('button', { class: 'btn', text: '取消', onclick: function () { this.closest('.modal-wrap').remove(); } })
+        ])
+      });
+    },
+
     /* ==========================================================
-     * 商店：月卡 + 满潜重复兑换
+     * 商店：月卡 + 满潜重复兑换 + 限定专区
      * ========================================================== */
     shopPane: function () {
       var self = this;
@@ -109,12 +137,14 @@
       var info = Store.cardInfo();
       var dup = Store.dupPoolInfo();
 
-      /* ---- 余额 ---- */
+      /* ---- 余额（两币不互通，各花各的）---- */
+      var gacha = bal.mode === 'gacha';
+      var unit = gacha ? '合成玉' : '积分';
       var balCard = el('div', { class: 'card shop-bal' });
       [
         [bal.points, '森林积分'],
         [bal.jade, '合成玉'],
-        [bal.total, '等值积分']
+        [bal.current, '当前可用']
       ].forEach(function (x) {
         balCard.appendChild(el('div', { class: 'shop-bal-item' }, [
           el('b', { text: String(x[0]) }),
@@ -124,18 +154,19 @@
       wrap.appendChild(balCard);
       wrap.appendChild(el('div', {
         class: 'shop-note',
-        text: '商城统一按积分计价（1 积分 = ' + POMO.JADE_PER_POINT +
-          ' 合成玉）。扣款先扣森林积分，不够的部分再按比例扣合成玉。'
+        text: '积分与合成玉不互通：森林模式花积分，抽卡模式花合成玉。月卡按当前模式的币种计价。'
       }));
 
       /* ---- 月卡 ---- */
       var cardBox = el('div', { class: 'card shop-block' });
       cardBox.appendChild(el('div', { class: 'section-title' }, ['月卡']));
 
+      var cardPrice = gacha ? POMO.CARD_PRICE_GACHA : POMO.CARD_PRICE;
+      var dailyTxt = gacha ? (POMO.CARD_DAILY * POMO.JADE_PER_POINT + ' 合成玉') : (POMO.CARD_DAILY + ' 积分');
       function buy() {
         var r = Store.buyCard();
         if (!r.ok) { V.toast(r.msg, 'err'); return; }
-        V.toast('月卡已开通，今天已返 ' + POMO.CARD_DAILY + ' 积分');
+        V.toast('月卡已开通，今天已返 ' + dailyTxt);
         self.render();
       }
 
@@ -147,18 +178,20 @@
         }
         cardBox.appendChild(el('div', {
           class: 'shop-desc',
-          text: '花 ' + POMO.CARD_PRICE + ' 积分开通 30 天：每天用任意功能返 ' +
-            POMO.CARD_DAILY + ' 分；任意连续 7 天全勤额外 +' + POMO.CARD_WEEK_BONUS +
-            '；30 天一天不漏再 +' + POMO.CARD_FULL_BONUS + '。漏签只损失当天和该窗口，有效期不顺延。'
+          text: '花 ' + cardPrice + ' ' + unit + ' 开通 30 天：每天用任意功能返 ' + dailyTxt +
+            '；任意连续 7 天全勤额外奖励（另发 1 张补签卡，可补漏签的日子）；' +
+            '30 天一天不漏再奖励（另发 1 张定向券，可兑换任意限定干员）。' +
+            '坚持一个月的总返还约为售价的 5 倍。漏签只损失当天和该窗口，有效期不顺延。' +
+            '同一时间只能持有一个模式的月卡。'
         }));
         cardBox.appendChild(el('button', {
           class: 'btn btn-primary btn-block btn-lg',
-          text: '开通月卡（' + POMO.CARD_PRICE + ' 积分）',
+          text: '开通月卡（' + cardPrice + ' ' + unit + '）',
           onclick: buy
         }));
       } else {
         cardBox.appendChild(el('div', { class: 'shop-row' }, [
-          el('b', { text: '剩余 ' + info.daysLeft + ' 天' }),
+          el('b', { text: (info.mode === 'gacha' ? '抽卡月卡 · ' : '森林月卡 · ') + '剩余 ' + info.daysLeft + ' 天' }),
           el('span', { text: '已签 ' + info.signedDays + '/' + info.daysTotal + ' 天' })
         ]));
 
@@ -169,27 +202,59 @@
         }));
         cardBox.appendChild(bar);
 
-        /* 滚动 7 天：最近 7 天的签到点 */
+        /* 滚动 7 天：最近 7 天的签到点（漏签的日子可用补签卡补上） */
         var dots = el('div', { class: 'shop-dots' });
         var c = Store.state.shop.card;
+        var mendInfo = Store.ticketInfo();
+        var mendQuota = Store.makeUpQuota();
+        var mendLeft = Math.min(mendInfo.makeUp || 0, mendQuota.left);
+        var todayKey = DateUtil.toStr(DateUtil.today());
         for (var i = 6; i >= 0; i--) {
           var d = DateUtil.addDays(DateUtil.today(), -i);
           var key = DateUtil.toStr(d);
           var on = !!(c.days && c.days[key]);
-          dots.appendChild(el('span', {
-            class: 'shop-dot' + (on ? ' on' : ''),
-            title: key + (on ? ' 已签到' : ' 未签到'),
+          var mendable = !on && mendLeft > 0 && key <= todayKey && key >= c.startDate;
+          var attrs = {
+            class: 'shop-dot' + (on ? ' on' : '') + (mendable ? ' mendable' : ''),
+            title: key + (on ? ' 已签到' : (mendable ? ' 点一下用补签卡补签' : ' 未签到')),
             text: String(d.getDate())
-          }));
+          };
+          if (mendable) {
+            attrs.onclick = function (k) {
+              return function () {
+                V.confirm({
+                  title: '补签 ' + k,
+                  message: '将消耗 1 张补签卡，补上 ' + k + ' 的签到与当日返还。确定继续吗？',
+                  ok: '补签',
+                  onOk: function () {
+                    var r = Store.useMakeUpCard(k);
+                    if (!r.ok) { V.toast(r.msg, 'err'); return; }
+                    V.toast('已补签 ' + k);
+                    self.render();
+                  }
+                });
+              };
+            }(key);
+          }
+          dots.appendChild(el('span', attrs));
         }
-        cardBox.appendChild(el('div', { class: 'shop-label', text: '最近 7 天（连续 7 天全勤 +' + POMO.CARD_WEEK_BONUS + '）' }));
+        cardBox.appendChild(el('div', {
+          class: 'shop-label',
+          text: '最近 7 天（连续 7 天全勤 +' + POMO.CARD_WEEK_BONUS +
+                '，另发 1 张补签卡）' +
+                (mendInfo.makeUp ? '　·　持 ' + mendInfo.makeUp + ' 张，近 7 天还可补 ' + mendQuota.left +
+                 '/' + mendQuota.max + ' 次' : '')
+        }));
         cardBox.appendChild(dots);
 
+        var cardGacha = info.mode === 'gacha';
+        var gainedTxt = cardGacha ? (info.gained * POMO.JADE_PER_POINT + ' 合成玉') : (info.gained + ' 积分');
+        var todayTxt = cardGacha ? (POMO.CARD_DAILY * POMO.JADE_PER_POINT + ' 合成玉') : (POMO.CARD_DAILY + ' 积分');
         cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
           el('span', {
-            text: info.todaySigned ? '今天已返 ' + POMO.CARD_DAILY + ' 积分' : '今天还没结算，进入任意模块即可'
+            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没结算，进入任意模块即可'
           }),
-          el('b', { text: '累计返 ' + info.gained + ' 积分' })
+          el('b', { text: '累计返 ' + gainedTxt })
         ]));
         if (info.fullAwarded) {
           cardBox.appendChild(el('div', { class: 'shop-badge', text: '30 天全勤奖励已领取' }));
@@ -203,8 +268,8 @@
       if (dup.count > 0) {
         exBox.appendChild(el('div', {
           class: 'shop-desc',
-          text: '待兑换 ' + dup.count + ' 份重复干员，按星级折算共 ' + dup.points +
-            ' 积分，可换 ' + dup.jade + ' 合成玉。'
+          text: '待兑换 ' + dup.count + ' 份重复干员，按 1 积分 = ' + POMO.JADE_PER_POINT +
+            ' 合成玉折算，共 ' + dup.jade + ' 合成玉。'
         }));
         exBox.appendChild(el('button', {
           class: 'btn btn-primary btn-block',
@@ -214,7 +279,7 @@
             V.toast('已兑换 ' + r.jade + ' 合成玉');
             self.render();
           }
-        }, [V.jade(16), '一键兑换 ' + dup.jade + ' 合成玉']));
+        }, [V.jade(16), '兑换为 ' + dup.jade + ' 合成玉']));
       } else {
         exBox.appendChild(el('div', {
           class: 'q-empty',
@@ -222,6 +287,82 @@
         }));
       }
       wrap.appendChild(exBox);
+
+      /* ---- 限定专区（限定井 / 定向券）：森林模式没有合成玉、井也不涨，完全不显示 ---- */
+      if (gacha) (function () {
+        var tk = Store.ticketInfo();
+        var lk = Store.limitedSparkInfo();
+        var box = el('div', { class: 'card shop-block' });
+        box.appendChild(el('div', { class: 'section-title' }, ['限定专区']));
+        box.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '限定干员不进轮换池，只能靠限定井或定向券获取：每次寻访都累计限定井' +
+                '（与 UP 井并行各计，但不叠加使用），攒满 ' + lk.need + ' 抽可兑换已登记的限定；' +
+                '定向券由月全勤发放，补签卡由滚动 7 天全勤发放。'
+        }));
+        box.appendChild(el('div', { class: 'shop-row' }, [
+          el('b', { text: '限定井 ' + lk.count + ' / ' + lk.need }),
+          el('span', { text: '定向券 ' + tk.selection + ' 张 · 补签卡 ' + tk.makeUp + ' 张' })
+        ]));
+        var bar2 = el('div', { class: 'shop-bar' });
+        bar2.appendChild(el('i', { style: { width: Math.round(lk.count / lk.need * 100) + '%' } }));
+        box.appendChild(bar2);
+        box.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
+          el('span', { text: '已登记目标' }),
+          el('b', { text: lk.target || '未登记' })
+        ]));
+        var btnRow = el('div', { class: 'shop-btn-row' });
+        btnRow.appendChild(el('button', {
+          class: 'btn', text: '登记限定',
+          onclick: function () {
+            self.limitedPicker(function (name) {
+              var r = Store.setLimitedTarget(name);
+              if (!r.ok) { V.toast(r.msg, 'err'); return; }
+              V.toast('已登记限定井目标：' + name);
+              self.render();
+            });
+          }
+        }));
+        btnRow.appendChild(el('button', {
+          class: 'btn' + (lk.ready ? ' btn-primary' : ''), text: '井兑换',
+          onclick: function () {
+            V.confirm({
+              title: '限定井兑换',
+              message: '将消耗攒满的限定井（计数清零），兑换已登记的限定「' +
+                       (lk.target || '未登记') + '」。确定继续吗？',
+              ok: '兑换',
+              onOk: function () {
+                var r = Store.redeemLimitedSpark();
+                if (!r.ok) { V.toast(r.msg, 'err'); return; }
+                V.toast('限定井兑换成功：' + r.n);
+                self.render();
+              }
+            });
+          }
+        }));
+        btnRow.appendChild(el('button', {
+          class: 'btn' + (tk.selection ? ' btn-primary' : ''),
+          text: '定向券兑换' + (tk.selection ? '（' + tk.selection + '）' : ''),
+          onclick: function () {
+            if (!tk.selection) { V.toast('没有定向券，坚持一个月月卡全勤可得', 'err'); return; }
+            self.limitedPicker(function (name) {
+              V.confirm({
+                title: '定向券兑换',
+                message: '将消耗 1 张定向券，兑换限定「' + name + '」。确定继续吗？',
+                ok: '兑换',
+                onOk: function () {
+                  var r = Store.useSelectionTicket(name);
+                  if (!r.ok) { V.toast(r.msg, 'err'); return; }
+                  V.toast('定向券兑换成功：' + r.n);
+                  self.render();
+                }
+              });
+            });
+          }
+        }));
+        box.appendChild(btnRow);
+        wrap.appendChild(box);
+      })();
 
       /* ---- 记录 ---- */
       var logs = (Store.state.shop.log || []).slice(0, 8);
@@ -367,7 +508,6 @@
             el('div', { class: 'ach-icon tier-' + a.tier }, [V.svg(V.icons[a.icon] || V.icons.sparkle, 22)]),
             body,
             el('div', { class: 'ach-points' + (done ? ' got' : '') }, [
-              el('span', { class: 'ach-pts', text: '+' + a.points }),
               el('span', { class: 'ach-status', text: done ? '已完成' : '待解锁' })
             ])
           ]));
@@ -377,7 +517,7 @@
 
       card.appendChild(el('div', {
         style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
-        text: '成就分「抽卡 / 集卡 / 种树 / 历练」四类：达成条件即可解锁并获得对应积分（抽卡模式下折算成合成玉）。' +
+        text: '成就只发徽章、不发放任何资源（积分 / 合成玉都不发）。达成条件即解锁；' +
               '抽卡与集卡类成就在解锁前默认隐藏；历练类成就按「初出茅庐(1 次) → 小有心得(10 次) → 炉火纯青(100 次)」逐级解锁。'
       }));
       return card;
@@ -389,57 +529,89 @@
     forestPane: function () {
       var self = this;
       var pm = Store.pomodoro;
+      var wrap = el('div', {});
       var card = el('div', { class: 'card', style: { padding: '16px 18px' } });
 
       card.appendChild(el('div', { class: 'section-title' }, [
         '我的森林',
-        el('span', { class: 'q-count', text: pm.trees.length + ' 棵' })
+        el('span', { class: 'q-count', text: pm.trees.length + ' / ' + POMO.GROVE_SLOTS + ' 个树位' })
       ]));
 
-      var baseCost = Store.plantCost(TREE_SPECIES[0].key);
-      var canPlant = pm.points >= baseCost;
-      var plantBtn = el('button', {
-        class: 'btn ' + (canPlant ? 'btn-primary' : '') + ' btn-block',
-        onclick: function () {
-          if (Store.pomodoro.points < baseCost) {
-            UI.toast('还差 ' + (baseCost - Store.pomodoro.points) + ' 分才能种树', 'err');
-            return;
-          }
-          openPlantDialog(self);
+      // 当前树种
+      var sel = speciesOf(pm.selectedSpecies);
+      card.appendChild(el('div', { class: 'grove-pick' }, [
+        el('div', { class: 'grove-pick-img' }, [treeSVG(3, sel)]),
+        el('div', { class: 'grove-pick-main' }, [
+          el('b', { text: '下次种下：' + sel.name }),
+          el('span', { text: '专注 ≥' + POMO.FOCUS_MIN_MIN + ' 分钟即种下 / 养护；点右侧可换树种' })
+        ]),
+        el('button', { class: 'btn btn-sm', onclick: function () { openSpeciesDialog(self); } }, ['选择树种'])
+      ]));
+
+      // 4 个树位
+      var grid = el('div', { class: 'grove-grid' });
+      for (var i = 0; i < POMO.GROVE_SLOTS; i++) {
+        var tr = pm.trees[i];
+        if (tr) grid.appendChild(treeCard(tr, self));
+        else {
+          grid.appendChild(el('div', { class: 'grove-slot empty' }, [
+            el('div', { class: 'grove-slot-plus', text: '+' }),
+            el('span', { text: '空树位' })
+          ]));
         }
-      }, [V.svg(V.icons.leaf, 16), canPlant
-        ? '选树种 · 种一棵树'
-        : '还差 ' + (baseCost - pm.points) + ' 分可种树']);
-      plantBtn.style.marginBottom = '14px';
-      card.appendChild(plantBtn);
-
-      if (!pm.trees.length) {
-        card.appendChild(V.empty(
-          V.icons.tree, '森林还是空的',
-          '专注攒够 ' + Store.plantCost(TREE_SPECIES[0].key) + ' 分就能种下第一棵树。不同树种价格不同，种得越多越贵（每棵 +' +
-          POMO.PLANT_STEP + ' 分）；浇水（' + POMO.WATER_COST + ' 分）可以让它长大。'
-        ));
-        return card;
       }
-
-      var grid = el('div', { class: 'tree-grid' });
-      pm.trees.slice().reverse().forEach(function (tree) {
-        grid.appendChild(treeCard(tree));
-      });
       card.appendChild(grid);
-      return card;
+
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)', margin: '10px 0 2px', lineHeight: '1.75' },
+        text: '一次专注 ≥' + POMO.FOCUS_MIN_MIN + ' 分钟会种下 / 养护一棵树（≥60 分钟记 2 次）；中途中断则本次种子枯萎，满 60 分钟提醒起来走走。' +
+          '养分（当前 ' + Math.round(pm.points) + '）用于浇水（' + POMO.WATER_COST + '）与复活枯桩（' + POMO.REVIVE_COST + '）。已收获 ' + (pm.harvested || 0) + ' 棵。'
+      }));
+      wrap.appendChild(card);
+
+      // 树种图鉴（只显示已解锁的资料）
+      var codex = el('div', { class: 'card', style: { padding: '16px 18px', marginTop: '14px' } });
+      var unlocked = Store.unlockedSpecies();
+      codex.appendChild(el('div', { class: 'section-title' }, [
+        '树种图鉴',
+        el('span', { class: 'q-count', text: unlocked.length + ' / ' + TREE_SPECIES.length })
+      ]));
+      var cg = el('div', { class: 'codex-grid' });
+      unlocked.forEach(function (sp) {
+        cg.appendChild(el('button', { class: 'codex-item', onclick: function () { openCodexInfo(sp); } }, [
+          el('div', { class: 'codex-img' }, [treeSVG(5, sp)]),
+          el('b', { text: sp.name })
+        ]));
+      });
+      codex.appendChild(cg);
+      var next = TREE_SPECIES.filter(function (sp) { return (sp.unlockH || 0) > Store.focusHours(); })
+        .sort(function (a, b) { return a.unlockH - b.unlockH; })[0];
+      codex.appendChild(el('div', {
+        class: 'codex-next',
+        text: next
+          ? ('累计专注 ' + next.unlockH + ' 小时解锁下一树种（当前 ' + Store.focusHours().toFixed(1) + ' 小时）')
+          : '全部树种已解锁 🎉'
+      }));
+      wrap.appendChild(codex);
+      return wrap;
     }
   };
 
   /* ==========================================================
-   * 树木渲染（从专注模块迁移而来）
+   * 树木渲染：5 个阶段 + 枯萎态（参数化 SVG，按树种形态分化）
    * ========================================================== */
-  /** 根据成长阶段与树种画一棵树 */
-  function treeSVG(stage, sp) {
+  function rerender() {
+    var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
+    if (v) v.render();
+  }
+
+  /** stage：1~5；withered：枯桩；sp：树种（shape/crown/crown2/trunk/bloom） */
+  function treeSVG(stage, sp, withered) {
     sp = sp || speciesOf('camphor');
+    stage = stage || 1;
     var svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '16 2 68 118');
-    svg.setAttribute('class', 'cp-tree-svg');
+    svg.setAttribute('viewBox', '0 0 100 120');
+    svg.setAttribute('class', 'cp-tree-svg' + (withered ? ' cp-withered' : ''));
 
     function add(tag, attrs, parent) {
       var n = document.createElementNS(NS, tag);
@@ -448,149 +620,208 @@
       return n;
     }
 
-    add('ellipse', { cx: 50, cy: 112, rx: 30, ry: 5, fill: '#e7dfc8' });
+    add('ellipse', { cx: 50, cy: 114, rx: 28, ry: 5, fill: '#e7dfc8' });
 
-    if (stage <= 0) {
-      add('ellipse', { cx: 50, cy: 106, rx: 6, ry: 7, fill: sp.trunk });
-      add('path', { d: 'M50 100 q1 -8 7 -11', stroke: sp.crown, 'stroke-width': 2.6, fill: 'none', 'stroke-linecap': 'round' });
+    if (withered) {
+      add('path', { d: 'M50 110 V58', stroke: '#8a7f6f', 'stroke-width': 6, 'stroke-linecap': 'round' });
+      add('path', { d: 'M50 80 l-17 -15 M50 72 l16 -14 M50 64 l-11 -17 M50 60 l12 -16', stroke: '#8a7f6f', 'stroke-width': 4, fill: 'none', 'stroke-linecap': 'round' });
+      add('path', { d: 'M33 65 q-4 7 0 11 M67 58 q4 7 0 11', stroke: '#a89a86', 'stroke-width': 2.2, fill: 'none' });
       return svg;
     }
 
-    if (stage === 1) {
-      add('path', { d: 'M50 110 V84', stroke: sp.crown, 'stroke-width': 3.4, 'stroke-linecap': 'round' });
-      add('ellipse', { cx: 41, cy: 88, rx: 10, ry: 5.5, fill: sp.crown, transform: 'rotate(-22 41 88)' });
-      add('ellipse', { cx: 59, cy: 83, rx: 10, ry: 5.5, fill: sp.crown2, transform: 'rotate(22 59 83)' });
+    if (stage <= 1) {
+      add('path', { d: 'M50 112 V92', stroke: sp.crown, 'stroke-width': 3, 'stroke-linecap': 'round' });
+      add('ellipse', { cx: 43, cy: 90, rx: 9, ry: 5, fill: sp.crown, transform: 'rotate(-26 43 90)' });
+      add('ellipse', { cx: 57, cy: 87, rx: 9, ry: 5, fill: sp.crown2, transform: 'rotate(26 57 87)' });
       return svg;
     }
 
-    var big = stage >= 3;
-    var trunkW = big ? 11 : 7.5;
-    var topY = big ? 50 : 66;
-    add('path', {
-      d: 'M50 110 V' + topY,
-      stroke: sp.trunk, 'stroke-width': trunkW, 'stroke-linecap': 'round'
-    });
-    if (big) {
-      add('path', { d: 'M50 80 l-13 -12', stroke: sp.trunk, 'stroke-width': 5, 'stroke-linecap': 'round' });
-      add('path', { d: 'M50 74 l13 -11', stroke: sp.trunk, 'stroke-width': 5, 'stroke-linecap': 'round' });
+    if (stage === 2) {
+      add('path', { d: 'M50 112 V80', stroke: sp.trunk, 'stroke-width': 5, 'stroke-linecap': 'round' });
+      add('circle', { cx: 50, cy: 74, r: 14, fill: sp.crown });
+      add('circle', { cx: 43, cy: 79, r: 8, fill: sp.crown2 });
+      return svg;
     }
 
-    var g = add('g', { class: 'crown' });
+    var big = stage >= 4;
+    var trunkW = big ? 11 : 8;
+    var topY = big ? 48 : 64;
+    add('path', { d: 'M50 112 V' + topY, stroke: sp.trunk, 'stroke-width': trunkW, 'stroke-linecap': 'round' });
+    add('path', { d: 'M50 82 l-12 -11', stroke: sp.trunk, 'stroke-width': 4, 'stroke-linecap': 'round' });
+    add('path', { d: 'M50 76 l12 -10', stroke: sp.trunk, 'stroke-width': 4, 'stroke-linecap': 'round' });
 
-    if (sp.shape === 'cone') {
-      // 松树：三层塔形
-      var layers = big ? [[50, 18, 44, 40], [50, 38, 56, 60], [50, 56, 66, 82]]
-                       : [[50, 32, 40, 54], [50, 50, 52, 78]];
+    var g = add('g', { class: 'cp-crown' });
+    var r = big ? 30 : 22;
+    var cy = big ? 42 : 58;
+    var shape = sp.shape || 'round';
+
+    if (shape === 'cone') {
+      var layers = big ? [[50, 12, 44, 38], [50, 32, 58, 60], [50, 52, 70, 84]]
+                       : [[50, 30, 42, 56], [50, 48, 54, 80]];
       layers.forEach(function (L, i) {
         add('polygon', {
           points: L[0] + ',' + L[1] + ' ' + (L[0] - L[2] / 2) + ',' + L[3] + ' ' + (L[0] + L[2] / 2) + ',' + L[3],
           fill: i % 2 ? sp.crown2 : sp.crown
         }, g);
       });
+    } else if (shape === 'fan') {
+      var baseX = 50, baseY = cy + r * 0.55;
+      [-42, -21, 0, 21, 42].forEach(function (ang, i) {
+        var rad = ang * Math.PI / 180, len = r * 1.25;
+        var ex = baseX + Math.sin(rad) * len, ey = baseY - Math.cos(rad) * len;
+        add('ellipse', {
+          cx: (baseX + ex) / 2, cy: (baseY + ey) / 2, rx: r * 0.4, ry: r * 0.72,
+          fill: i % 2 ? sp.crown2 : sp.crown,
+          transform: 'rotate(' + ang + ' ' + ((baseX + ex) / 2) + ' ' + ((baseY + ey) / 2) + ')'
+        }, g);
+      });
+    } else if (shape === 'droop') {
+      add('circle', { cx: 50, cy: cy, r: r, fill: sp.crown }, g);
+      add('circle', { cx: 50 - r * 0.5, cy: cy + r * 0.3, r: r * 0.7, fill: sp.crown2 }, g);
+      for (var k = -2; k <= 2; k++) {
+        add('path', {
+          d: 'M' + (50 + k * 9) + ' ' + (cy + r * 0.45) + ' q' + (k * 4) + ' ' + (r * 0.75) + ' ' + (k * 6) + ' ' + (r * 1.15),
+          stroke: sp.crown2, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round'
+        }, g);
+      }
+    } else if (shape === 'palm') {
+      for (var a = -64; a <= 64; a += 32) {
+        var rd = a * Math.PI / 180;
+        var px = 50 + Math.sin(rd) * r * 1.4, py = topY - Math.cos(rd) * r * 1.15;
+        add('path', { d: 'M50 ' + topY + ' Q' + ((50 + px) / 2) + ' ' + (topY - 15) + ' ' + px + ' ' + py, stroke: sp.crown, 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, g);
+        add('path', { d: 'M50 ' + topY + ' Q' + ((50 + px) / 2) + ' ' + (topY - 15) + ' ' + px + ' ' + py, stroke: sp.crown2, 'stroke-width': 2, fill: 'none', 'stroke-linecap': 'round' }, g);
+      }
     } else {
-      var r = big ? 30 : 23;
-      var cy = big ? 42 : 56;
       add('circle', { cx: 50, cy: cy, r: r, fill: sp.crown }, g);
       add('circle', { cx: 50 - r * 0.55, cy: cy + r * 0.42, r: r * 0.62, fill: sp.crown2 }, g);
       add('circle', { cx: 50 + r * 0.55, cy: cy + r * 0.38, r: r * 0.58, fill: sp.crown }, g);
     }
 
-    if (stage >= 4) {
-      [[36, 48], [64, 45], [50, 60], [30, 62], [70, 58]].forEach(function (q) {
-        add('circle', { cx: q[0], cy: q[1], r: 3.4, fill: '#e53935' });
+    if (stage >= 5 && sp.bloom) {
+      [[38, cy - 2], [62, cy + 2], [50, cy + 12], [31, cy + 10], [69, cy + 8]].forEach(function (q) {
+        add('circle', { cx: q[0], cy: q[1], r: 3, fill: sp.bloom }, g);
       });
     }
     return svg;
   }
 
-  function treeCard(tree) {
-    var stage = treeStage(tree.growth || 0);
+  function treeCard(tree, view) {
     var sp = speciesOf(tree.species);
-    var next = TREE_STAGES[stage + 1];
-    var prevMin = TREE_STAGES[stage].min;
-    var nextMin = next ? next.min : null;
-    var prog = nextMin ? (tree.growth - prevMin) / (nextMin - prevMin) : 1;
-    prog = Math.max(0, Math.min(1, prog));
+    var grown = tree.stage >= 5;
+    var need = stageNeed(sp, tree.stage);
+    var prog = grown ? 1 : Math.max(0, Math.min(1, (tree.prog || 0) / need));
 
-    var cls = 'tree-card';
-    if (tree.id === justPlantedId) cls += ' just-planted';
-
+    var cls = 'tree-card' + (tree.withered ? ' withered' : '') + (tree.id === justPlantedId ? ' just-planted' : '');
     var card = el('div', { class: cls, dataset: { id: tree.id } });
-    card.appendChild(treeSVG(stage, sp));
-    card.appendChild(el('div', { class: 'tree-name', text: sp.name + ' · ' + TREE_STAGES[stage].name }));
+    card.appendChild(treeSVG(tree.stage, sp, tree.withered));
+    card.appendChild(el('div', { class: 'tree-name', text: sp.name + ' · ' + (tree.withered ? '枯桩' : TREE_STAGES[tree.stage].name) }));
 
     card.appendChild(el('div', { class: 'tree-bar' }, [
       el('i', { style: { width: Math.round(prog * 100) + '%' } })
     ]));
     card.appendChild(el('div', {
       class: 'tree-growth',
-      text: nextMin ? ('成长 ' + tree.growth + ' / ' + nextMin) : ('成长 ' + tree.growth + ' · 已长成')
+      text: grown ? '已长成，可收获'
+        : tree.withered ? ('已枯萎 · 复活后本阶段重攒')
+        : ('成长 ' + (tree.prog || 0) + ' / ' + need + ' 记')
     }));
 
-    var canWater = Store.pomodoro.points >= POMO.WATER_COST;
-    card.appendChild(el('button', {
-      class: 'btn btn-sm btn-block' + (canWater ? '' : ' disabled'),
-      onclick: function (e) {
-        e.stopPropagation();
-        if (!Store.waterTree(tree.id)) {
-          UI.toast('积分不足，浇水需要 ' + POMO.WATER_COST + ' 分', 'err');
-          return;
+    if (tree.withered) {
+      card.appendChild(el('button', {
+        class: 'btn btn-sm btn-block',
+        onclick: function () {
+          if (!Store.reviveTree(tree.id)) { UI.toast('养分不足，复活需 ' + POMO.REVIVE_COST + ' 养分', 'err'); return; }
+          UI.toast('已复活，本阶段重新攒记');
+          if (view) view.render();
         }
-        UI.toast('浇了一次水，成长 +' + POMO.WATER_COST);
-        var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
-        if (v) v.render();
-        // 直接在对应卡片上打特效，避免整页重渲染后特效错位（修复：右边树浇水左边树出特效）
-        var node = V.$('.cp-tree-card[data-id="' + tree.id + '"]', v ? v.root : null);
-        if (node) {
-          node.classList.add('cp-watered');
-          setTimeout(function () { node.classList.remove('cp-watered'); }, 900);
+      }, ['复活 -' + POMO.REVIVE_COST + ' 养分']));
+    } else if (grown) {
+      card.appendChild(el('button', {
+        class: 'btn btn-sm btn-primary btn-block',
+        onclick: function () {
+          if (Store.harvestTree(tree.id)) { UI.toast('已收获，移入收藏'); if (view) view.render(); }
         }
-      }
-    }, ['浇水 -' + POMO.WATER_COST + ' 分']));
-
+      }, ['收获入收藏']));
+    } else {
+      var canWater = Store.pomodoro.points >= POMO.WATER_COST;
+      card.appendChild(el('button', {
+        class: 'btn btn-sm btn-block' + (canWater ? '' : ' disabled'),
+        onclick: function (e) {
+          e.stopPropagation();
+          if (!Store.waterTree(tree.id)) { UI.toast('养分不足，浇水需 ' + POMO.WATER_COST + ' 养分', 'err'); return; }
+          UI.toast('浇了一次水，成长 +1 记');
+          if (view) view.render();
+          var node = V.$('.cp-tree-card[data-id="' + tree.id + '"]', view ? view.root : null);
+          if (node) { node.classList.add('cp-watered'); setTimeout(function () { node.classList.remove('cp-watered'); }, 900); }
+        }
+      }, ['浇水 -' + POMO.WATER_COST + ' 养分']));
+    }
     return card;
   }
 
-  /** 选择树种后种下（不同树种价格不同） */
-  function openPlantDialog(view) {
+  /** 选择下一次种下的树种（只列已解锁） */
+  function openSpeciesDialog(view) {
     var m;
     var grid = el('div', { class: 'species-grid' });
-    var maxPrice = TREE_SPECIES.reduce(function (mx, sp) { return Math.max(mx, sp.price); }, 0);
-    TREE_SPECIES.forEach(function (sp) {
-      var cost = Store.plantCost(sp.key);
+    Store.unlockedSpecies().forEach(function (sp) {
+      var active = Store.pomodoro.selectedSpecies === sp.key;
       grid.appendChild(el('button', {
-        class: 'species-item',
+        class: 'species-item' + (active ? ' active' : ''),
         onclick: function () {
+          Store.setSelectedSpecies(sp.key);
           m.close();
-          if (Store.pomodoro.points < cost) { UI.toast('积分不足，' + sp.name + '需 ' + cost + ' 分', 'err'); return; }
-          var tree = Store.plantTree(sp.key);
-          if (!tree) { UI.toast('积分不足', 'err'); return; }
-          justPlantedId = tree.id;
-          UI.toast('种下了一棵' + sp.name + '，积分 -' + cost);
-          view.render();
-          var node = V.$('.cp-tree-card[data-id="' + tree.id + '"]', view.root);
-          if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          UI.toast('下次将种下「' + sp.name + '」');
+          if (view) view.render();
         }
       }, [
         el('div', { class: 'species-img' }, [treeSVG(3, sp)]),
         el('b', { text: sp.name }),
-        el('span', { text: cost + ' 分' })
+        el('span', { text: '成熟需 ' + sp.lastK + ' 次' })
       ]));
     });
-
+    var next = TREE_SPECIES.filter(function (sp) { return (sp.unlockH || 0) > Store.focusHours(); })
+      .sort(function (a, b) { return a.unlockH - b.unlockH; })[0];
     m = V.modal({
       title: '选择树种',
       body: [
         el('p', {
           style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-          text: '这是你的第 ' + (Store.pomodoro.trees.length + 1) + ' 棵树。不同树种基础价不同（' +
-                TREE_SPECIES[0].price + '~' + maxPrice + ' 分），且种得越多下一棵越贵。当前可用 ' +
-                Store.pomodoro.points + ' 分。'
+          text: '种植不花养分——一次 ≥' + POMO.FOCUS_MIN_MIN + ' 分钟的专注，就会在空树位种下当前树种并开始生长。' +
+                (next ? ('累计专注 ' + next.unlockH + ' 小时可解锁「' + next.name + '」。') : '')
         }),
         grid
       ],
       footer: el('div', { class: 'modal-foot' }, [
-        el('button', { class: 'btn btn-block', text: '再等等', onclick: function () { m.close(); } })
+        el('button', { class: 'btn btn-block', text: '关闭', onclick: function () { m.close(); } })
+      ])
+    });
+  }
+
+  /** 图鉴资料卡：五形态 + 资料 */
+  function openCodexInfo(sp) {
+    var strip = el('div', { class: 'codex-strip' });
+    [1, 2, 3, 4, 5].forEach(function (st) {
+      strip.appendChild(el('div', { class: 'codex-strip-cell' }, [
+        treeSVG(st, sp),
+        el('span', { text: TREE_STAGES[st].name })
+      ]));
+    });
+    var info = sp.info || {};
+    var m;
+    m = V.modal({
+      title: sp.name + ' · 图鉴',
+      body: [
+        strip,
+        el('div', { class: 'codex-info' }, [
+          el('div', {}, [el('b', { text: '学名' }), el('span', { text: info.sci || '—' })]),
+          el('div', {}, [el('b', { text: '科属' }), el('span', { text: info.family || '—' })]),
+          el('div', {}, [el('b', { text: '保护级别' }), el('span', { text: info.protect || '—' })]),
+          el('div', {}, [el('b', { text: '趣闻' }), el('span', { text: info.note || '—' })]),
+          el('div', {}, [el('b', { text: '成熟' }), el('span', { text: '第 4→5 阶段需 ' + (sp.lastK || 3) + ' 次专注' })])
+        ])
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn btn-block', text: '关闭', onclick: function () { m.close(); } })
       ])
     });
   }

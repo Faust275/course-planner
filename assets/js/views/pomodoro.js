@@ -16,14 +16,16 @@
     endAt: 0,      // 结束时间戳（ms）
     left: 0,       // 剩余秒
     total: 0,      // 本次总秒
-    duration: 25,  // 设定分钟
+    duration: 45,  // 设定分钟（默认 45，便于达到 ≥40 的种树门槛）
     taskId: '',
-    tags: ''
+    tags: '',
+    treeId: '',    // 本次专注播下/养护的树
+    warned60: false
   };
   var statsDim = 'day';   // day 近 7 天 / tag 按标签
   var tickId = null;
 
-  var DURATIONS = [15, 25, 45, 60];
+  var DURATIONS = [25, 40, 45, 60];
 
   var view = {
     id: 'pomodoro',
@@ -392,6 +394,12 @@
     var left = (T.endAt - Date.now()) / 1000;
     if (left <= 0) { complete(); return; }
     T.left = left;
+    // 满 60 分钟提醒起来走走（每次专注只提醒一次）
+    var elapsed = (T.total || T.duration * 60) - Math.max(0, left);
+    if (!T.warned60 && elapsed >= (POMO.FOCUS_REMIND_MIN || 60) * 60) {
+      T.warned60 = true;
+      UI.toast('已专注 ' + (POMO.FOCUS_REMIND_MIN || 60) + ' 分钟，起来走走、活动一下');
+    }
     paintTimer();
   }
 
@@ -416,7 +424,14 @@
     T.left = T.total;
     T.endAt = Date.now() + T.left * 1000;
     T.running = true;
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags });
+    T.warned60 = false;
+    // 森林模式：开跑即在空树位播下当前树种（中断则枯萎）
+    T.treeId = '';
+    if (Store.pomodoro.mode === 'forest') {
+      var seed = Store.seedTree(Store.pomodoro.selectedSpecies);
+      if (seed) T.treeId = seed.id;
+    }
+    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -426,7 +441,7 @@
   function pause() {
     T.running = false;
     stopTick();
-    Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags });
+    Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
     UI.toast('已暂停');
@@ -435,7 +450,7 @@
   function resume() {
     T.endAt = Date.now() + T.left * 1000;
     T.running = true;
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags });
+    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -449,7 +464,9 @@
     if (doneMin >= 1) {
       finish(doneMin);
     } else {
-      Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags });
+      Store.witherActiveTree();
+      T.treeId = '';
+      Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags, treeId: '' });
       T.left = T.duration * 60;
       T.total = T.duration * 60;
       var v0 = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
@@ -481,25 +498,32 @@
     };
 
     var gain = Store.finishFocus(minutes, taskId, extra);
+    T.treeId = '';
     T.left = T.duration * 60;
     T.total = T.duration * 60;
 
-    flyPoints('+' + gain + ' 分');
+    var gacha = Store.pomodoro.mode === 'gacha';
+    var gainTxt = gacha ? (gain * POMO.JADE_PER_POINT + ' 合成玉') : (gain + ' 养分');
+    flyPoints('+' + (gacha ? (gain * POMO.JADE_PER_POINT) + ' 玉' : gain + ' 分'));
     bumpScore();
 
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
 
     var onPage = App.currentId === 'pomodoro';
+    if (gain <= 0) {
+      UI.toast('专注不足 ' + POMO.FOCUS_MIN_MIN + ' 分钟，本次不计分' + (Store.pomodoro.mode === 'forest' ? '，本次树苗枯萎' : ''));
+      return;
+    }
     if (!onPage) {
-      UI.toast('专注完成，获得 ' + gain + ' 分');
+      UI.toast('专注完成，获得 ' + gainTxt);
       return;
     }
     if (task && task.status !== 'done') {
       setTimeout(function () {
         V.confirm({
           title: '专注完成',
-          message: '本次专注 ' + minutes + ' 分钟，获得 ' + gain + ' 分。\n要把「' + task.title + '」标记为完成吗？（额外 +' + POMO.TASK_DONE + ' 分）',
+          message: '本次专注 ' + minutes + ' 分钟，获得 ' + gainTxt + '。\n要把「' + task.title + '」标记为完成吗？（额外 +' + POMO.TASK_DONE + ' 分）',
           okText: '标记完成', cancelText: '先不了'
         }).then(function (ok) {
           if (ok) {
@@ -511,7 +535,7 @@
         });
       }, 400);
     } else {
-      UI.toast('专注完成，获得 ' + gain + ' 分');
+      UI.toast('专注完成，获得 ' + gainTxt);
     }
   }
 
@@ -519,9 +543,10 @@
   function restoreTimer() {
     var t = Store.pomodoro.timer;
     if (!t) return;
-    T.duration = t.duration || 25;
+    T.duration = t.duration || 45;
     T.taskId = t.taskId || '';
     T.tags = t.tags || '';
+    T.treeId = t.treeId || '';
     T.total = T.duration * 60;
     if (t.running && t.endAt) {
       var left = (t.endAt - Date.now()) / 1000;

@@ -55,6 +55,40 @@
     });
   }
 
+  /** 两色按比例混合（t=0 → a，t=1 → b） */
+  function mixHex(a, b, t) {
+    var x = hex2rgb(a), y = hex2rgb(b);
+    return rgb2hex({
+      r: x.r + (y.r - x.r) * t,
+      g: x.g + (y.g - x.g) * t,
+      b: x.b + (y.b - x.b) * t
+    });
+  }
+
+  /** 当前生效的明暗：auto 跟随系统 */
+  function effectiveMode() {
+    var s = (Store.state && Store.state.settings) || {};
+    var m = s.themeMode || 'auto';
+    if (m === 'light' || m === 'dark') return m;
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (e) { return 'light'; }
+  }
+
+  /** 写入主色及派生色；深色下弱底 / 浅底向深色表面混合，避免亮色块 */
+  function applyPrimary(hex, mode) {
+    var root = document.documentElement;
+    var rgb = hex2rgb(hex);
+    var dark = mode === 'dark';
+    root.style.setProperty('--primary', hex);
+    root.style.setProperty('--primary-hover', dark ? mixHex(hex, '#ffffff', 0.14) : shade(hex, -0.14));
+    root.style.setProperty('--primary-weak', dark ? mixHex(hex, '#181b21', 0.86) : mixWhite(hex, 0.9));
+    root.style.setProperty('--primary-light', dark ? mixHex(hex, '#ffffff', 0.22) : mixWhite(hex, 0.24));
+    root.style.setProperty('--primary-tint', dark ? mixHex(hex, '#1f232b', 0.72) : mixWhite(hex, 0.55));
+    root.style.setProperty('--primary-shadow', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + (dark ? '.45' : '.28') + ')');
+    root.style.setProperty('--primary-shadow-soft', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + (dark ? '.30' : '.20') + ')');
+  }
+
   /* ---------- 应用主题 ---------- */
   function applyTheme() {
     var s = Store.state.settings || {};
@@ -70,18 +104,15 @@
     }
 
     var root = document.documentElement;
-    var rgb = hex2rgb(hex);
-    root.style.setProperty('--primary', hex);
-    root.style.setProperty('--primary-hover', shade(hex, -0.14));
-    root.style.setProperty('--primary-weak', mixWhite(hex, 0.9));
-    root.style.setProperty('--primary-light', mixWhite(hex, 0.24));
-    root.style.setProperty('--primary-tint', mixWhite(hex, 0.55));
-    root.style.setProperty('--primary-shadow', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',.28)');
-    root.style.setProperty('--primary-shadow-soft', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',.20)');
+    var mode = effectiveMode();
+    root.dataset.mode = mode;
+    applyPrimary(hex, mode);
     root.dataset.theme = key;
 
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', hex);
+    if (meta) meta.setAttribute('content', mode === 'dark' ? '#0f1115' : hex);
+
+    applyMech();
   }
 
   /* ---------- 应用背景 ---------- */
@@ -143,16 +174,8 @@
 
   /** 只改视觉、不落盘（拖动取色器时用） */
   function previewColor(hex) {
-    var root = document.documentElement;
-    var rgb = hex2rgb(hex);
-    root.style.setProperty('--primary', hex);
-    root.style.setProperty('--primary-hover', shade(hex, -0.14));
-    root.style.setProperty('--primary-weak', mixWhite(hex, 0.9));
-    root.style.setProperty('--primary-light', mixWhite(hex, 0.24));
-    root.style.setProperty('--primary-tint', mixWhite(hex, 0.55));
-    root.style.setProperty('--primary-shadow', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',.28)');
-    root.style.setProperty('--primary-shadow-soft', 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',.20)');
-    root.dataset.theme = 'custom';
+    applyPrimary(hex, effectiveMode());
+    document.documentElement.dataset.theme = 'custom';
   }
 
   /** 只改遮罩、不落盘（拖动滑块时用） */
@@ -161,7 +184,8 @@
   }
 
   function setThemeColor(key, customHex) {
-    var patch = { theme: key };
+    // 用户手动选色 → 关闭「自动跟随强调色」，让其颜色覆盖机制默认色
+    var patch = { theme: key, themeSkinAuto: false };
     if (key === 'custom' && customHex) patch.customColor = customHex;
     Store.updateSettings(patch);
     applyTheme();
@@ -175,9 +199,71 @@
     applyBackground();
   }
 
+  /* ---------- 机制主题皮肤（种树 / 抽卡）---------- */
+  // 机制默认强调色：开启皮肤且未手动选色时使用；手动选色后由用户色覆盖
+  var MECH = {
+    tree:    { primary: { light: '#37b24d', dark: '#5ec269' } },
+    factory: { primary: { light: '#1f9fb8', dark: '#b8e653' } }
+  };
+
+  /** 当前应套用的机制皮肤：关闭则返回 null；开启时按奖励机制推导 */
+  function mechOf() {
+    var s = (Store.state && Store.state.settings) || {};
+    if (!s.themeSkin) return null;
+    var mode = (Store.state.pomodoro && Store.state.pomodoro.mode) || 'forest';
+    return mode === 'gacha' ? 'factory' : 'tree';
+  }
+
+  /** 套用机制皮肤：设置 data-mech 并（自动模式下）按当前明暗覆盖强调色 */
+  function applyMech() {
+    var root = document.documentElement;
+    var mech = mechOf();
+    if (!mech) { root.removeAttribute('data-mech'); return; }
+    root.setAttribute('data-mech', mech);
+
+    var s = (Store.state && Store.state.settings) || {};
+    if (s.themeSkinAuto && MECH[mech]) {
+      var mode = effectiveMode();
+      var hex = MECH[mech].primary[mode] || MECH[mech].primary.light;
+      applyPrimary(hex, mode);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', mode === 'dark' ? (mech === 'tree' ? '#0f1712' : '#0a0c0f') : hex);
+    }
+  }
+
+  /** 开关机制皮肤：开启时重置为「自动跟随强调色」，让机制默认色（绿/青）先呈现 */
+  function setThemeSkin(on) {
+    var patch = { themeSkin: !!on };
+    if (on) patch.themeSkinAuto = true;
+    Store.updateSettings(patch);
+    applyTheme();
+  }
+
+  /** 切换明暗：auto / light / dark */
+  function setThemeMode(mode) {
+    if (['auto', 'light', 'dark'].indexOf(mode) < 0) mode = 'auto';
+    Store.updateSettings({ themeMode: mode });
+    applyTheme();
+  }
+
+  // 系统明暗变化时，auto 模式自动跟随
+  try {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    var onScheme = function () {
+      var s = (Store.state && Store.state.settings) || {};
+      if ((s.themeMode || 'auto') === 'auto') applyTheme();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', onScheme);
+    else if (mq.addListener) mq.addListener(onScheme);
+  } catch (e) { /* ignore */ }
+
   global.Theme = {
     THEMES: THEMES,
     apply: applyTheme,
+    applyMech: applyMech,
+    setThemeSkin: setThemeSkin,
+    setThemeMode: setThemeMode,
+    effectiveMode: effectiveMode,
     applyBackground: applyBackground,
     previewColor: previewColor,
     previewMask: previewMask,

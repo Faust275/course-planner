@@ -751,7 +751,7 @@
             el('div', { class: 'ach-pop-icon tier-' + a.tier }, [svg(IC[a.icon] || IC.sparkle, 30)]),
             el('div', { class: 'ach-pop-name', text: a.name }),
             el('div', { class: 'ach-pop-desc', text: a.desc }),
-            el('div', { class: 'ach-pop-points', style: { color: tier.color }, text: '+ ' + a.points + ' 积分' })
+            el('div', { class: 'ach-pop-points', style: { color: tier.color }, text: '已解锁' })
           ])
         });
         setTimeout(function () { m.close(); }, 2600);

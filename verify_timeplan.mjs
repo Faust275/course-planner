@@ -8,6 +8,11 @@ const BASE = process.env.URL || 'http://localhost:8301/index.html';
 
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1280, height: 1000 } });
+// 固定时钟：抽屉「一键划块」从当前时刻起找空档，冻结到 10:00 才能跨时区/时段稳定复现
+try {
+  const fixed = new Date(); fixed.setHours(10, 0, 0, 0);
+  await p.clock.install({ time: fixed });
+} catch (e) { console.warn('clock.install 不可用：' + e.message); }
 const errors = [];
 p.on('pageerror', e => errors.push('pageerror: ' + e.message));
 p.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
