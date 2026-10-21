@@ -129,7 +129,7 @@
     App.currentId = id;
     App.current = v;
 
-    // 进入任意模块就算「今天用过」：月卡在这里结算，必须早于渲染，界面上的余额才是新的
+    // 进入模块只记活跃痕迹；月卡返还与全勤改由「完成有效动作」触发（Store.markAction）
     if (Store.touchActive) Store.touchActive();
 
     UI.$$('.cp-view').forEach(function (n) { n.classList.remove('cp-active'); });

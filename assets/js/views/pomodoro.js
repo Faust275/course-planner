@@ -462,17 +462,65 @@
     T.running = false;
     stopTick();
     if (doneMin >= 1) {
+      var pm = Store.pomodoro;
+      var hasTree = !!(pm.timer && pm.timer.treeId);
+      var qualified = doneMin >= POMO.FOCUS_MIN_MIN;
+      var fq = Store.fishQuota();
+      if (!qualified && hasTree && fq.hold > 0 && fq.left > 0) {
+        // 不足 40 分钟：给一次「用券休整」的机会，树苗与进度都不丢
+        V.confirm({
+          title: '要不要先歇会儿？',
+          message: '这次专注 ' + doneMin + ' 分钟，不足 ' + POMO.FOCUS_MIN_MIN + ' 分钟不算合格，树苗会枯。\n' +
+                   '用 1 张摸鱼券休整：树苗与进度都保留，本次时长照样记入统计与象限。',
+          okText: '用券休整',
+          cancelText: '结束并让它枯'
+        }).then(function (yes) {
+          if (yes) {
+            var r = Store.useFishCard('rest');
+            if (!r.ok) { V.toast(r.msg, 'err'); finish(doneMin); return; }
+            V.toast('摸鱼券：树苗保留，下次接着长');
+            finish(doneMin, true);
+          } else {
+            finish(doneMin);
+          }
+        });
+        return;
+      }
       finish(doneMin);
+    } else if (Store.fishQuota().hold > 0 && Store.fishQuota().left > 0) {
+      // 有摸鱼券：先问一句要不要护住这棵树，而不是直接判枯
+      V.confirm({
+        title: '这次不算数？',
+        message: '不足 1 分钟，本次不计分。要用 1 张摸鱼券护住这棵树吗（阶段与进度都保留，下次接着长）？\n' +
+                 '不用的话树苗会枯萎，之后要花 ' + POMO.REVIVE_COST + ' 养分或 1 张券复活。',
+        okText: '用券护住',
+        cancelText: '让它枯'
+      }).then(function (yes) {
+        if (yes) {
+          var r = Store.useFishCard('protect');
+          if (!r.ok) V.toast(r.msg, 'err');
+          else V.toast('摸鱼券护住了这棵树');
+        } else {
+          Store.witherActiveTree();
+        }
+        afterStopEarly();
+      });
+      return;
     } else {
       Store.witherActiveTree();
-      T.treeId = '';
-      Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags, treeId: '' });
-      T.left = T.duration * 60;
-      T.total = T.duration * 60;
-      var v0 = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
-      if (v0 && App.currentId === 'pomodoro') v0.render();
-      UI.toast('不足 1 分钟，本次不计分');
+      afterStopEarly();
     }
+  }
+
+  /** 提前停止后的收尾（清空计时器状态并重绘） */
+  function afterStopEarly() {
+    T.treeId = '';
+    Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags, treeId: '' });
+    T.left = T.duration * 60;
+    T.total = T.duration * 60;
+    var v0 = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
+    if (v0 && App.currentId === 'pomodoro') v0.render();
+    UI.toast('不足 1 分钟，本次不计分');
   }
 
   function complete() {
@@ -482,7 +530,7 @@
     finish(T.duration);
   }
 
-  function finish(minutes) {
+  function finish(minutes, keepTree) {
     var taskId = T.taskId;
     var task = taskId ? Store.getTask(taskId) : null;
 
@@ -497,7 +545,7 @@
       tags: T.tags
     };
 
-    var gain = Store.finishFocus(minutes, taskId, extra);
+    var gain = Store.finishFocus(minutes, taskId, extra, { keepTree: !!keepTree });
     T.treeId = '';
     T.left = T.duration * 60;
     T.total = T.duration * 60;

@@ -270,9 +270,13 @@
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
       shop: {                   // 商城：月卡 / 潜能兑换 / 限定专区
         card: null,             // 月卡 { startDate, endDate, days:{}, weekAwardEnd, fullAwarded, paid, gained, mode }
-        activeDays: {},         // 近 120 天「用过任意功能」的日期：{ 'YYYY-MM-DD': 1 }
+        activeDays: {},         // 近 120 天「打开过应用」的日期（旧口径，仅统计用）：{ 'YYYY-MM-DD': 1 }
         dupPool: [],            // 满潜重复待兑换：[{ n, r, pts, at }]
-        tickets: { selection: 0, makeUp: 0 },  // 定向券（月全勤发）/ 补签卡（周全勤发）
+        validDays: {},          // 有效日：{ 'YYYY-MM-DD': 当天有效动作次数 }（新签到口径）
+        growth: 0,              // 成长值：重度动作 2 / 轻度 1，满 GROWTH_PER_TICKET 换 1 张摸鱼券
+        streak: { weekEnd: '', monthEnd: '' },  // 全勤发奖窗口（滚动，不重叠）
+        tickets: { selection: 0, fish: 0 },     // 定向券（月全勤）/ 摸鱼券（周+月全勤 + 成长值）
+        fishLog: [],            // 摸鱼券使用日期（滚动 7 天限 FISH_MAX_PER_WEEK）
         log: []                 // 最近 100 条商城记录
       }
     };
@@ -662,9 +666,15 @@
     CARD_PRICE_GACHA: 54000, // 月卡售价（抽卡模式，合成玉；占位数值，待定）
     CARD_DAYS: 30,         // 月卡有效天数
     CARD_DAILY: 25,        // 每天用任意功能返还的积分（30 天全勤总返还约为售价的 3 倍）
-    CARD_WEEK_BONUS: 25,   // 滚动 7 天全勤的额外奖励（另发 1 张补签卡）
+    CARD_WEEK_BONUS: 25,   // 滚动 7 天全勤的额外奖励（券由全勤统一发，见 settleStreak）
     CARD_FULL_BONUS: 50,   // 30 天全勤的额外奖励（另发 1 张定向券）
-    MEND_MAX_PER_WEEK: 3,  // 补签卡：滚动 7 天内最多用 3 张
+    /* —— 有效动作 / 全勤 / 摸鱼券 —— */
+    VALID_DAY_MIN: 2,      // 一天算「有效日」所需的最少有效动作次数
+    GROWTH_PER_TICKET: 10, // 成长值满 10 换 1 张摸鱼券（重度动作 2 分，轻度 1 分 → 5 次合格专注 = 1 张）
+    FISH_MAX_PER_WEEK: 5,  // 摸鱼券：滚动 7 天内最多用 5 张
+    FISH_HOLD_MAX: 20,     // 摸鱼券持有上限
+    STREAK_WEEK_POINTS: 5, // 连续 7 个有效日：人人可得的积分
+    STREAK_MONTH_POINTS: 20, // 连续 30 个有效日：人人可得的积分
 
     /* —— 限定获取通道 —— */
     LIMITED_SPARK: 200,    // 限定井：累计抽数达到可直接兑换登记的限定（双井并计，但不叠加）
@@ -1775,6 +1785,16 @@
         if (p.spark == null) p.spark = 0;
         if (p.guaranteed == null) p.guaranteed = false;
       });
+      // 摸鱼券：旧档的 makeUp 搬运过来，使用记录改名
+      var sh = state.shop;
+      if (!sh.tickets) sh.tickets = { selection: 0, fish: 0 };
+      if (sh.tickets.fish == null) sh.tickets.fish = sh.tickets.makeUp || 0;
+      delete sh.tickets.makeUp;
+      if (!Array.isArray(sh.fishLog)) sh.fishLog = Array.isArray(sh.makeUpLog) ? sh.makeUpLog : [];
+      delete sh.makeUpLog;
+      if (!sh.validDays || typeof sh.validDays !== 'object') sh.validDays = {};
+      if (sh.growth == null) sh.growth = 0;
+      if (!sh.streak) sh.streak = { weekEnd: '', monthEnd: '' };
       // 限定井：登记目标 + 累计抽数（与 UP 井双计，但不叠加使用）
       if (!gc.limited || typeof gc.limited !== 'object') gc.limited = { target: '', count: 0 };
       if (gc.limited.target == null) gc.limited.target = '';
@@ -2259,6 +2279,7 @@
       };
       state.courses.push(c);
       this.bumpUsage('course');
+      if (this.markAction) this.markAction('course', 1);
       this.emit();
       this.checkAchievements(true);
       return c;
@@ -2764,6 +2785,7 @@
       state.tasks.push(t);
       // 新增子任务后，父任务的进度可能变了；若设置要求「全完成自动完成父」，这里也要生效
       if (t.parentId) this.syncParent(t.parentId);
+      if (this.markAction) this.markAction('task', 1);
       this.emit();
       return t;
     },
@@ -2794,6 +2816,7 @@
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
         this.addPoints(POMO.TASK_DONE, 'task');
+        if (this.markAction) this.markAction('taskdone', 1);
         // 重复任务：完成时生成下一期实例（保留 repeat 链条）
         if (t.repeat && t.repeat.type !== 'none') {
           var nt = genNextTask(t);
@@ -3614,11 +3637,15 @@
       sh.log.unshift({ at: Date.now(), type: 'card', text: '购买月卡 −' + price + ' ' + unit });
       this.trimShopLog();
       this.save();
-      this.touchActive();     // 购买当天就用上了，直接结算首日
+      this.touchActive();     // 只记活跃痕迹；首日返还要等当天完成 2 次有效动作
       return { ok: true };
     },
 
-    /** 记录「今天用过应用」，并结算月卡。任意模块进入时调用 */
+    /** 记录「今天打开过应用」（旧口径，仅保留活跃痕迹） */
+    /**
+     * 「打开过模块」的记录（旧口径）。签到已改为「完成有效动作」——见 markAction；
+     * 这里只保留活跃日痕迹用于兼容，不再直接触发月卡结算。
+     */
     touchActive: function () {
       var t = DateUtil.toStr(DateUtil.today());
       var sh = state.shop;
@@ -3630,13 +3657,12 @@
         keys.slice(0, keys.length - 120).forEach(function (k) { delete sh.activeDays[k]; });
         dirty = true;
       }
-      if (this.settleCard()) dirty = true;
       if (dirty) this.save();
     },
 
     /**
      * 结算当天月卡（补签也走同一条路径，见 settleCardFor）。
-     * 规则：有效期 30 天内，每天首次「用过任意功能」返 CARD_DAILY；
+     * 规则：有效期 30 天内，每天首次达成「有效日」（2 次有效动作）返 CARD_DAILY；
      * 任意连续 7 天全勤额外 +CARD_WEEK_BONUS（滚动窗口，发过后窗口不重叠）；
      * 30 天一天不漏再 +CARD_FULL_BONUS。漏签只损失当天和该窗口，有效期不顺延。
      */
@@ -3683,8 +3709,7 @@
           pay(POMO.CARD_WEEK_BONUS);
           gained += POMO.CARD_WEEK_BONUS;
           c.weekAwardEnd = day;
-          // 周全勤另发 1 张补签卡
-          self.grantTicket('makeUp', '周全勤');
+          // 摸鱼券由 settleStreak 统一发放（人人可得），月卡这里只多给积分
         }
       }
 
@@ -3699,8 +3724,7 @@
           pay(POMO.CARD_FULL_BONUS);
           gained += POMO.CARD_FULL_BONUS;
           c.fullAwarded = true;
-          // 月全勤另发 1 张定向券
-          self.grantTicket('selection', '月全勤');
+          // 定向券由 settleStreak 发放（人人可得）
         }
       }
 
@@ -3714,22 +3738,26 @@
     },
 
     /* ==========================================================
-     * 定向券 / 补签卡 / 限定井（限定获取通道）
+     * 定向券 / 摸鱼券 / 限定井（限定获取通道）
      * ========================================================== */
     grantTicket: function (kind, from) {
       var sh = state.shop;
-      if (!sh.tickets) sh.tickets = { selection: 0, makeUp: 0 };
-      sh.tickets[kind] = (sh.tickets[kind] || 0) + 1;
+      if (!sh.tickets) sh.tickets = { selection: 0, fish: 0 };
+      var max = (kind === 'fish') ? (POMO.FISH_HOLD_MAX || 20) : 99;
+      var now = sh.tickets[kind] || 0;
+      if (now >= max) return 0;                 // 摸鱼券持有上限，避免无限囤积
+      sh.tickets[kind] = now + 1;
       sh.log.unshift({
         at: Date.now(), type: 'ticket',
-        text: (from || '') + '奖励 +1 张' + (kind === 'makeUp' ? '补签卡' : '定向券')
+        text: (from || '') + '奖励 +1 张' + (kind === 'fish' ? '摸鱼券' : '定向券')
       });
       this.trimShopLog();
+      return 1;
     },
 
     ticketInfo: function () {
       var t = (state.shop && state.shop.tickets) || {};
-      return { selection: t.selection || 0, makeUp: t.makeUp || 0 };
+      return { selection: t.selection || 0, fish: t.fish || 0, makeUp: t.fish || 0 };
     },
 
     /** 干员名 → 抽卡记录对象（源数据 AK_OPS） */
@@ -3828,44 +3856,210 @@
       return { ok: true, n: name };
     },
 
-    /** 补签卡剩余额度：滚动 7 天内最多用 MEND_MAX_PER_WEEK 张 */
-    makeUpQuota: function () {
+    /* ==========================================================
+     * 有效动作 / 全勤 / 摸鱼券
+     * - 「有效日」= 当天完成 ≥ VALID_DAY_MIN 次有效动作（不再是「打开过模块」）
+     * - 全勤奖励人人可得（摸鱼券 + 积分），月卡只是额外多一份积分，定向券人人都有
+     * - 摸鱼券四种用法：补签 / 护树 / 休整 / 复活枯桩
+     * ========================================================== */
+    /** 有效动作埋点：重度 2 分，轻度 1 分 */
+    markAction: function (kind, weight) {
       var sh = state.shop;
-      var log = (sh.tickets && sh.tickets.makeUpLog) || [];
-      var today = DateUtil.today();
-      var from = DateUtil.toStr(DateUtil.addDays(today, -6));
-      var used = 0;
-      log.forEach(function (d) { if (d >= from) used++; });
-      var max = POMO.MEND_MAX_PER_WEEK || 3;
-      return { used: used, left: Math.max(0, max - used), max: max };
+      var t = DateUtil.toStr(DateUtil.today());
+      if (!sh.validDays) sh.validDays = {};
+      sh.validDays[t] = (sh.validDays[t] || 0) + 1;
+
+      var w = (weight === 2) ? 2 : 1;
+      sh.growth = (sh.growth || 0) + w;
+      var got = 0;
+      while ((sh.growth || 0) >= POMO.GROWTH_PER_TICKET) {
+        // 持有上限已满时不再消耗成长值，等腾出位置再自动换
+        if (!this.grantTicket('fish', '工作量')) break;
+        sh.growth -= POMO.GROWTH_PER_TICKET;
+        got++;
+      }
+      // 达成有效日 → 结算（月卡日返还 + 全勤判定）
+      if ((sh.validDays[t] || 0) >= POMO.VALID_DAY_MIN) {
+        this.settleCardFor(t);
+        this.settleStreak();
+      }
+      this.save();
+      return { actions: sh.validDays[t], growth: sh.growth, tickets: got };
     },
 
-    /** 补签卡补签指定日期：与当天签到完全等价（同一套结算） */
-    useMakeUpCard: function (dateStr) {
+    /** 某天是否为有效日 */
+    isValidDay: function (dateStr) {
       var sh = state.shop;
-      if (!(sh.tickets && sh.tickets.makeUp)) return { ok: false, msg: '没有补签卡（滚动 7 天全勤发放）' };
-      var c = sh.card;
-      if (!c) return { ok: false, msg: '当前没有生效的月卡' };
-      if (!dateStr || dateStr < c.startDate || dateStr > c.endDate) {
-        return { ok: false, msg: '只能补当前月卡周期内的日期' };
+      return ((sh.validDays || {})[dateStr] || 0) >= POMO.VALID_DAY_MIN;
+    },
+
+    /** 连续有效日数（从今天往回数） */
+    validStreak: function () {
+      var n = 0;
+      var d = DateUtil.today();
+      for (var i = 0; i < 400; i++) {
+        if (this.isValidDay(DateUtil.toStr(d))) n++;
+        else break;
+        d = DateUtil.addDays(d, -1);
       }
-      if (dateStr > DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '还没到的日子不用补' };
-      if (c.days[dateStr]) return { ok: false, msg: '这一天已经签到了' };
-      var q = this.makeUpQuota();
-      if (q.left <= 0) {
-        return { ok: false, msg: '最近 7 天已用满 ' + q.max + ' 张补签卡，过几天才能再补' };
+      return n;
+    },
+
+    /**
+     * 全勤结算（所有用户）：连续 7 / 30 个有效日发奖。
+     * 券人人可得；月卡用户在 settleCardFor 之外不再重复发券，只多拿积分。
+     */
+    settleStreak: function () {
+      var sh = state.shop;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (!sh.streak) sh.streak = { weekEnd: '', monthEnd: '' };
+      var got = { fish: 0, points: 0, selection: 0 };
+
+      function payPoints(n) {
+        var pm = state.pomodoro;
+        // 按当前模式币种发（森林→积分，抽卡→合成玉 180:1）
+        if (pm.mode === 'gacha') pm.jade += n * POMO.JADE_PER_POINT;
+        else pm.points += n;
+        pm.earned += n;
+        pm.pointLog.push({ date: today, n: n, src: 'streak' });
+        if (pm.pointLog.length > 2000) pm.pointLog = pm.pointLog.slice(-2000);
       }
 
-      sh.tickets.makeUp--;
-      if (!sh.tickets.makeUpLog) sh.tickets.makeUpLog = [];
-      sh.tickets.makeUpLog.push(dateStr);
-      var before = c.gained || 0;
-      this.settleCardFor(dateStr);        // 与当天签到同一套结算（含周窗与全勤补发）
-      sh.log.unshift({ at: Date.now(), type: 'card', text: '补签 ' + dateStr + '（与当天签到同等结算）' });
+      // 周全勤：窗口 = [today-6, today]，与上次发奖窗口不重叠
+      if (!sh.streak.weekEnd || today > sh.streak.weekEnd) {
+        var winStart = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -6));
+        if (!sh.streak.weekEnd || winStart > sh.streak.weekEnd) {
+          var ok7 = true;
+          for (var i = 0; i < 7; i++) {
+            if (!this.isValidDay(DateUtil.toStr(DateUtil.addDays(DateUtil.parse(winStart), i)))) { ok7 = false; break; }
+          }
+          if (ok7) {
+            sh.streak.weekEnd = today;
+            this.grantTicket('fish', '周全勤');
+            got.fish++;
+            payPoints(POMO.STREAK_WEEK_POINTS);
+            got.points += POMO.STREAK_WEEK_POINTS;
+          }
+        }
+      }
+
+      // 月全勤：连续 30 个有效日（与上次发奖不重叠）
+      if (!sh.streak.monthEnd || DateUtil.toStr(DateUtil.addDays(DateUtil.parse(sh.streak.monthEnd), 30)) <= today) {
+        var ok30 = true;
+        for (var j = 0; j < 30; j++) {
+          if (!this.isValidDay(DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -j)))) { ok30 = false; break; }
+        }
+        if (ok30 && this.validStreak() >= 30) {
+          sh.streak.monthEnd = today;
+          this.grantTicket('fish', '月全勤');
+          this.grantTicket('selection', '月全勤');   // 定向券人人可得
+          got.fish++; got.selection++;
+          payPoints(POMO.STREAK_MONTH_POINTS);
+          got.points += POMO.STREAK_MONTH_POINTS;
+        }
+      }
+
+      if (got.fish) this.trimShopLog();
+      return got;
+    },
+
+    /** 摸鱼券余额 / 7 天用券额度 */
+    fishQuota: function () {
+      var sh = state.shop;
+      var log = sh.fishLog || [];
+      var from = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -6));
+      var used = 0;
+      log.forEach(function (d) { if (d >= from) used++; });
+      var max = POMO.FISH_MAX_PER_WEEK || 5;
+      return {
+        hold: (sh.tickets && sh.tickets.fish) || 0,
+        holdMax: POMO.FISH_HOLD_MAX || 20,
+        used: used, left: Math.max(0, max - used), max: max
+      };
+    },
+
+    /**
+     * 用一张摸鱼券。kind：
+     *  mend 补签（把指定日期补成有效日）| protect 护树（中断不枯萎，进度保留）
+     *  rest 休整（专注暂停，树休眠）| revive 复活枯桩（替代 5 养分）
+     */
+    useFishCard: function (kind, payload) {
+      var sh = state.shop;
+      if (!(sh.tickets && sh.tickets.fish)) return { ok: false, msg: '没有摸鱼券了（全勤或攒成长值可得）' };
+      var q = this.fishQuota();
+      if (q.left <= 0) return { ok: false, msg: '最近 7 天已用满 ' + q.max + ' 张，缓几天再来' };
+
+      var res = null;
+      if (kind === 'mend') res = this.fishMendDay(payload);
+      else if (kind === 'protect') res = this.fishProtectTree();
+      else if (kind === 'rest') res = this.fishRestTree();
+      else if (kind === 'revive') res = this.fishRevive(payload);
+      else return { ok: false, msg: '未知的用券方式' };
+
+      if (!res || !res.ok) return res;
+
+      sh.tickets.fish--;
+      if (!Array.isArray(sh.fishLog)) sh.fishLog = [];
+      sh.fishLog.push(DateUtil.toStr(DateUtil.today()));
+      sh.log.unshift({ at: Date.now(), type: 'ticket', text: '用掉 1 张摸鱼券：' + (res.label || kind) });
       this.trimShopLog();
+      if (kind === 'mend') {
+        // 补签 = 当天签到：月卡用户在有效期内同样拿当日返还（不走这一步就会漏一天）
+        this.settleCardFor(res.date);
+        this.settleStreak();
+      }
       this.emit();
       this.save();
-      return { ok: true, date: dateStr, gained: (c.gained || 0) - before };
+      res.left = this.fishQuota();
+      return res;
+    },
+
+    /** 补签：把某天补成有效日（与真实达成有效日同等参与全勤判定） */
+    fishMendDay: function (dateStr) {
+      var sh = state.shop;
+      if (!dateStr || dateStr > DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '只能补已经过去的日子' };
+      if (this.isValidDay(dateStr)) return { ok: false, msg: '这一天已经是有效日了' };
+      if (!sh.validDays) sh.validDays = {};
+      sh.validDays[dateStr] = POMO.VALID_DAY_MIN;
+      return { ok: true, label: '补签 ' + dateStr, date: dateStr };
+    },
+
+    /** 护树：当前专注的树进入休眠，阶段与进度都保留 */
+    fishProtectTree: function () {
+      var pm = state.pomodoro;
+      var tree = pm.timer && pm.timer.treeId ? this.getTree(pm.timer.treeId) : null;
+      if (!tree) return { ok: false, msg: '当前没有正在长的树' };
+      tree.withered = false;
+      tree.dormant = true;
+      return { ok: true, label: '护住树苗（休眠保留）', treeId: tree.id };
+    },
+
+    /** 休整：提前结束但树不判枯、进度保留（下一次专注接着长） */
+    fishRestTree: function () {
+      var pm = state.pomodoro;
+      var tree = pm.timer && pm.timer.treeId ? this.getTree(pm.timer.treeId) : null;
+      if (!tree) return { ok: false, msg: '当前没有正在长的树' };
+      tree.withered = false;
+      tree.dormant = true;
+      return { ok: true, label: '休整（树保留）', treeId: tree.id };
+    },
+
+    /** 休整收尾：把树从休眠转回可生长状态（不清进度） */
+    keepActiveTree: function () {
+      var pm = state.pomodoro;
+      var tree = pm.timer && pm.timer.treeId ? this.getTree(pm.timer.treeId) : null;
+      if (tree) { tree.withered = false; tree.dormant = false; }
+      this.save();
+    },
+
+    /** 复活枯桩：免养分 */
+    fishRevive: function (id) {
+      var tree = this.getTree(id);
+      if (!tree || !tree.withered) return { ok: false, msg: '这棵树没枯' };
+      tree.withered = false;
+      tree.dormant = false;
+      tree.prog = 0;
+      return { ok: true, label: '复活 ' + (tree.name || '枯桩') };
     },
 
     /** 满潜重复干员：待兑换份数与可换合成玉 */
@@ -3901,7 +4095,7 @@
     },
 
     /** 结束一次专注：minutes 为实际专注分钟，extra 可带起止时间用于写入象限 */
-    finishFocus: function (minutes, taskId, extra) {
+    finishFocus: function (minutes, taskId, extra, opts) {
       minutes = Math.max(0, Math.floor(minutes));
       var pm = state.pomodoro;
       pm.focusMinutes += minutes;
@@ -3909,10 +4103,12 @@
       var qualified = minutes >= POMO.FOCUS_MIN_MIN;
       var gain = qualified ? POMO.FOCUS_REWARD : 0;
       if (gain > 0) this.addPoints(gain, 'focus');
+      if (qualified && this.markAction) this.markAction('focus', 2);
 
       // 种树：合格专注让当前树长 1~2 记；不合格（中断）让本次播下的种子枯萎
       if (pm.mode === 'forest') {
         if (qualified) this.growActiveTree(minutes);
+        else if (opts && opts.keepTree) this.keepActiveTree();   // 用摸鱼券休整：树保留
         else this.witherActiveTree();
       }
 
@@ -4500,7 +4696,7 @@
           }
         }
       }
-      if (tree && !tree.withered) this.addTreeJi(tree, minutes >= 60 ? 2 : 1);
+      if (tree && !tree.withered) { tree.dormant = false; this.addTreeJi(tree, minutes >= 60 ? 2 : 1); }
       this.save();
     },
 
@@ -4658,6 +4854,7 @@
         createdAt: new Date().toISOString()
       };
       state.plans.unshift(plan);
+      if (this.markAction) this.markAction('plan', 1);
       this.emit();
       return plan;
     },
@@ -4735,6 +4932,7 @@
       var g = normGoal(data);
       state.goals.unshift(g);
       this.bumpUsage('goal');
+      if (this.markAction) this.markAction('goalnew', 1);
       this.emit();
       return g;
     },
@@ -4782,6 +4980,7 @@
       if (gained.length) {
         this.addPoints(POMO.GOAL_DONE * gained.length, 'goal');
         this.checkAchievements(true);
+        if (this.markAction) this.markAction('goal', 2);
         this.save();
       }
       this.settleKRs();
@@ -4974,6 +5173,7 @@
       } else {
         plan.records.push({ date: dateStr, value: 1, note: '', at: new Date().toISOString() });
         this.bumpUsage('plan');
+        if (this.markAction) this.markAction('plancheck', 1);
       }
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
@@ -4998,6 +5198,7 @@
         value: v, note: (note || '').trim(), at: new Date().toISOString()
       });
       this.bumpUsage('plan');
+      if (this.markAction) this.markAction('planvalue', 1);
       var wasDone = plan.done;
       this.refreshPlanDone(plan);
       var gain = POMO.PLAN_CHECKIN;
@@ -5215,6 +5416,7 @@
    * @returns {object} 日记对象
    */
   saveDiary: function (data) {
+    if (this.markAction) this.markAction('diary', 1);
     var date = (data.date || '').trim() || DateUtil.toStr(DateUtil.today());
     var exist = this.diaryOf(date);
     var content = typeof data.content === 'string' ? data.content : '';
@@ -5468,6 +5670,7 @@
     };
     if (e.amount <= 0) return null;
     state.ledger.push(e);
+    if (this.markAction) this.markAction('ledger', 1);
     this.bumpUsage('ledger');
     this.emit();
     return e;

@@ -178,11 +178,10 @@
         }
         cardBox.appendChild(el('div', {
           class: 'shop-desc',
-          text: '花 ' + cardPrice + ' ' + unit + ' 开通 30 天：每天用任意功能返 ' + dailyTxt +
-            '；任意连续 7 天全勤额外奖励（另发 1 张补签卡，可补漏签的日子）；' +
-            '30 天一天不漏再奖励（另发 1 张定向券，可兑换任意限定干员）。' +
-            '坚持一个月的总返还约为售价的 5 倍。漏签只损失当天和该窗口，有效期不顺延。' +
-            '同一时间只能持有一个模式的月卡。'
+          text: '花 ' + cardPrice + ' ' + unit + ' 开通 30 天：每天完成 2 次有效动作返 ' + dailyTxt +
+            '；任意连续 7 天全勤额外奖励；30 天一天不漏再奖励。' +
+            '坚持一个月的总返还约为售价的 3 倍。漏签只损失当天和该窗口，有效期不顺延。' +
+            '全勤奖（摸鱼券 / 定向券）人人可得，月卡只多给积分。同一时间只能持有一个模式的月卡。'
         }));
         cardBox.appendChild(el('button', {
           class: 'btn btn-primary btn-block btn-lg',
@@ -202,34 +201,31 @@
         }));
         cardBox.appendChild(bar);
 
-        /* 滚动 7 天：最近 7 天的签到点（漏签的日子可用补签卡补上） */
+        /* 最近 7 天的「有效日」（不是有效日的那天可以用摸鱼券补上） */
         var dots = el('div', { class: 'shop-dots' });
-        var c = Store.state.shop.card;
-        var mendInfo = Store.ticketInfo();
-        var mendQuota = Store.makeUpQuota();
-        var mendLeft = Math.min(mendInfo.makeUp || 0, mendQuota.left);
+        var fq7 = Store.fishQuota();
         var todayKey = DateUtil.toStr(DateUtil.today());
         for (var i = 6; i >= 0; i--) {
           var d = DateUtil.addDays(DateUtil.today(), -i);
           var key = DateUtil.toStr(d);
-          var on = !!(c.days && c.days[key]);
-          var mendable = !on && mendLeft > 0 && key <= todayKey && key >= c.startDate;
+          var on = Store.isValidDay(key);
+          var mendable = !on && fq7.hold > 0 && fq7.left > 0 && key <= todayKey;
           var attrs = {
             class: 'shop-dot' + (on ? ' on' : '') + (mendable ? ' mendable' : ''),
-            title: key + (on ? ' 已签到' : (mendable ? ' 点一下用补签卡补签' : ' 未签到')),
+            title: key + (on ? ' 有效日' : (mendable ? ' 点一下用摸鱼券补上' : ' 不是有效日')),
             text: String(d.getDate())
           };
           if (mendable) {
             attrs.onclick = function (k) {
               return function () {
                 V.confirm({
-                  title: '补签 ' + k,
-                  message: '将消耗 1 张补签卡，补上 ' + k + ' 的签到与当日返还。确定继续吗？',
-                  ok: '补签',
+                  title: '补上 ' + k,
+                  message: '将消耗 1 张摸鱼券，把 ' + k + ' 补成有效日（与真实达成同等参与全勤判定）。确定继续吗？',
+                  ok: '用券补上',
                   onOk: function () {
-                    var r = Store.useMakeUpCard(k);
+                    var r = Store.useFishCard('mend', k);
                     if (!r.ok) { V.toast(r.msg, 'err'); return; }
-                    V.toast('已补签 ' + k);
+                    V.toast('已把 ' + k + ' 补成有效日');
                     self.render();
                   }
                 });
@@ -240,10 +236,9 @@
         }
         cardBox.appendChild(el('div', {
           class: 'shop-label',
-          text: '最近 7 天（连续 7 天全勤 +' + POMO.CARD_WEEK_BONUS +
-                '，另发 1 张补签卡）' +
-                (mendInfo.makeUp ? '　·　持 ' + mendInfo.makeUp + ' 张，近 7 天还可补 ' + mendQuota.left +
-                 '/' + mendQuota.max + ' 次' : '')
+          text: '最近 7 天（有效日 = 当天完成 ' + POMO.VALID_DAY_MIN + ' 次以上有效动作；' +
+                '连续 7 天全勤另发 1 张摸鱼券）' +
+                (fq7.hold ? '　·　持 ' + fq7.hold + ' 张，近 7 天还可再用 ' + fq7.left + '/' + fq7.max + ' 次' : '')
         }));
         cardBox.appendChild(dots);
 
@@ -252,7 +247,7 @@
         var todayTxt = cardGacha ? (POMO.CARD_DAILY * POMO.JADE_PER_POINT + ' 合成玉') : (POMO.CARD_DAILY + ' 积分');
         cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
           el('span', {
-            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没结算，进入任意模块即可'
+            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没完成有效动作（新建/完成 2 次即可返 ' + dailyTxt + '）'
           }),
           el('b', { text: '累计返 ' + gainedTxt })
         ]));
@@ -288,6 +283,38 @@
       }
       wrap.appendChild(exBox);
 
+      /* ---- 摸鱼券 / 全勤（人人可得）---- */
+      (function () {
+        var fq = Store.fishQuota();
+        var tk = Store.ticketInfo();
+        var streak = Store.validStreak();
+        var box = el('div', { class: 'card shop-block' });
+        box.appendChild(el('div', { class: 'section-title' }, ['摸鱼券 · 全勤']));
+        box.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '每天完成 2 次以上有效动作（新建/完成待办、合格专注、写日记、记账、推进目标…）算一个「有效日」；' +
+                '连续 7 天发 1 张券 + ' + POMO.STREAK_WEEK_POINTS + ' 分，连续 30 天再发 1 张券 + ' +
+                POMO.STREAK_MONTH_POINTS + ' 分 + 1 张定向券。' +
+                '另外每攒满 ' + POMO.GROWTH_PER_TICKET + ' 点成长值（合格专注 2 分 / 其他 1 分）也送 1 张。'
+        }));
+        box.appendChild(el('div', { class: 'shop-row' }, [
+          el('b', { text: '连续有效日 ' + streak + ' 天' }),
+          el('span', { text: '摸鱼券 ' + fq.hold + '/' + fq.holdMax + ' 张 · 定向券 ' + tk.selection + ' 张' })
+        ]));
+        var sbar = el('div', { class: 'shop-bar' });
+        sbar.appendChild(el('i', { style: { width: Math.min(100, Math.round(streak / 30 * 100)) + '%' } }));
+        box.appendChild(sbar);
+        box.appendChild(el('div', {
+          class: 'shop-label',
+          text: '摸鱼券四种用法（每次 1 张）：补签漏掉的日子 · 护住中断的树苗 · 专注中途休整 · 复活枯桩　' +
+                '近 7 天还可再用 ' + fq.left + '/' + fq.max + ' 次'
+        }));
+        if (Store.state.shop.streak && Store.state.shop.streak.weekEnd) {
+          box.appendChild(el('div', { class: 'shop-badge', text: '最近一次周全勤：' + Store.state.shop.streak.weekEnd }));
+        }
+        wrap.appendChild(box);
+      })();
+
       /* ---- 限定专区（限定井 / 定向券）：森林模式没有合成玉、井也不涨，完全不显示 ---- */
       if (gacha) (function () {
         var tk = Store.ticketInfo();
@@ -298,11 +325,11 @@
           class: 'shop-desc',
           text: '限定干员不进轮换池，只能靠限定井或定向券获取：每次寻访都累计限定井' +
                 '（与 UP 井并行各计，但不叠加使用），攒满 ' + lk.need + ' 抽可兑换已登记的限定；' +
-                '定向券由月全勤发放，补签卡由滚动 7 天全勤发放。'
+                '定向券由月全勤发放；漏签的日子可以用摸鱼券补。'
         }));
         box.appendChild(el('div', { class: 'shop-row' }, [
           el('b', { text: '限定井 ' + lk.count + ' / ' + lk.need }),
-          el('span', { text: '定向券 ' + tk.selection + ' 张 · 补签卡 ' + tk.makeUp + ' 张' })
+          el('span', { text: '定向券 ' + tk.selection + ' 张 · 摸鱼券 ' + tk.fish + ' 张' })
         ]));
         var bar2 = el('div', { class: 'shop-bar' });
         bar2.appendChild(el('i', { style: { width: Math.round(lk.count / lk.need * 100) + '%' } }));
@@ -723,10 +750,23 @@
       class: 'tree-growth',
       text: grown ? '已长成，可收获'
         : tree.withered ? ('已枯萎 · 复活后本阶段重攒')
+        : tree.dormant ? ('休眠中 · 进度保留 ' + (tree.prog || 0) + ' / ' + need + ' 记，下次专注接着长')
         : ('成长 ' + (tree.prog || 0) + ' / ' + need + ' 记')
     }));
 
     if (tree.withered) {
+      var fqR = Store.fishQuota();
+      if (fqR.hold > 0 && fqR.left > 0) {
+        card.appendChild(el('button', {
+          class: 'btn btn-sm btn-primary btn-block',
+          onclick: function () {
+            var r = Store.useFishCard('revive', tree.id);
+            if (!r.ok) { UI.toast(r.msg, 'err'); return; }
+            UI.toast('摸鱼券复活了这棵树');
+            if (view) view.render();
+          }
+        }, ['用摸鱼券复活（免养分）']));
+      }
       card.appendChild(el('button', {
         class: 'btn btn-sm btn-block',
         onclick: function () {

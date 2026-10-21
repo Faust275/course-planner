@@ -67,9 +67,18 @@ const buyRes = await p.evaluate(async () => {
 });
 check('购买月卡成功', buyRes.ok === true);
 const CARD = await p.evaluate(() => ({ daily: POMO.CARD_DAILY, week: POMO.CARD_WEEK_BONUS, full: POMO.CARD_FULL_BONUS, days: POMO.CARD_DAYS }));
-check('扣 300 分并返当天 ' + CARD.daily + ' 分（1000 → ' + (1000 - 300 + CARD.daily) + '）', buyRes.points === 1000 - 300 + CARD.daily, buyRes.points);
+check('购买只扣 300 分（1000 → 700），返还在完成有效动作后', buyRes.points === 700, buyRes.points);
 check('有效期 30 天', buyRes.info.daysLeft === 30 && buyRes.info.daysTotal === 30, buyRes.info);
-check('当天记为已签', buyRes.info.todaySigned === true && buyRes.info.signedDays === 1, buyRes.info);
+check('刚买完还不算签到（需当天完成 2 次有效动作）', buyRes.info.todaySigned === false && buyRes.info.signedDays === 0, buyRes.info);
+
+const afterAct = await p.evaluate(() => {
+  Store.state.shop.validDays = {};
+  Store.markAction('task', 1);
+  Store.markAction('taskdone', 1);          // 第 2 次才够「有效日」
+  return { points: Store.state.pomodoro.points, info: Store.cardInfo() };
+});
+check('完成 2 次有效动作后：记为已签并返当天 ' + CARD.daily + ' 分（700 → ' + (700 + CARD.daily) + '）',
+  afterAct.points === 700 + CARD.daily && afterAct.info.todaySigned === true && afterAct.info.signedDays === 1, afterAct);
 
 const again = await p.evaluate(() => Store.buyCard());
 check('有效期内不能重复购买', again.ok === false, again);
@@ -124,8 +133,18 @@ check('漏第 5 天：损失当天 + 该窗口 + 全勤奖', sim.miss5.points ==
 check('漏签不发 30 天全勤奖', sim.miss5.full === false);
 check('漏第 1 天仍能拿 4 次周奖励', sim.miss1.points === expectFull - CARD.daily - CARD.full, sim.miss1);
 check('月卡返利写入积分流水（30 天 + 5 次奖励 = 35 条）', sim.full.src === 35, sim.full.src);
-const ticketState = await p.evaluate(() => Store.ticketInfo());
-check('全勤后拿到定向券与补签卡', ticketState.selection >= 1 && ticketState.makeUp >= 1, ticketState);
+const ticketState = await p.evaluate(() => {
+  const sh = Store.state.shop;
+  sh.validDays = {}; sh.streak = { weekEnd: '', monthEnd: '' };
+  sh.tickets = { selection: 0, fish: 0 }; sh.fishLog = [];
+  for (let i = 0; i < 30; i++) {
+    sh.validDays[DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -i))] = POMO.VALID_DAY_MIN;
+  }
+  Store.settleStreak();
+  return Store.ticketInfo();
+});
+check('30 个有效日全勤：拿到定向券 + 摸鱼券（人人可得）',
+  ticketState.selection >= 1 && ticketState.fish >= 1, ticketState);
 
 /* ---------- 双币不互通 ---------- */
 const dual = await p.evaluate(() => {

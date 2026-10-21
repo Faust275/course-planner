@@ -1,4 +1,4 @@
-// 限定专区：限定井（双井并计但不叠加）/ 定向券（月全勤）/ 补签卡（周全勤）/ 新手池 / 月卡 5 倍收益
+// 限定专区：限定井（双井并计但不叠加）/ 全勤发券（人人可得）/ 补签 / 月卡 3 倍收益
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL || 'http://localhost:8137/index.html';
@@ -35,48 +35,32 @@ check('森林月卡 30 天全勤总返还 ≈ 售价 3 倍（2.7~3.3）', ratio 
 const jratio = cardGain.jadeTotal / cardGain.jadePrice;
 check('抽卡月卡同样是 3 倍（按 180 折算）', jratio >= 2.7 && jratio <= 3.3, { jade: cardGain.jadeTotal, jratio: +jratio.toFixed(2) });
 
-/* ---------- 2. 周全勤发补签卡 / 月全勤发定向券 ---------- */
+/* ---------- 2. 全勤：人人可得（无月卡也发券） ---------- */
 const ticketFlow = await p.evaluate(() => {
   const sh = Store.state.shop;
-  // 月卡周期 = 过去 29 天起 ~ 今天（共 30 天），前 29 天全部已签
-  const start = DateUtil.addDays(DateUtil.today(), -29);
-  const c = {
-    startDate: DateUtil.toStr(start),
-    endDate: DateUtil.toStr(DateUtil.today()),
-    days: {}, weekAwardEnd: '', fullAwarded: false, paid: true, gained: 0, mode: 'forest'
-  };
-  sh.card = c;
-  sh.tickets = { selection: 0, makeUp: 0 };
-  for (let i = 0; i < 29; i++) {
-    c.days[DateUtil.toStr(DateUtil.addDays(start, i))] = 1;
+  sh.card = null;                       // 没有月卡
+  sh.validDays = {}; sh.growth = 0; sh.streak = { weekEnd: '', monthEnd: '' };
+  sh.tickets = { selection: 0, fish: 0 }; sh.fishLog = [];
+  for (let i = 0; i < 30; i++) {
+    sh.validDays[DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -i))] = POMO.VALID_DAY_MIN;
   }
-  Store.settleCard();               // 结算最后一天（今天）→ 周全勤 + 月全勤同时触发
-  return { tickets: { ...sh.tickets } };
+  const got = Store.settleStreak();
+  return { tickets: { ...sh.tickets }, got };
 });
-check('周全勤发放 1 张补签卡', ticketFlow.tickets.makeUp === 1, ticketFlow);
+check('普通用户（无月卡）周/月全勤各发 1 张摸鱼券', ticketFlow.tickets.fish === 2, ticketFlow);
+check('月全勤发定向券（无需月卡）', ticketFlow.tickets.selection === 1, ticketFlow);
 
-const full = await p.evaluate(() => {
-  const sh = Store.state.shop;
-  return { tickets: { ...sh.tickets }, fullAwarded: !!sh.card.fullAwarded };
-});
-check('月全勤发放 1 张定向券', full.tickets.selection === 1, full);
-check('月全勤标记已领取', full.fullAwarded === true, full);
-
-/* ---------- 3. 补签卡：补漏签日 ---------- */
+/* ---------- 3. 摸鱼券补签：把漏掉的一天补成有效日 ---------- */
 const mend = await p.evaluate(() => {
   const sh = Store.state.shop;
-  sh.tickets.makeUp = 1;
-  const c = sh.card;
-  // 把第 10 天挖空再补
-  const k = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(c.startDate), 9));
-  const wasThere = c.days[k];
-  delete c.days[k];
-  const before = sh.tickets.makeUp;
-  const r = Store.useMakeUpCard(k);
-  return { ok: r.ok, wasThere: !!wasThere, restored: !!c.days[k], spent: before - sh.tickets.makeUp };
+  sh.validDays = {}; sh.tickets = { selection: 0, fish: 1 }; sh.fishLog = [];
+  const k = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -3));
+  const was = Store.isValidDay(k);
+  const r = Store.useFishCard('mend', k);
+  return { ok: r.ok, was, valid: Store.isValidDay(k), spent: 1 - sh.tickets.fish };
 });
-check('补签卡可以补漏签日', mend.ok && mend.restored, mend);
-check('补签消耗 1 张卡', mend.spent === 1, mend);
+check('摸鱼券可以补签漏掉的日子', mend.ok && !mend.was && mend.valid, mend);
+check('补签消耗 1 张券', mend.spent === 1, mend);
 
 /* ---------- 4. 限定井：登记 + 攒井 + 兑换 ---------- */
 const spark = await p.evaluate(() => {
@@ -149,40 +133,49 @@ const hero = await p.evaluate(() => {
 check('问候卡保留主题色渐变（不再被白底覆盖）', /gradient\(/.test(hero) && /rgb/.test(hero), hero);
 
 
-/* ---------- 9. 补签与当天签到等价 + 7 天限 3 张 ---------- */
+/* ---------- 9. 补签 = 当天签到；7 天最多用 5 张 ---------- */
 const mendEq = await p.evaluate(() => {
   const sh = Store.state.shop;
+  const pm = Store.state.pomodoro;
   const start = DateUtil.addDays(DateUtil.today(), -29);
   sh.card = { startDate: DateUtil.toStr(start), endDate: DateUtil.toStr(DateUtil.today()),
     days: {}, weekAwardEnd: '', fullAwarded: false, paid: 300, gained: 0, mode: 'forest' };
-  sh.tickets = { selection: 0, makeUp: 5, makeUpLog: [] };
-  for (let i = 0; i < 29; i++) sh.card.days[DateUtil.toStr(DateUtil.addDays(start, i))] = 1;
-  const last = DateUtil.toStr(DateUtil.addDays(start, 29));
-  const before = sh.tickets.makeUp;
-  const r = Store.useMakeUpCard(last);
-  return { ok: r.ok, gained: r.gained, full: !!sh.card.fullAwarded,
-           selection: sh.tickets.selection, spent: before - sh.tickets.makeUp, last };
+  sh.validDays = {};
+  for (let i = 0; i < 29; i++) {
+    const k = DateUtil.toStr(DateUtil.addDays(start, i));
+    sh.card.days[k] = 1;
+    sh.validDays[k] = POMO.VALID_DAY_MIN;
+  }
+  sh.tickets = { selection: 0, fish: 5 }; sh.fishLog = [];
+  sh.streak = { weekEnd: '', monthEnd: '' };
+  const last = DateUtil.toStr(DateUtil.today());
+  const bp = pm.points, bj = pm.jade;
+  const r = Store.useFishCard('mend', last);
+  return {
+    ok: r.ok, cardDay: !!sh.card.days[last], full: !!sh.card.fullAwarded,
+    gained: (pm.points - bp) + (pm.jade - bj) / POMO.JADE_PER_POINT,
+    selection: sh.tickets.selection, valid: Store.isValidDay(last)
+  };
 });
-check('补签触发与当天签到同等的全勤结算（发定向券）', mendEq.ok && mendEq.full && mendEq.selection === 1, mendEq);
-check('补签奖励含全勤奖（>日返还）', mendEq.gained > 25, mendEq);
+check('补签与当天签到等价：写入月卡签到日并返当日积分', mendEq.ok && mendEq.cardDay && mendEq.gained >= 25, mendEq);
+check('补签触发 30 天全勤（月卡全勤奖）', mendEq.full, mendEq);
+check('补签同样参与全勤发券（定向券）', mendEq.selection === 1, mendEq);
 
 const mendLimit = await p.evaluate(() => {
   const sh = Store.state.shop;
-  sh.tickets = { selection: 0, makeUp: 9, makeUpLog: [] };
-  const start = DateUtil.addDays(DateUtil.today(), -20);
-  sh.card = { startDate: DateUtil.toStr(start), endDate: DateUtil.toStr(DateUtil.today()),
-    days: {}, weekAwardEnd: '', fullAwarded: true, paid: 300, gained: 0, mode: 'forest' };
+  sh.card = null;
+  sh.validDays = {};
+  sh.tickets = { selection: 0, fish: 12 }; sh.fishLog = [];
   const out = [];
-  // 补最近 7 天内的漏签日（today-6 … today-2），第 4 次起应被拒
-  for (let i = 6; i >= 2; i--) {
+  for (let i = 0; i < 6; i++) {
     const d = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -i));
-    out.push(Store.useMakeUpCard(d).ok);
+    out.push(Store.useFishCard('mend', d).ok);
   }
-  return { results: out, quota: Store.makeUpQuota() };
+  return { results: out, quota: Store.fishQuota() };
 });
-check('近 7 天最多补 3 次（第 4 次被拒）',
-  mendLimit.results.slice(0, 3).every(Boolean) && mendLimit.results[3] === false && mendLimit.results[4] === false, mendLimit);
-check('补签额度口径 = 已用 3 / 上限 3', mendLimit.quota.used === 3 && mendLimit.quota.left === 0, mendLimit.quota);
+check('近 7 天最多用 5 张（第 6 次被拒）',
+  mendLimit.results.slice(0, 5).every(Boolean) && mendLimit.results[5] === false, mendLimit);
+check('用券额度口径 = 已用 5 / 上限 5', mendLimit.quota.used === 5 && mendLimit.quota.left === 0, mendLimit.quota);
 
 check('无 JS 报错', errors.length === 0, errors.slice(0, 3));
 console.log(`\n结果：${ok} 通过 / ${bad} 失败`);
