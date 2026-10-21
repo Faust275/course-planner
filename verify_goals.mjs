@@ -427,7 +427,7 @@ check('成就页能看到「说到做到」', /说到做到/.test(L));
 check('成就页能看到「月末回头看」', /月末回头看/.test(L));
 
 const L2 = await p.evaluate(() => window.Onboard.steps);
-check('教程步数从 15 增到 16', L2 === 16, L2);
+check('教程步数（15 核心 + 8 非核心 + 收尾 = 24）', L2 === 24, L2);
 
 await p.evaluate(() => { window.Onboard.start(); });
 await wait(600);

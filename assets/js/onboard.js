@@ -1,7 +1,11 @@
 
 
+
 /* ==========================================================
  * 新手教程：首次打开自动走一遍，之后可在「设置 → 新手教程」再看
+ *  - 核心步骤（core 不写或 true）：走完整个流程
+ *  - 非核心步骤（core: false）：介绍新增功能，卡片上直接给「关闭」按钮，
+ *    第一次出现非核心步骤时高亮提醒「之后在设置也能打开」
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -51,7 +55,7 @@
       desc: '用 24 小时的环形图看时间都花在哪，也可以自己补记活动。',
       tips: [
         '饮食和睡眠默认记录，不需要的话在「设置 → 记录偏好」里关掉',
-        '可以切「今天 / 一周 / 一月 / 一季」，图表能在饼图和方形图之间切换',
+        '可以切「今天 / 一周 / 一月 / 一季 / 今年」，图表能在饼图和方形图之间切换',
         '专注记录会自动汇总到这里'
       ]
     },
@@ -139,11 +143,80 @@
       view: 'settings', icon: I.settings, title: '设置与同步',
       desc: '剩下这些，等用熟了再调也来得及。',
       tips: [
-        '外观：9 套配色或自选颜色，也能传一张图做背景',
+        '外观：20 套配色或自选颜色，也能传一张图做背景',
         '模块显示：关掉不用的模块，还能拖动排序；超过 5 个会自动收进「更多」',
         '数据管理：用同步码把数据搬到手机或电脑；手机上可以「添加到主屏幕」，装好后长按图标有「今日课表 / 写日记 / 待办」快捷入口'
       ]
     },
+
+    /* ===================== 以下为非核心功能介绍（core: false） ===================== */
+    {
+      core: false, view: 'schedule', icon: I.calendar, title: '课程单次调整',
+      desc: '某一节的课临时有变？打开「课程表」里那门课，或今日页课程卡上的「调整」，可以停掉这一节、临时换教室，或把课调到别的日期。',
+      tips: [
+        '只改那一天，整学期的课表不受影响，也不会影响提醒和日历',
+        '停课当天，这节课会从节数、提醒、统计里消失，日历上显示为灰色「已调走」',
+        '调课补课会在目标日期出现，并标注「调自 X/X」'
+      ]
+    },
+    {
+      core: false, view: 'calendar', icon: I.check, title: '待办计划块',
+      desc: '「日历」选中某一天，卡片下方有「待办」抽屉：点一条待办，会在当天的空档自动划出一段「计划学习」的时间块，并关联上它。',
+      tips: [
+        '虚线框是「计划」，真正专注后记录成实线——计划不等于已经做了，不会算进统计',
+        '时间块弹窗也能手动选「关联待办」和「仅作计划」'
+      ]
+    },
+    {
+      core: false, view: 'schedule', icon: I.phone, title: '手势与离线更新',
+      desc: '手机上在课表左右滑切周、在月历左右滑切月，单手就能翻。应用有新版时会弹「应用已更新」，点一下刷新即可，数据都在本地不会丢。',
+      tips: [
+        '滑动只在非滚动区域触发，不会和你正常的上下滚动打架',
+        '用「添加到主屏幕」装成 App 后，离线也能打开'
+      ]
+    },
+    {
+      core: false, view: 'plans', tab: 'goals', icon: I.target, title: '目标与复盘',
+      desc: '「计划」页第二个分页是「目标」：给这个学期定方向，下面挂 2–4 条关键结果，每条对应一个能算出来的数（挂计划、挂待办、或自己填）。',
+      tips: [
+        '总进度是几条关键结果的等权平均，没有权重——权重靠拍脑袋反而更误导',
+        '同时在办最多 5 个；到期不删也不扣分，只是进「已归档」；每月最后三天有复盘卡'
+      ]
+    },
+    {
+      core: false, view: 'diary', icon: I.moon, title: '日记与心情',
+      desc: '底部「日记」可以记每天的心情和随笔，心情用颜色标记，月末能回看自己的情绪走势。',
+      tips: [
+        '写了日记的日期在日历上会有小圆点',
+        '目标复盘卡可以一键把进度写进当天日记'
+      ]
+    },
+    {
+      core: false, view: 'tasks', icon: I.search, title: '搜索与重复任务',
+      desc: '顶部的搜索框能跨所有模块找内容：课程、待办、账目、日记都能搜。待办设了重复规则（每天 / 每周 / 自定义）后，完成后会自动生成下一次。',
+      tips: [
+        '农历生日、纪念日也能设成每年重复的提醒',
+        '设置里能开启全局快捷键，电脑上更顺手'
+      ]
+    },
+    {
+      core: false, view: 'stats', icon: I.chart, title: '统计与年度视角',
+      desc: '「统计」页用「今天 / 本周 / 本月 / 本学期 / 今年」切换周期。选「今年」能从元旦看到现在的累计，还能和去年同期对比。',
+      tips: [
+        '跨度超过 120 天，热力图会自动按月分组',
+        '象限里的「今年」档同样能看到整年投入'
+      ]
+    },
+    {
+      core: false, view: 'tasks', icon: I.idea, title: '待办与时间投入',
+      desc: '一条待办可以和时间记录双向关联：专注或补录时选它，待办里就会显示「已投入」总时长和最近记录；月历计划块则显示「今日计划 vs 实际」。',
+      tips: [
+        '计划块不算「已投入」——计划是打算做，实际专注才计入',
+        '点「已投入」里的记录，可直接跳到那天的象限查看'
+      ]
+    },
+
+    /* ===================== 收尾 ===================== */
     {
       view: 'schedule', icon: I.leaf, title: '就这些了',
       desc: '先去课程表把课排上，其他功能用着用着就熟了。',
@@ -154,6 +227,9 @@
       ]
     }
   ];
+
+  // 第一个非核心步骤的下标，用于「第一次」高亮提醒
+  var firstNonCore = STEPS.findIndex(function (s) { return s.core === false; });
 
   var idx = 0;
   var root = null;
@@ -201,6 +277,8 @@
   function draw(s) {
     card.innerHTML = '';
     var isLast = idx === STEPS.length - 1;
+    var nonCore = s.core === false;
+    var showNotice = nonCore && idx === firstNonCore;
 
     card.appendChild(el('div', { class: 'ob-head' }, [
       el('span', { class: 'ob-icon' }, [V.svg(s.icon, 20)]),
@@ -220,32 +298,61 @@
       return el('li', { text: t });
     })));
 
+    // 第一次出现非核心功能时，高亮提醒「之后在设置也能打开」
+    if (showNotice) {
+      card.appendChild(el('div', { class: 'ob-notice' }, [
+        el('b', { text: '小提示：' }),
+        el('span', { text: '以上是最近新增的功能，看不看都行。不想看直接点「关闭」，之后在「设置 → 新手教程」也能打开。' })
+      ]));
+    }
+
     var dots = el('div', { class: 'ob-dots' });
     STEPS.forEach(function (_, i) {
       dots.appendChild(el('i', { class: 'ob-dot' + (i === idx ? ' on' : '') }));
     });
     card.appendChild(dots);
 
-    card.appendChild(el('div', { class: 'ob-foot' }, [
-      idx > 0 ? el('button', {
+    var foot = el('div', { class: 'ob-foot' });
+    if (idx > 0) {
+      foot.appendChild(el('button', {
         class: 'btn btn-sm', text: '上一步',
         onclick: function () { go(idx - 1); }
-      }) : el('span', { class: 'ob-step-hint', text: '点「下一步」继续' }),
-      el('button', {
-        class: 'btn btn-sm btn-primary',
-        text: isLast ? '开始使用' : '下一步',
-        onclick: function () { go(idx + 1); }
-      })
-    ]));
+      }));
+    } else {
+      foot.appendChild(el('span', { class: 'ob-step-hint', text: '点「下一步」继续' }));
+    }
+
+    // 非核心功能：直接给「关闭」按钮，可一键跳过这批介绍
+    if (nonCore) {
+      foot.appendChild(el('button', {
+        class: 'btn btn-sm', text: '关闭这些介绍',
+        onclick: function () { finish(true, true); }
+      }));
+    }
+
+    foot.appendChild(el('button', {
+      class: 'btn btn-sm btn-primary',
+      text: isLast ? '开始使用' : '下一步',
+      onclick: function () { go(idx + 1); }
+    }));
+    card.appendChild(foot);
+
+    if (nonCore) {
+      card.appendChild(el('div', {
+        class: 'ob-close-hint',
+        text: '关闭后可在「设置 → 新手教程」再看'
+      }));
+    }
   }
 
-  function finish(skipped) {
+  function finish(skipped, fromNonCore) {
     Store.updateSettings({ guided: true });
     remove();
     if (global.App && App.go) App.go(fromView || 'schedule', fromTab ? { tab: fromTab } : null);
     fromView = null;
     fromTab = null;
-    V.toast(skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧');
+    V.toast(fromNonCore ? '已关闭新功能介绍，可在「设置 → 新手教程」再看'
+                        : (skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧'));
   }
 
   /**
@@ -263,5 +370,3 @@
 
   global.Onboard = { start: start, steps: STEPS.length };
 })(window);
-
-

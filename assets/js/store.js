@@ -119,7 +119,8 @@
   })();
 
   /* ---------- 预设 ---------- */
-  var COLORS = [
+  // 20 色课程调色板统一从 palette.js 取，和外观主题共用一套色
+  var COLORS = (typeof Palette !== 'undefined' && Palette.COURSE_COLORS) || [
     '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b',
     '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'
   ];
@@ -733,7 +734,7 @@
     PLANT_STEP: 30,        // 每多一棵，价格递增
     WATER_COST: 20,        // 浇一次水
     /* —— 抽卡机制 —— */
-    JADE_PER_POINT: 160,   // 1 积分 = 160 合成玉
+    JADE_PER_POINT: 600,   // 1 积分 = 600 合成玉（与 PULL_COST 对齐：单抽 600 玉 = 1 积分）
     PULL_COST: 600,        // 单抽 600 合成玉（= 1 积分）
     TEN_COST: 6000,        // 十连 6000 合成玉（= 10 积分）
     RATE_6: 2,             // 六星基础概率 %

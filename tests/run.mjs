@@ -399,6 +399,21 @@ eq('excludes 去重收集三个原日期', fc.excludes, ['2026-10-06', '2026-10-
 eq('rooms 一条', fc.rooms.length, 1);
 eq('moves 一条且带 toDate', fc.moves[0].toDate, '2026-10-11');
 
+/* ==========================================================
+ * Palette（直接 import 源文件——store.js 数据拆分的第一类：颜色/主题外置）
+ * ========================================================== */
+const palSrc = readFileSync(new URL('../assets/js/palette.js', import.meta.url), 'utf8');
+new Function(palSrc)();
+const Pal = globalThis.Palette;
+
+console.log('Palette');
+eq('预设数量为 20（课程+外观共用）', Pal.count, 20);
+eq('COURSE_COLORS 与 THEME_PRESETS 同源', Pal.COURSE_COLORS, Pal.THEME_PRESETS.map(p => p.c));
+eq('COURSE_COLORS 长度 20', Pal.COURSE_COLORS.length, 20);
+eq('颜色均为 #RRGGBB', Pal.COURSE_COLORS.every(c => /^#[0-9a-fA-F]{6}$/.test(c)), true);
+eq('key 不重复', new Set(Pal.THEME_PRESETS.map(p => p.key)).size, 20);
+eq('每个预设都带 name 与 c', Pal.THEME_PRESETS.every(p => p.name && /^#[0-9a-fA-F]{6}$/.test(p.c)), true);
+
 console.log('TimeUtil.toMin');
 eq('08:30 -> 510', TimeUtil.toMin('08:30'), 510);
 eq('00:00 -> 0', TimeUtil.toMin('00:00'), 0);

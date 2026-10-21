@@ -2212,6 +2212,19 @@ input[type="range"]::-moz-range-thumb {
 .cp-ob-skip:hover { color: var(--text-2); text-decoration: underline; }
 .cp-ob-step-hint { font-size: 11.5px; color: var(--text-3); }
 
+.cp-ob-notice {
+  display: flex; gap: 6px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.7; color: var(--text-2);
+  background: var(--primary-weak, #eef0fe);
+  border: 1px solid var(--primary-light, #dfe2fb);
+  border-radius: 10px; padding: 9px 11px; margin-bottom: 11px;
+}
+.cp-ob-notice b { color: var(--primary); flex: 0 0 auto; }
+.cp-ob-close-hint {
+  text-align: center; font-size: 11px; color: var(--text-3);
+  margin-top: 8px;
+}
+
 /* ==========================================================
  * 添加课程：星期 / 节次多选、自定义时间
  * ========================================================== */

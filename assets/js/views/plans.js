@@ -27,7 +27,10 @@
   }
   var justDoneId = '';
 
-  var COLORS = ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
+  // 计划选色复用课程那套 20 色，保证全 App 同一套色卡
+  var COLORS = (typeof Store !== 'undefined' && Store.COLORS) ||
+               (typeof Palette !== 'undefined' && Palette.COURSE_COLORS) ||
+               ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
 
   function fmtNum(n) {
     return String(Math.round(n * 100) / 100);

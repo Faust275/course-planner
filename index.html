@@ -2282,6 +2282,19 @@ input[type="range"]::-moz-range-thumb {
 .cp-ob-skip:hover { color: var(--text-2); text-decoration: underline; }
 .cp-ob-step-hint { font-size: 11.5px; color: var(--text-3); }
 
+.cp-ob-notice {
+  display: flex; gap: 6px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.7; color: var(--text-2);
+  background: var(--primary-weak, #eef0fe);
+  border: 1px solid var(--primary-light, #dfe2fb);
+  border-radius: 10px; padding: 9px 11px; margin-bottom: 11px;
+}
+.cp-ob-notice b { color: var(--primary); flex: 0 0 auto; }
+.cp-ob-close-hint {
+  text-align: center; font-size: 11px; color: var(--text-3);
+  margin-top: 8px;
+}
+
 /* ==========================================================
  * 添加课程：星期 / 节次多选、自定义时间
  * ========================================================== */
@@ -4302,6 +4315,52 @@ window.AK_OPS = [
 </script>
 <script>
 
+/* ==========================================================
+ * 调色板：课程颜色 + 外观主题预设（纯数据，无 DOM / Store 依赖）
+ * 放在 store.js 之前加载，store / theme / plans 都从这里取颜色，
+ * 保证课程表、外观、计划三处用的是同一套 20 色，不会出现两套色卡。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  /* 20 色，按色相环铺开，彼此区分度高，浅色背景上文字都看得清 */
+  var PRESETS = [
+    { key: 'indigo',   name: '靛蓝', c: '#4f46e5' },
+    { key: 'blue',     name: '晴空', c: '#0ea5e9' },
+    { key: 'sky',      name: '天青', c: '#06b6d4' },
+    { key: 'teal',     name: '青碧', c: '#14b8a6' },
+    { key: 'emerald',  name: '翠绿', c: '#10b981' },
+    { key: 'green',    name: '草绿', c: '#22c55e' },
+    { key: 'lime',     name: '青柠', c: '#84cc16' },
+    { key: 'yellow',   name: '明黄', c: '#eab308' },
+    { key: 'amber',    name: '琥珀', c: '#f59e0b' },
+    { key: 'orange',   name: '橘橙', c: '#f97316' },
+    { key: 'red',      name: '朱红', c: '#ef4444' },
+    { key: 'rose',     name: '玫红', c: '#f43f5e' },
+    { key: 'pink',     name: '桃粉', c: '#ec4899' },
+    { key: 'fuchsia',  name: '品紫', c: '#d946ef' },
+    { key: 'purple',   name: '紫罗兰', c: '#a855f7' },
+    { key: 'violet',   name: '深紫', c: '#7c3aed' },
+    { key: 'indigo2',  name: '蓝紫', c: '#6366f1' },
+    { key: 'cobalt',   name: '宝蓝', c: '#3b82f6' },
+    { key: 'ocean',    name: '深海', c: '#0891b2' },
+    { key: 'slate',    name: '石墨', c: '#64748b' }
+  ];
+
+  /* 课程表选色就是上面这 20 个十六进制，平铺成数组方便 colorPicker 遍历 */
+  var COURSE_COLORS = PRESETS.map(function (p) { return p.c; });
+
+  global.Palette = {
+    PRESETS: PRESETS,
+    THEME_PRESETS: PRESETS,
+    COURSE_COLORS: COURSE_COLORS,
+    count: PRESETS.length
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+
 
 /* ==========================================================
  * 单次调课例外（纯函数模块）
@@ -4536,7 +4595,8 @@ window.AK_OPS = [
   })();
 
   /* ---------- 预设 ---------- */
-  var COLORS = [
+  // 20 色课程调色板统一从 palette.js 取，和外观主题共用一套色
+  var COLORS = (typeof Palette !== 'undefined' && Palette.COURSE_COLORS) || [
     '#4f46e5', '#0ea5e9', '#10b981', '#f59e0b',
     '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'
   ];
@@ -5150,7 +5210,7 @@ window.AK_OPS = [
     PLANT_STEP: 30,        // 每多一棵，价格递增
     WATER_COST: 20,        // 浇一次水
     /* —— 抽卡机制 —— */
-    JADE_PER_POINT: 160,   // 1 积分 = 160 合成玉
+    JADE_PER_POINT: 600,   // 1 积分 = 600 合成玉（与 PULL_COST 对齐：单抽 600 玉 = 1 积分）
     PULL_COST: 600,        // 单抽 600 合成玉（= 1 积分）
     TEN_COST: 6000,        // 十连 6000 合成玉（= 10 积分）
     RATE_6: 2,             // 六星基础概率 %
@@ -18610,7 +18670,10 @@ window.AK_OPS = [
   }
   var justDoneId = '';
 
-  var COLORS = ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
+  // 计划选色复用课程那套 20 色，保证全 App 同一套色卡
+  var COLORS = (typeof Store !== 'undefined' && Store.COLORS) ||
+               (typeof Palette !== 'undefined' && Palette.COURSE_COLORS) ||
+               ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
 
   function fmtNum(n) {
     return String(Math.round(n * 100) / 100);
@@ -24262,7 +24325,7 @@ window.AK_OPS = [
             el('li', { text: '· 绩点换算规则在「成绩与 GPA」里自己填（4.0 / 5.0 制或线性均可），成绩单可导出 CSV 或打印成 PDF。' }),
             el('li', { text: '· 「计划」支持打卡与进度条两种方式，达标后自动完成并奖励积分。' }),
             el('li', { text: '· 奖励机制有「森林」和「抽卡」两种，积分各自独立不通用；切换时不清零、不兑换，已攒的都保留。' }),
-            el('li', { text: '· 抽卡按明日方舟标准寻访：600 合成玉单抽、6000 十连，1 积分 = 160 合成玉；六星 2%，50 抽后概率递增；每自然天第一个十连保底至少一位五星，其余十连不保底；重复干员提升潜能（0~5），满潜能后多余复制转化为积分。' }),
+            el('li', { text: '· 抽卡按明日方舟标准寻访：600 合成玉单抽、6000 十连，1 积分 = 600 合成玉；六星 2%，50 抽后概率递增；每自然天第一个十连保底至少一位五星，其余十连不保底；重复干员提升潜能（0~5），满潜能后多余复制转化为积分。' }),
             el('li', { text: '· 「象限」用 24 小时环形图统计时间去向，可记录睡眠、饮食与活动。' }),
             el('li', { text: '· 记饮食时可以搜食物名（米饭、鸡胸、奶茶…），热量和蛋白质/脂肪/碳水会自动估算，也能手动改。' }),
             el('li', { text: '· 在「设置 → 饮食与热量」里设每日热量目标、三餐配比和营养素目标，记录时会提示这餐还剩多少额度。' }),
@@ -24274,7 +24337,7 @@ window.AK_OPS = [
             el('li', { text: '· 子任务的默认行为是「各算各的」：子任务全完成不自动完成父任务，勾父任务也不连带子任务；删除父任务时子任务会保留并提升为顶层。这四条都能在「设置 → 子任务」里改。' }),
             el('li', { text: '· 灵感已并入「待办」：切到顶部的「灵感」分页就能随手记，点「转为待办」一键搬过去。' }),
             el('li', { text: '· 每日一句 / 每日一词可以单独关掉（模块显示 → 首页卡片）；喜欢的话点星标收藏，在「收藏的词句」里回看。' }),
-            el('li', { text: '· 外观可换 9 套配色或自选颜色，也能传一张图做背景。' }),
+            el('li', { text: '· 外观可换 20 套配色或自选颜色，也能传一张图做背景。' }),
             el('li', { text: '· 「每日一词」右上角有「小测验」，看释义拼单词，答错会提示差在哪。' }),
           el('li', { text: '· 「导入课表」会自动跳过「星期几 / 第几节」表头，并把课程名、地点、老师拆开，核对后一键导入。' }),
           el('li', { text: '· 新建待办时点麦克风可以说话输入，会自动拆出日期和时间。' }),
@@ -33777,8 +33840,8 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
 (function (global) {
   'use strict';
 
-  /* ---------- 预设主题 ---------- */
-  var THEMES = [
+  /* ---------- 预设主题（20 套，与课程调色板共用 palette.js 的同一套色） ---------- */
+  var THEMES = (typeof Palette !== 'undefined' && Palette.THEME_PRESETS) || [
     { key: 'indigo', name: '靛蓝', c: '#4f46e5' },
     { key: 'blue', name: '晴空', c: '#0ea5e9' },
     { key: 'teal', name: '青碧', c: '#14b8a6' },
@@ -33966,8 +34029,12 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
 <script>
 
 
+
 /* ==========================================================
  * 新手教程：首次打开自动走一遍，之后可在「设置 → 新手教程」再看
+ *  - 核心步骤（core 不写或 true）：走完整个流程
+ *  - 非核心步骤（core: false）：介绍新增功能，卡片上直接给「关闭」按钮，
+ *    第一次出现非核心步骤时高亮提醒「之后在设置也能打开」
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -34017,7 +34084,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       desc: '用 24 小时的环形图看时间都花在哪，也可以自己补记活动。',
       tips: [
         '饮食和睡眠默认记录，不需要的话在「设置 → 记录偏好」里关掉',
-        '可以切「今天 / 一周 / 一月 / 一季」，图表能在饼图和方形图之间切换',
+        '可以切「今天 / 一周 / 一月 / 一季 / 今年」，图表能在饼图和方形图之间切换',
         '专注记录会自动汇总到这里'
       ]
     },
@@ -34105,11 +34172,80 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       view: 'settings', icon: I.settings, title: '设置与同步',
       desc: '剩下这些，等用熟了再调也来得及。',
       tips: [
-        '外观：9 套配色或自选颜色，也能传一张图做背景',
+        '外观：20 套配色或自选颜色，也能传一张图做背景',
         '模块显示：关掉不用的模块，还能拖动排序；超过 5 个会自动收进「更多」',
         '数据管理：用同步码把数据搬到手机或电脑；手机上可以「添加到主屏幕」，装好后长按图标有「今日课表 / 写日记 / 待办」快捷入口'
       ]
     },
+
+    /* ===================== 以下为非核心功能介绍（core: false） ===================== */
+    {
+      core: false, view: 'schedule', icon: I.calendar, title: '课程单次调整',
+      desc: '某一节的课临时有变？打开「课程表」里那门课，或今日页课程卡上的「调整」，可以停掉这一节、临时换教室，或把课调到别的日期。',
+      tips: [
+        '只改那一天，整学期的课表不受影响，也不会影响提醒和日历',
+        '停课当天，这节课会从节数、提醒、统计里消失，日历上显示为灰色「已调走」',
+        '调课补课会在目标日期出现，并标注「调自 X/X」'
+      ]
+    },
+    {
+      core: false, view: 'calendar', icon: I.check, title: '待办计划块',
+      desc: '「日历」选中某一天，卡片下方有「待办」抽屉：点一条待办，会在当天的空档自动划出一段「计划学习」的时间块，并关联上它。',
+      tips: [
+        '虚线框是「计划」，真正专注后记录成实线——计划不等于已经做了，不会算进统计',
+        '时间块弹窗也能手动选「关联待办」和「仅作计划」'
+      ]
+    },
+    {
+      core: false, view: 'schedule', icon: I.phone, title: '手势与离线更新',
+      desc: '手机上在课表左右滑切周、在月历左右滑切月，单手就能翻。应用有新版时会弹「应用已更新」，点一下刷新即可，数据都在本地不会丢。',
+      tips: [
+        '滑动只在非滚动区域触发，不会和你正常的上下滚动打架',
+        '用「添加到主屏幕」装成 App 后，离线也能打开'
+      ]
+    },
+    {
+      core: false, view: 'plans', tab: 'goals', icon: I.target, title: '目标与复盘',
+      desc: '「计划」页第二个分页是「目标」：给这个学期定方向，下面挂 2–4 条关键结果，每条对应一个能算出来的数（挂计划、挂待办、或自己填）。',
+      tips: [
+        '总进度是几条关键结果的等权平均，没有权重——权重靠拍脑袋反而更误导',
+        '同时在办最多 5 个；到期不删也不扣分，只是进「已归档」；每月最后三天有复盘卡'
+      ]
+    },
+    {
+      core: false, view: 'diary', icon: I.moon, title: '日记与心情',
+      desc: '底部「日记」可以记每天的心情和随笔，心情用颜色标记，月末能回看自己的情绪走势。',
+      tips: [
+        '写了日记的日期在日历上会有小圆点',
+        '目标复盘卡可以一键把进度写进当天日记'
+      ]
+    },
+    {
+      core: false, view: 'tasks', icon: I.search, title: '搜索与重复任务',
+      desc: '顶部的搜索框能跨所有模块找内容：课程、待办、账目、日记都能搜。待办设了重复规则（每天 / 每周 / 自定义）后，完成后会自动生成下一次。',
+      tips: [
+        '农历生日、纪念日也能设成每年重复的提醒',
+        '设置里能开启全局快捷键，电脑上更顺手'
+      ]
+    },
+    {
+      core: false, view: 'stats', icon: I.chart, title: '统计与年度视角',
+      desc: '「统计」页用「今天 / 本周 / 本月 / 本学期 / 今年」切换周期。选「今年」能从元旦看到现在的累计，还能和去年同期对比。',
+      tips: [
+        '跨度超过 120 天，热力图会自动按月分组',
+        '象限里的「今年」档同样能看到整年投入'
+      ]
+    },
+    {
+      core: false, view: 'tasks', icon: I.idea, title: '待办与时间投入',
+      desc: '一条待办可以和时间记录双向关联：专注或补录时选它，待办里就会显示「已投入」总时长和最近记录；月历计划块则显示「今日计划 vs 实际」。',
+      tips: [
+        '计划块不算「已投入」——计划是打算做，实际专注才计入',
+        '点「已投入」里的记录，可直接跳到那天的象限查看'
+      ]
+    },
+
+    /* ===================== 收尾 ===================== */
     {
       view: 'schedule', icon: I.leaf, title: '就这些了',
       desc: '先去课程表把课排上，其他功能用着用着就熟了。',
@@ -34120,6 +34256,9 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       ]
     }
   ];
+
+  // 第一个非核心步骤的下标，用于「第一次」高亮提醒
+  var firstNonCore = STEPS.findIndex(function (s) { return s.core === false; });
 
   var idx = 0;
   var root = null;
@@ -34167,6 +34306,8 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   function draw(s) {
     card.innerHTML = '';
     var isLast = idx === STEPS.length - 1;
+    var nonCore = s.core === false;
+    var showNotice = nonCore && idx === firstNonCore;
 
     card.appendChild(el('div', { class: 'ob-head' }, [
       el('span', { class: 'ob-icon' }, [V.svg(s.icon, 20)]),
@@ -34186,32 +34327,61 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       return el('li', { text: t });
     })));
 
+    // 第一次出现非核心功能时，高亮提醒「之后在设置也能打开」
+    if (showNotice) {
+      card.appendChild(el('div', { class: 'ob-notice' }, [
+        el('b', { text: '小提示：' }),
+        el('span', { text: '以上是最近新增的功能，看不看都行。不想看直接点「关闭」，之后在「设置 → 新手教程」也能打开。' })
+      ]));
+    }
+
     var dots = el('div', { class: 'ob-dots' });
     STEPS.forEach(function (_, i) {
       dots.appendChild(el('i', { class: 'ob-dot' + (i === idx ? ' on' : '') }));
     });
     card.appendChild(dots);
 
-    card.appendChild(el('div', { class: 'ob-foot' }, [
-      idx > 0 ? el('button', {
+    var foot = el('div', { class: 'ob-foot' });
+    if (idx > 0) {
+      foot.appendChild(el('button', {
         class: 'btn btn-sm', text: '上一步',
         onclick: function () { go(idx - 1); }
-      }) : el('span', { class: 'ob-step-hint', text: '点「下一步」继续' }),
-      el('button', {
-        class: 'btn btn-sm btn-primary',
-        text: isLast ? '开始使用' : '下一步',
-        onclick: function () { go(idx + 1); }
-      })
-    ]));
+      }));
+    } else {
+      foot.appendChild(el('span', { class: 'ob-step-hint', text: '点「下一步」继续' }));
+    }
+
+    // 非核心功能：直接给「关闭」按钮，可一键跳过这批介绍
+    if (nonCore) {
+      foot.appendChild(el('button', {
+        class: 'btn btn-sm', text: '关闭这些介绍',
+        onclick: function () { finish(true, true); }
+      }));
+    }
+
+    foot.appendChild(el('button', {
+      class: 'btn btn-sm btn-primary',
+      text: isLast ? '开始使用' : '下一步',
+      onclick: function () { go(idx + 1); }
+    }));
+    card.appendChild(foot);
+
+    if (nonCore) {
+      card.appendChild(el('div', {
+        class: 'ob-close-hint',
+        text: '关闭后可在「设置 → 新手教程」再看'
+      }));
+    }
   }
 
-  function finish(skipped) {
+  function finish(skipped, fromNonCore) {
     Store.updateSettings({ guided: true });
     remove();
     if (global.App && App.go) App.go(fromView || 'schedule', fromTab ? { tab: fromTab } : null);
     fromView = null;
     fromTab = null;
-    V.toast(skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧');
+    V.toast(fromNonCore ? '已关闭新功能介绍，可在「设置 → 新手教程」再看'
+                        : (skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧'));
   }
 
   /**
@@ -34229,8 +34399,6 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
 
   global.Onboard = { start: start, steps: STEPS.length };
 })(window);
-
-
 
 </script>
 <script>

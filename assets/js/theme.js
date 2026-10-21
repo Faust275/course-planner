@@ -6,8 +6,8 @@
 (function (global) {
   'use strict';
 
-  /* ---------- 预设主题 ---------- */
-  var THEMES = [
+  /* ---------- 预设主题（20 套，与课程调色板共用 palette.js 的同一套色） ---------- */
+  var THEMES = (typeof Palette !== 'undefined' && Palette.THEME_PRESETS) || [
     { key: 'indigo', name: '靛蓝', c: '#4f46e5' },
     { key: 'blue', name: '晴空', c: '#0ea5e9' },
     { key: 'teal', name: '青碧', c: '#14b8a6' },

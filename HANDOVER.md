@@ -12,9 +12,9 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | `07453ef` feat: 单次调课/停课/调休 + 待办抽屉与计划专注块（Time-Blocking） |
-| 单元测试 | `node tests/run.mjs` **561 条全过** |
-| UI 回归 | 22 个 `verify_*.mjs` 全部通过（需 Playwright；gesture_sw/course_ex/timeplan 自带或用 URL 变量指定服务） |
+| 最后提交 | `ccec9a6` feat: 20 色板(palette.js) + 合成玉换算勘误(160→600) + 新手教程非核心关闭按钮/首屏提醒 + 8 项新功能介绍 |
+| 单元测试 | `node tests/run.mjs` **567 条全过**（Palette / CourseException 直读源文件） |
+| UI 回归 | 23 个 `verify_*.mjs` 全部通过（需 Playwright；gesture_sw/course_ex/timeplan/onboard 自带或用 URL 变量指定服务） |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |

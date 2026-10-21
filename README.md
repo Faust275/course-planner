@@ -59,8 +59,9 @@ course-planner-web/
 ├── verify_gesture_sw.mjs     横滑切周/切月手势、SW 更新（network-first、断网回退、更新 Toast）
 ├── verify_course_ex.mjs      单次调课/停课/换教室：今日灰显、提醒例外、ICS EXDATE、月历联动、同步
 ├── verify_timeplan.mjs       待办抽屉、计划专注块（虚线、不进统计）、今日计划 vs 实际
+├── verify_onboard.mjs        新手教程（非核心关闭按钮 + 首屏提醒）、20 色板、合成玉换算 600
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（545 条）
+└── tests/run.mjs             纯函数单测（567 条，Palette / CourseException 直读源文件）
 ```
 
 ## 构建
