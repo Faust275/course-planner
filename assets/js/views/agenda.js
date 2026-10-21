@@ -64,9 +64,9 @@
         var dateStr = DateUtil.toStr(date);
         var items = [];
 
-        // 课程
+        // 课程（含单次调课例外：停课的不出现，调进来的会出现）
         if (viewState.showCourses) {
-          Store.coursesOnDay(DateUtil.isoDow(date), Store.weekOf(date)).forEach(function (c) {
+          Store.coursesOnDate(dateStr).forEach(function (c) {
             var t = Store.courseTime(c);
             items.push({
               kind: 'course', sort: t ? t.start : '00:00',

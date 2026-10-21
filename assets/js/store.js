@@ -1724,6 +1724,7 @@
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
       if (!state.courses) state.courses = [];
+      if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
@@ -1997,7 +1998,7 @@
       var weekNo = this.currentWeek();
       var todayStr = DateUtil.toStr(now);
 
-      var courses = this.coursesOnDay(dow, weekNo).map(function (c) {
+      var courses = this.coursesOnDate(todayStr).map(function (c) {
         var t = Store.courseTime(c) || { start: '', end: '' };
         return { start: t.start || '', end: t.end || '', name: c.name, location: c.location || '' };
       });
@@ -2883,6 +2884,88 @@
       });
     },
 
+    /* ===== 单次调课例外（停课 / 换教室 / 调课） =====
+     * 周历回答「这门课一般什么时候上」，例外回答「那一天到底上不上、在哪上」。
+     * 判定逻辑在 course-exception.js（纯模块），这里只管存取与拼装。 */
+
+    /** 某天的实际课表：基础周历 + 例外（去掉停课/调走的，换教室的带 _exRoom，
+     *  调进来的以原课程为模板带 _moveIn/_moveFrom）。今天显示、提醒、统计、
+     *  月历时间带全部走这里，别再用 coursesOnDay 直接当日历用。 */
+    coursesOnDate: function (dateStr) {
+      var d = DateUtil.parse(dateStr);
+      if (!d || !global.CourseException) return [];
+      var dow = DateUtil.isoDow(d);
+      var base = this.coursesOnDay(dow, this.weekOf(d));
+      var out = global.CourseException.dayEffect(base, dateStr, state.courseExceptions).kept;
+      var self = this;
+      global.CourseException.moveIns(state.courseExceptions, dateStr).forEach(function (e) {
+        var src = self.getCourse(e.courseId);
+        if (!src) return;
+        var inst = {};
+        Object.keys(src).forEach(function (k) { inst[k] = src[k]; });
+        inst.courseId = src.id;
+        inst._slot = null;
+        inst.day = dow;
+        inst._moveIn = e.id;
+        inst._moveFrom = e.date;
+        if (e.location) inst.location = e.location;
+        if (e.toPeriodId) {
+          inst.timeMode = 'period'; inst.periodId = e.toPeriodId;
+          inst.startTime = ''; inst.endTime = '';
+        } else if (e.toStart) {
+          inst.timeMode = 'custom'; inst.startTime = e.toStart;
+          inst.endTime = e.toEnd || e.toStart;
+        }
+        out.push(inst);
+      });
+      return out.sort(function (a, b) {
+        var ta = Store.courseTime(a), tb = Store.courseTime(b);
+        return (ta ? ta.start : '99:99') < (tb ? tb.start : '99:99') ? -1 : 1;
+      });
+    },
+
+    /** 某天被停 / 被调走的课（今日页灰显用，带 _off 与 _moveTo） */
+    canceledLessonsOn: function (dateStr) {
+      var d = DateUtil.parse(dateStr);
+      if (!d || !global.CourseException) return [];
+      var base = this.coursesOnDay(DateUtil.isoDow(d), this.weekOf(d));
+      return global.CourseException.dayEffect(base, dateStr, state.courseExceptions).removed;
+    },
+
+    /** 一门课的全部例外（课程详情弹窗管理用） */
+    lessonExceptionsOfCourse: function (courseId) {
+      return (state.courseExceptions || []).filter(function (e) { return e.courseId === courseId; });
+    },
+
+    /** 写入一条例外；同一门课同一天只留一条（后写的覆盖先写的） */
+    addCourseException: function (data) {
+      if (!data || !data.courseId || !data.date) return null;
+      var type = data.type === 'room' || data.type === 'move' ? data.type : 'cancel';
+      state.courseExceptions = (state.courseExceptions || []).filter(function (e) {
+        return !(e.courseId === data.courseId && e.date === data.date);
+      });
+      var ex = {
+        id: uid('cex'),
+        courseId: data.courseId,
+        date: data.date,
+        type: type,
+        location: (data.location || '').trim(),
+        toDate: data.toDate || '',
+        toPeriodId: data.toPeriodId || '',
+        toStart: data.toStart || '',
+        toEnd: data.toEnd || '',
+        createdAt: new Date().toISOString()
+      };
+      state.courseExceptions.push(ex);
+      this.emit();
+      return ex;
+    },
+
+    removeCourseException: function (id) {
+      state.courseExceptions = (state.courseExceptions || []).filter(function (e) { return e.id !== id; });
+      this.emit();
+    },
+
     /* ===== 一次性日程 ===== */
     addEvent: function (data) {
       var e = {
@@ -2959,7 +3042,8 @@
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         taskId: String(data.taskId || ''),   // 挂在哪条待办上：双向关联的这一头
-        from: String(data.from || '')        // 记录来源：'block' = 月历里补录的时间块
+        from: String(data.from || ''),       // 记录来源：'block' = 月历里补录的时间块
+        planned: !!data.planned              // true = 计划专注块（还没发生，不进统计与投入）
       };
       state.activities.push(a);
       this.emit();
@@ -3896,7 +3980,9 @@
           name: r.name || '时间块',
           type: r.type || 'other',
           from: 'block',
-          note: '月历时间块补录'
+          taskId: r.taskId || '',
+          planned: !!r.planned,
+          note: r.planned ? '月历计划专注块' : '月历时间块补录'
         });
       });
       this.emit();
@@ -3917,7 +4003,7 @@
      * 否则同一段专注会被算两次。
      */
     taskInvest: function (taskId) {
-      var list = this.activitiesOfTask(taskId);
+      var list = this.activitiesOfTask(taskId).filter(function (a) { return !a.planned; });
       var minutes = 0, last = '';
       list.forEach(function (a) {
         minutes += TimeUtil.diffMin(a.start, a.end);
@@ -3931,8 +4017,18 @@
       return { minutes: minutes, count: list.length, pomodoros: pomos, last: last, recent: recent };
     },
 
-    /** 打卡型的日期槽位 */
-    planSlots: function (plan) {
+    /** 某条待办在某天的「计划专注块」分钟数（from:'block' 且 planned） */
+    taskPlannedOn: function (taskId, dateStr) {
+      var min = 0;
+      (state.activities || []).forEach(function (a) {
+        if (a.taskId === taskId && a.date === dateStr && a.from === 'block' && a.planned) {
+          min += TimeUtil.diffMin(a.start, a.end);
+        }
+      });
+      return min;
+    },
+
+    /** 打卡型的日期槽位 */    planSlots: function (plan) {
       var slots = [];
       var start = DateUtil.parse(plan.startDate) || DateUtil.today();
       if (plan.type !== 'checkin') return slots;
@@ -4664,7 +4760,8 @@
       var dow = DateUtil.isoDow(d);
       var weekNo = this.weekOf(d);
 
-      var courses = this.coursesOnDay(dow, weekNo);
+      // 单次例外生效后的课表：停课/调走的当天不再计入「上课」时长
+      var courses = this.coursesOnDate(dateStr);
       var cr = [], seen = {};
       courses.forEach(function (c) {
         var key = c.day + '|' + (c.periodId || ('t' + c.startTime + c.endTime));
@@ -4674,9 +4771,12 @@
         if (t) cr = cr.concat(expandRange(t.start, t.end));
       });
 
-      var activities = this.activitiesOf(dateStr);
-      var ar = [];
-      activities.forEach(function (a) { ar = ar.concat(expandRange(a.start, a.end)); });
+    var activities = this.activitiesOf(dateStr);
+    var ar = [];
+    activities.forEach(function (a) {
+      if (a.planned) return;      // 计划块不是实际投入，不进统计
+      ar = ar.concat(expandRange(a.start, a.end));
+    });
 
       var events = this.eventsOf(dateStr);
       var er = [];
@@ -4797,6 +4897,7 @@
         grades: obj.grades || {},
         periods: (obj.periods && obj.periods.length) ? obj.periods : ds.periods,
         courses: obj.courses || [],
+        courseExceptions: Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [],
         tasks: obj.tasks || [],
         taskSeq: obj.taskSeq || {},
         settings: Object.assign({}, ds.settings, obj.settings || {}),

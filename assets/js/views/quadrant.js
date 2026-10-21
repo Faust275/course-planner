@@ -455,7 +455,7 @@
       });
     }
 
-    Store.coursesOnDay(DateUtil.isoDow(d), Store.weekOf(d)).forEach(function (c) {
+    Store.coursesOnDate(DateUtil.toStr(d)).forEach(function (c) {
       var t = Store.courseTime(c);
       if (!t) return;
       TimeUtil.expand(t.start, t.end).forEach(function (x) {

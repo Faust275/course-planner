@@ -448,3 +448,51 @@ sw.js 字节不变就永远不重新 install，新版发不出去。
 
 `verify_gesture_sw.mjs`（18 项，自带临时目录静态服务，可原地改文件模拟发新版）：
 横滑 9 项 + SW 9 项，含断网回退、新 SW 接管弹 Toast、点击刷新、离线能力保留。
+
+## 单次调课/停课/调休 + 待办抽屉计划块（已实施）
+
+### 背景
+
+外部审查两条建议，核实后全部采纳（有取舍）：① 临时调课三件套是高校学生最大刚需，
+现状确实只有严格周历；② 待办日历化（Time-Blocking）——采纳「待办抽屉 + 一键划计划块 +
+计划 vs 实际」，**砍掉拖拽排期**（移动端误触多，与横滑手势的「不抢滚动」原则冲突）。
+同时把例外判定拆成第一个纯模块，作为 store.js 拆分（③）的第一刀。
+
+### course-exception.js（纯模块）
+
+- `dayEffect(base, dateStr, list)` → `{kept, removed}`：kept 里换教室的带 `_exRoom`，
+  removed 带 `_off('cancel'|'move')` 与 `_moveTo`；`moveIns(list, dateStr)`、
+  `forCourse(list, courseId)` → `{excludes, rooms, moves}` 供 ICS 用。
+- 不依赖 Store/DateUtil，tests/run.mjs **直接读源文件测试**（16 条），
+  不再用括号平衡正则从 index.html 掏代码——这就是拆分要的收益。
+- Store 新 API：`coursesOnDate(dateStr)`（今天的实际课表，含调进来的课，带 `_moveIn`）、
+  `canceledLessonsOn`、`lessonExceptionsOfCourse`、`addCourseException`（同课同天覆盖写）、
+  `removeCourseException`。`_dayStat`、`snapshotForWidget` 与今日/日程/月历/象限/提醒
+  全部改走 `coursesOnDate`——**改课表口径时只动一处**。
+
+### 消费方
+
+- 今日页：课程卡「调整」入口 + 灰显停课条（划线 + 「本次停课 / 已调走·调至 X/X」）+
+  调进来的课「调自 X/X」chip、换教室「换教室」chip；节数按生效课表算。
+- 页面内提醒：`todayLessons` 过滤停课/调走，换教室用新教室，调进来的照常提醒。
+- .ics：例外原日期加 `EXDATE`；换教室/调课生成单独 VEVENT（UID `cex-*`）。
+- 月历：日详情课程行带徽标；时间带只画生效课。
+- 统计：停课当天「上课」分钟不计。
+
+### 待办抽屉 + 计划块
+
+- 月历选中日卡片：时间块下方「待办抽屉」，点待办在当天找第一个 1 小时空档划
+  「计划 · 学习」块（自动带 taskId）。
+- 时间块编辑弹窗：新增「关联待办」（可选）与「性质」（实际投入/仅作计划）。
+- 计划块 = activity `{from:'block', planned:true, taskId}`：时间带虚线格（`.cp-plan`）；
+  **不进统计（_dayStat 过滤）、不进 taskInvest**——计划不是实际，不做假数据。
+- 待办弹窗「时间投入」区：今日计划 X · 今日实际 Y（还差 Z）· 累计已投入。
+- taskInvest 曾把计划块算进「已投入」（测试抓到），已修：口径=排除 planned。
+
+### 验证
+
+- tests/run.mjs：新增 CourseException 16 条（直读源文件），总数 561。
+- verify_course_ex.mjs（24 项）：UI 停课流、灰显、提醒例外、统计、EXDATE、
+  调课事件、月历联动、同步码、孤儿例外不报错。
+- verify_timeplan.mjs（17 项）：一键划块、虚线、不进统计/投入、弹窗计划vs实际、清空。
+- 全量 22 verify + eq_check 0 差异；390px 无横向溢出。

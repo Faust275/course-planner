@@ -177,7 +177,7 @@
 
     var dow = DateUtil.isoDow(d);
     var wk = Store.weekOf(d);
-    var courses = Store.coursesOnDay(dow, wk);
+    var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
 
     // 当天已记录的时间（分钟）
@@ -233,7 +233,7 @@
     var d = DateUtil.parse(ds);
     var dow = DateUtil.isoDow(d);
     var wk = Store.weekOf(d);
-    var courses = Store.coursesOnDay(dow, wk);
+    var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
     var st = Store.dayStat(ds);
     var mins = {};
@@ -265,6 +265,9 @@
     /* ---- 时间块补录 ---- */
     card.appendChild(blockEditor(ds));
 
+    /* ---- 待办抽屉：点待办一键划计划块 ---- */
+    card.appendChild(taskDrawer(ds));
+
     /* ---- 课程 ---- */
     if (courses.length) {
       card.appendChild(el('div', { class: 'cal-sub' }, ['课程']));
@@ -275,7 +278,12 @@
         } }, [
           el('span', { class: 'cal-time', text: t ? t.start : '--:--' }),
           el('i', { class: 'cal-color', style: { background: c.color } }),
-          el('span', { class: 'cal-name', text: c.name + (c.location ? ' · ' + c.location : '') })
+          el('span', {
+            class: 'cal-name',
+            text: c.name + (c.location ? ' · ' + c.location : '') +
+                  (c._moveIn ? '（调自 ' + (c._moveFrom || '').slice(5).replace('-', '/') + '）' : '')
+          }),
+          c._exRoom ? el('span', { class: 'chip chip-amber', text: '换教室' }) : null
         ]));
       });
     }
@@ -359,8 +367,8 @@
     for (var i = 0; i < SLOT_N; i++) slots[i] = null;
     var d = DateUtil.parse(ds);
 
-    /* 课程：最底层，只读 */
-    Store.coursesOnDay(DateUtil.isoDow(d), Store.weekOf(d)).forEach(function (c) {
+    /* 课程：最底层，只读（单次例外生效后的课表，停课/调走的不画） */
+    Store.coursesOnDate(ds).forEach(function (c) {
       var t = Store.courseTime(c);
       if (t && t.start && t.end) {
         paintRange(slots, t.start, t.end, { kind: 'course', color: c.color, label: c.name });
@@ -383,29 +391,42 @@
       slots[slotOfMin(TimeUtil.toMin(m.time))] = { kind: 'meal', color: '#ef4444', label: '用餐' };
     });
 
-    /* 活动：象限里手动记的只读，时间块补录的可改 */
+    /* 活动：象限里手动记的只读，时间块补录/计划块的可改 */
     Store.activitiesOf(ds).forEach(function (a) {
       if (!a.start) return;
       var isBlock = a.from === 'block';
       paintRange(slots, a.start, a.end, {
         kind: isBlock ? 'block' : 'act',
         color: actOf(a.type).color,
-        label: isBlock ? actOf(a.type).label : (a.name || '活动'),
-        type: a.type
+        label: (isBlock && a.planned ? '计划 · ' : '') + (isBlock ? actOf(a.type).label : (a.name || '活动')),
+        type: a.type,
+        taskId: a.taskId || '',
+        planned: !!a.planned
       });
     });
     return slots;
   }
 
-  /** 把「时间块」那一层写回 Store（只动 from === 'block' 的记录） */
+  /** 把「时间块」那一层写回 Store（只动 from === 'block' 的记录）。
+   *  同类型 + 同关联待办 + 同计划/实际才合并成一条。 */
   function saveBlocks(ds, slots) {
     var runs = [];
     var i = 0;
     while (i < SLOT_N) {
       if (!slots[i] || slots[i].kind !== 'block') { i++; continue; }
       var j = i;
-      while (j < SLOT_N && slots[j] && slots[j].kind === 'block' && slots[j].type === slots[i].type) j++;
-      runs.push({ start: hmOfSlot(i), end: hmOfSlot(j), type: slots[i].type, name: actOf(slots[i].type).label });
+      while (j < SLOT_N && slots[j] && slots[j].kind === 'block' &&
+             slots[j].type === slots[i].type &&
+             (slots[j].taskId || '') === (slots[i].taskId || '') &&
+             !!slots[j].planned === !!slots[i].planned) j++;
+      var lbl = actOf(slots[i].type).label;
+      runs.push({
+        start: hmOfSlot(i), end: hmOfSlot(j),
+        type: slots[i].type,
+        name: slots[i].planned ? '计划 · ' + lbl : lbl,
+        taskId: slots[i].taskId || '',
+        planned: !!slots[i].planned
+      });
       i = j;
     }
     Store.saveTimeBlocks(ds, runs);
@@ -429,7 +450,8 @@
         (function (idx) {
           var s = slots[idx];
           var cls = 'tb-cell' + (idx % 2 === 0 ? ' is-hour' : '') +
-                    (s ? ' has' : '') + (s && s.kind === 'block' ? ' editable' : '');
+                    (s ? ' has' : '') + (s && s.kind === 'block' ? ' editable' : '') +
+                    (s && s.planned ? ' plan' : '');
           bar.appendChild(el('div', {
             class: cls,
             style: s ? { background: s.color } : null,
@@ -441,16 +463,20 @@
       }
       var mins = blockMin();
       info.textContent = mins
-        ? '时间块已记 ' + TimeUtil.humanMin(mins) + '（点格子可改或清除）'
+        ? '时间块已记 ' + TimeUtil.humanMin(mins) + '（虚线格是计划块，点格子可改或清除）'
         : '点格子补录：一次半小时，也可以一次涂 1 / 2 / 4 小时';
     }
 
-    function apply(idx, span, type) {
+    function apply(idx, span, type, taskId, planned) {
       for (var k = idx; k < idx + span && k < SLOT_N; k++) {
         // 只改「空」和「时间块」这两类格子，课程 / 睡眠 / 手动记录不动
         var cur = slots[k];
         if (cur && cur.kind !== 'block') continue;
-        slots[k] = type ? { kind: 'block', color: actOf(type).color, label: actOf(type).label, type: type } : null;
+        slots[k] = type ? {
+          kind: 'block', color: actOf(type).color,
+          label: (planned ? '计划 · ' : '') + actOf(type).label,
+          type: type, taskId: taskId || '', planned: !!planned
+        } : null;
       }
       saveBlocks(ds, slots);
       slots = readSlots(ds);      // 以 Store 为准重画，底层信息才不会被抹掉
@@ -460,6 +486,8 @@
 
     function pick(idx) {
       var span = 1;
+      var taskId = '';
+      var planned = false;
       var m;
       var spanSeg = V.segment([
         { value: '1', label: '半小时' },
@@ -472,9 +500,23 @@
       (global.ACT_TYPES || []).forEach(function (t) {
         typeBox.appendChild(el('button', {
           class: 'tb-type',
-          onclick: function () { m.close(); apply(idx, span, t.value); }
+          onclick: function () { m.close(); apply(idx, span, t.value, taskId, planned); }
         }, [el('i', { style: { background: t.color } }), t.label]));
       });
+
+      // 关联待办（可选）：划出来的时间就记在这条待办头上
+      var pend = Store.pendingTasks().filter(function (t) { return !t.parentId; }).slice(0, 30);
+      var taskSel = V.select(
+        [{ value: '', label: '不关联待办' }].concat(pend.map(function (t) {
+          return { value: t.id, label: t.title };
+        })), '');
+      taskSel.addEventListener('change', function () { taskId = taskSel.value; });
+
+      // 仅作计划：还没发生的时间安排，不进统计与已投入
+      var modeSeg = V.segment([
+        { value: 'act', label: '实际投入' },
+        { value: 'plan', label: '仅作计划' }
+      ], 'act', function (v) { planned = v === 'plan'; });
 
       m = V.modal({
         title: '这段时间在做什么',
@@ -484,8 +526,10 @@
             text: hmOfSlot(idx) + ' 起，选完立刻生效'
           }),
           V.field('涂多久', spanSeg, '半小时一格；一次涂多格会自动合并成一条记录'),
-          V.field('类型', typeBox)
-        ],
+          V.field('类型', typeBox),
+          pend.length ? V.field('关联待办', taskSel, '关联后这段时长会记进待办的「已投入」') : null,
+          V.field('性质', modeSeg, '「仅作计划」画成虚线格，不进统计，事后可点格子改成实际')
+        ].filter(Boolean),
         footer: el('div', { class: 'modal-foot' }, [
           el('button', {
             class: 'btn btn-danger', text: '清除这段',
@@ -531,6 +575,83 @@
       el('button', { class: 'btn btn-sm', onclick: clearAll }, ['清空这天的时间块'])
     ]));
     return wrap;
+  }
+
+  /* ==========================================================
+   * 待办抽屉：点一条待办，就在这天的时间轴上划一块计划
+   * 「我想在今天下午专门做待办 A」——不用想半天从几点开始，
+   * 先划 1 小时占住，实际做了多少由专注和补录说话。
+   * ========================================================== */
+  function taskDrawer(ds) {
+    var wrap = el('div', { class: 'card', style: { padding: '14px 16px', marginTop: '14px' } });
+    var pend = Store.pendingTasks().filter(function (t) { return !t.parentId; });
+    // 今天到期 / 已逾期的排前面，其余按截止日期
+    pend.sort(function (a, b) {
+      var da = a.dueDate || '9999-99-99', db = b.dueDate || '9999-99-99';
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+    pend = pend.slice(0, 8);
+
+    wrap.appendChild(el('div', { class: 'section-title' }, [
+      '待办抽屉',
+      el('span', { class: 'q-count', text: pend.length ? '点一条，划 1 小时计划块' : '' })
+    ]));
+
+    if (!pend.length) {
+      wrap.appendChild(el('div', { class: 'q-empty', text: '没有未完成的待办，去待办页加一条吧。' }));
+      return wrap;
+    }
+
+    function actualOn(t) {
+      var min = 0;
+      (Store.activitiesOfTask(t.id) || []).forEach(function (a) {
+        if (a.date === ds && !a.planned) min += TimeUtil.diffMin(a.start, a.end);
+      });
+      return min;
+    }
+
+    pend.forEach(function (t) {
+      var planned = Store.taskPlannedOn(t.id, ds);
+      var actual = actualOn(t);
+      var tag = [];
+      if (planned) tag.push('计划 ' + TimeUtil.humanMin(planned));
+      if (actual) tag.push('实际 ' + TimeUtil.humanMin(actual));
+      wrap.appendChild(el('div', {
+        class: 'tb-drawer-row',
+        onclick: function () { paintPlanned(ds, t); }
+      }, [
+        el('i', { class: 'cal-color', style: { background: '#0ea5e9' } }),
+        el('span', { class: 'tb-drawer-name', text: t.title }),
+        t.dueDate ? el('span', { class: 'chip', text: DateUtil.human(t.dueDate) }) : null,
+        tag.length ? el('span', { class: 'tb-drawer-tag', text: tag.join(' · ') }) : null
+      ]));
+    });
+    return wrap;
+  }
+
+  /** 在 ds 这天给待办 t 找第一个连续 1 小时空档，划一块「学习」计划块 */
+  function paintPlanned(ds, t) {
+    var slots = readSlots(ds);
+    var now = new Date();
+    var startIdx = (ds === DateUtil.toStr(DateUtil.today()))
+      ? Math.max(0, slotOfMin(now.getHours() * 60 + now.getMinutes()))
+      : slotOfMin(8 * 60);
+    var found = -1;
+    for (var i = startIdx; i + 1 < SLOT_N; i++) {
+      var a = slots[i], b = slots[i + 1];
+      if ((!a || a.kind === 'block') && (!b || b.kind === 'block')) { found = i; break; }
+    }
+    if (found < 0) { UI.toast('这天找不到连续 1 小时的空档', 'err'); return; }
+    for (var k = found; k < found + 2; k++) {
+      slots[k] = {
+        kind: 'block', type: 'study',
+        color: actOf('study').color, label: '计划 · 学习',
+        taskId: t.id, planned: true
+      };
+    }
+    saveBlocks(ds, slots);
+    view.render();
+    UI.toast('已为「' + (t.title.length > 10 ? t.title.slice(0, 10) + '…' : t.title) + '」划 1 小时计划块');
   }
 
   (window.VIEWS = window.VIEWS || []).push(view);

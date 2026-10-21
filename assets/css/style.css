@@ -490,6 +490,26 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .cp-toast .cp-update-btn:active { transform: scale(.96); }
 
+/* 单次调课：「调整」入口（chip 外观但要能点） */
+.cp-lesson-adj-btn {
+  cursor: pointer; border: 1px solid var(--line); background: transparent;
+  color: var(--text-3); font-size: 11px; padding: 2px 9px;
+}
+.cp-lesson-adj-btn:active { transform: scale(.95); }
+
+/* 计划专注块：虚线描边，一眼区分「打算学」和「已经学了」 */
+.cp-tb-cell.cp-plan { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); border: 2px dashed rgba(15, 23, 42, .45); }
+
+/* 待办抽屉 */
+.cp-tb-drawer-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 2px;
+  border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 8px;
+}
+.cp-tb-drawer-row:last-child { border-bottom: none; }
+.cp-tb-drawer-row:active { background: var(--bg-2, #f1f3f8); }
+.cp-tb-drawer-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-tb-drawer-tag { font-size: 11.5px; color: var(--text-3); flex: 0 0 auto; }
+
 /* ============ 响应式 ============ */
 @media (max-width: 900px) {
   .cp-toast-root { bottom: calc(var(--tabbar-h) + 22px); }

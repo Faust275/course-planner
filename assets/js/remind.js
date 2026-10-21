@@ -128,9 +128,37 @@
       return DateUtil.toStr(DateUtil.addDays(base, (weekNo - 1) * 7 + (day - 1)));
     }
 
-    /* ---- 课程：每个时段一条重复事件 ---- */
+    /** 该日期如果这门课确实有课，返回那个时段的 {start,end,oldLoc}；否则 null */
+    function timeForCourseDate(c, dateStr) {
+      var pd = DateUtil.parse(dateStr);
+      if (!pd) return null;
+      var weekNo = Math.floor(DateUtil.diffDays(pd, base) / 7) + 1;
+      var dow = DateUtil.isoDow(pd);
+      var hit = null;
+      (c.slots || []).forEach(function (s) {
+        if (!s || +s.day !== dow || hit) return;
+        var occ = slotOccurrences(c.startWeek, c.endWeek, c.weekType);
+        if (!occ) return;
+        var interval = (c.weekType === 'odd' || c.weekType === 'even') ? 2 : 1;
+        for (var k = 0; k < occ.count; k++) {
+          if (dateOfWeekDay(occ.first + k * interval, dow) === dateStr) {
+            var p = s.timeMode === 'custom'
+              ? { start: s.startTime || '08:00', end: s.endTime || s.startTime || '08:00' }
+              : periods[s.periodId];
+            if (p && p.start) hit = { start: p.start, end: p.end, oldLoc: s.location || c.location || '' };
+          }
+        }
+      });
+      return hit;
+    }
+
+    /* ---- 课程：每个时段一条重复事件；单次调课例外用 EXDATE 排掉，
+     *        换教室/调课在对应日期生成单独事件（RRULE 事件带不了单次变更） ---- */
     if (inc.courses !== false && base) {
+      var exList = global.CourseException ? global.CourseException.normalize(o.exceptions) : [];
       (o.courses || []).forEach(function (c) {
+        var fc = global.CourseException ? global.CourseException.forCourse(exList, c.id) : { excludes: [], rooms: [], moves: [] };
+
         (c.slots || []).forEach(function (s, i) {
           if (!s || !s.day) return;
           var p = s.timeMode === 'custom'
@@ -139,6 +167,13 @@
           if (!p || !p.start) return;
           var occ = slotOccurrences(c.startWeek, c.endWeek, c.weekType);
           if (!occ) return;
+          var interval = (c.weekType === 'odd' || c.weekType === 'even') ? 2 : 1;
+          // 这个时段的所有上课日期（拿去跟例外的原日期求交集 → EXDATE）
+          var occDates = [];
+          for (var k = 0; k < occ.count; k++) occDates.push(dateOfWeekDay(occ.first + k * interval, +s.day));
+          var exLines = fc.excludes
+            .filter(function (d) { return occDates.indexOf(d) >= 0; })
+            .map(function (d) { return 'EXDATE:' + icsDT(d, p.start); });
           var date = dateOfWeekDay(occ.first, +s.day);
           var byday = BYDAY[(+s.day) - 1];
           if (!byday) return;
@@ -152,10 +187,45 @@
           lines.push('DTSTART:' + icsDT(date, p.start));
           lines.push('DTEND:' + icsDT(date, p.end || p.start));
           lines.push('RRULE:' + rrule);
+          exLines.forEach(function (l) { lines.push(l); });
           lines.push('SUMMARY:' + icsEscape(c.name));
           if (loc) lines.push('LOCATION:' + icsEscape(loc));
           if (c.teacher) lines.push('DESCRIPTION:' + icsEscape(c.teacher));
           valarm(c.name, lead).forEach(function (l) { lines.push(l); });
+          lines.push('END:VEVENT');
+        });
+
+        /* 换教室：原日期已被 EXDATE 排掉，这里补一条新教室的单次事件 */
+        fc.rooms.forEach(function (e) {
+          var t = timeForCourseDate(c, e.date);
+          if (!t) return;
+          lines.push('BEGIN:VEVENT');
+          lines.push('UID:cex-' + e.id + '@course-planner');
+          lines.push('DTSTAMP:' + stamp);
+          lines.push('DTSTART:' + icsDT(e.date, t.start));
+          lines.push('DTEND:' + icsDT(e.date, t.end || t.start));
+          lines.push('SUMMARY:' + icsEscape(c.name));
+          lines.push('LOCATION:' + icsEscape(e.location));
+          lines.push('DESCRIPTION:' + icsEscape('临时换教室（原 ' + (t.oldLoc || c.location || '') + '）'));
+          valarm(c.name, lead).forEach(function (l) { lines.push(l); });
+          lines.push('END:VEVENT');
+        });
+
+        /* 调课：原日期已 EXDATE，在调到的日期生成关联原课程的单次事件 */
+        fc.moves.forEach(function (e) {
+          var t = e.toPeriodId
+            ? (periods[e.toPeriodId] || null)
+            : (e.toStart ? { start: e.toStart, end: e.toEnd || e.toStart } : timeForCourseDate(c, e.date));
+          if (!t || !t.start) return;
+          lines.push('BEGIN:VEVENT');
+          lines.push('UID:cex-' + e.id + '@course-planner');
+          lines.push('DTSTAMP:' + stamp);
+          lines.push('DTSTART:' + icsDT(e.toDate, t.start));
+          lines.push('DTEND:' + icsDT(e.toDate, t.end || t.start));
+          lines.push('SUMMARY:' + icsEscape(c.name + '（调课）'));
+          if (c.location || e.location) lines.push('LOCATION:' + icsEscape(e.location || c.location));
+          lines.push('DESCRIPTION:' + icsEscape('由 ' + e.date + ' 调至'));
+          valarm(c.name + '（调课）', lead).forEach(function (l) { lines.push(l); });
           lines.push('END:VEVENT');
         });
       });
@@ -282,6 +352,7 @@
       semesterStart: DateUtil.toStr(Store.semesterStart()),
       periods: Store.periods,
       courses: courses,
+      exceptions: Store.state.courseExceptions || [],
       exams: o.exams ? exams : [],
       events: o.events ? Store.state.events : [],
       include: { courses: true, exams: !!o.exams, events: !!o.events },
@@ -400,14 +471,22 @@
     } catch (e) { /* 声音不重要，失败就算了 */ }
   }
 
-  /** 今天要上的课（按今天星期几 + 本周是否在上） */
+  /** 今天要上的课（按今天星期几 + 本周是否在上；单次调课例外生效） */
   function todayLessons() {
     var today = DateUtil.today();
+    var todayStr = DateUtil.toStr(today);
     var dow = DateUtil.isoDow(today);
     var weekNo = Store.weekOf(today);
     var out = [];
+    // 单次例外：停课/调走的不提醒，换教室的用新教室，调进来的照样提醒
+    var exByCid = {};
+    (Store.canceledLessonsOn(todayStr) || []).forEach(function (c) { exByCid[c.courseId] = c; });
     semesterCourses().forEach(function (c) {
       if (!Store.courseInWeek(c, weekNo)) return;
+      if (exByCid[c.id]) return;
+      var roomEx = Store.lessonExceptionsOfCourse(c.id).filter(function (e) {
+        return e.type === 'room' && e.location && e.date === todayStr;
+      })[0];
       (c.slots || []).forEach(function (s) {
         if (!s || +s.day !== dow) return;
         var p = s.timeMode === 'custom'
@@ -419,8 +498,28 @@
               return null;
             })();
         if (!p || !p.start) return;
-        out.push({ course: c, slot: s, period: p, startMin: TimeUtil.toMin(p.start) });
+        var courseRef = c;
+        if (roomEx) {
+          courseRef = {};
+          Object.keys(c).forEach(function (k) { courseRef[k] = c[k]; });
+          courseRef.location = roomEx.location;
+        }
+        out.push({ course: courseRef, slot: s, period: p, startMin: TimeUtil.toMin(p.start) });
       });
+    });
+    // 调进来的课：以原课程为模板，按调到的节次/时间提醒
+    (Store.coursesOnDate(todayStr) || []).forEach(function (c) {
+      if (!c._moveIn) return;
+      var p = c.timeMode === 'custom'
+        ? { id: '', start: c.startTime || '', end: c.endTime || c.startTime || '' }
+        : (function () {
+            for (var i = 0; i < Store.periods.length; i++) {
+              if (Store.periods[i].id === c.periodId) return Store.periods[i];
+            }
+            return null;
+          })();
+      if (!p || !p.start) return;
+      out.push({ course: c, slot: { day: dow, location: c.location || '' }, period: p, startMin: TimeUtil.toMin(p.start) });
     });
     return out.sort(function (a, b) { return a.startMin - b.startMin; });
   }

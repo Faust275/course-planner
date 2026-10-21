@@ -51,7 +51,9 @@
       var dow = DateUtil.isoDow(today);
       var weekNo = Store.currentWeek();
       var inTerm = weekNo >= 1 && weekNo <= Store.semester.weeks;
-      var courses = Store.coursesOnDay(dow, weekNo);
+      var todayStr = DateUtil.toStr(today);
+      // 单次例外生效后的课表：停课/调走的不算节数，调进来的算
+      var courses = Store.coursesOnDate(todayStr);
       // 「今日」只看顶层任务：子任务在父任务里展开看，避免同一件事刷两遍
       var todayTasks = Store.todayTasks().filter(function (t) { return !t.parentId; });
       var overdue = Store.overdueTasks().filter(function (t) { return !t.parentId; });
@@ -223,12 +225,13 @@
             ])
           )
         ]));
-      } else if (!courses.length) {
-        section.appendChild(el('div', { class: 'card' }, [
+      } else {
+        // 生效课 + 被停/被调走的（灰显）一起进时间线；全被调走也不至于误以为没课
+        var dayItems = buildDayItems(courses, todayStr, true);
+        if (dayItems.length) section.appendChild(courseTimeline(dayItems, now));
+        else section.appendChild(el('div', { class: 'card' }, [
           V.empty(V.icons.today, '今天没有课', '可以安排自习，或者处理一下待办清单。')
         ]));
-      } else {
-        section.appendChild(courseTimeline(buildDayItems(courses, DateUtil.toStr(today)), now));
       }
       leftCol.appendChild(section);
 
@@ -509,17 +512,32 @@
     }).length;
   }
 
-  /** 今日时间线：课程 + 一次性日程合并 */
-  function buildDayItems(courses, dateStr) {
+  /** 今日时间线：课程 + 一次性日程合并；withOff=true 时把被停/调走的课灰显带出来 */
+  function buildDayItems(courses, dateStr, withOff) {
     var items = [];
     courses.forEach(function (c) {
       var t = Store.courseTime(c) || { start: '--:--', end: '--:--', label: '—' };
       items.push({
         kind: 'course', sort: t.start, start: t.start, end: t.end,
-        title: c.name, sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
-        color: c.color, course: c
+        title: c.name,
+        sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
+        color: c.color, course: c,
+        moveFrom: c._moveIn ? c._moveFrom : '',      // 调进来的：显示「调自 X/X」
+        roomChanged: c._exRoom || ''                 // 换过教室的：显示「换教室」
       });
     });
+    if (withOff) {
+      Store.canceledLessonsOn(dateStr).forEach(function (c) {
+        var t = Store.courseTime(c) || { start: '--:--', end: '--:--', label: '—' };
+        items.push({
+          kind: 'course-off', sort: t.start, start: t.start, end: t.end,
+          title: c.name,
+          sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
+          color: c.color, course: c,
+          offType: c._off, moveTo: c._moveTo || ''
+        });
+      });
+    }
     Store.examsOf(dateStr).forEach(function (e) {
       items.push({
         kind: 'exam', sort: e.start || '08:00', start: e.start || '—', end: e.end || '—',
@@ -546,10 +564,15 @@
     items.forEach(function (it, i) {
       var start = timeToDate(it.start);
       var end = timeToDate(it.end);
-      var state = now < start ? 'future' : (now > end ? 'past' : 'now');
+      var isOff = it.kind === 'course-off';
+      var state = isOff ? 'off' : (now < start ? 'future' : (now > end ? 'past' : 'now'));
 
       var stateChip;
-      if (state === 'now') stateChip = el('span', { class: 'chip chip-green', text: '进行中' });
+      if (state === 'off') {
+        // 停课 / 已调走：灰色说明chip，不再给倒计时
+        stateChip = el('span', { class: 'chip', style: { background: 'var(--bg-2, #eef0f5)', color: 'var(--text-3)' },
+          text: it.offType === 'move' ? ('已调走 · 调至 ' + (it.moveTo || '').slice(5).replace('-', '/')) : '本次停课' });
+      } else if (state === 'now') stateChip = el('span', { class: 'chip chip-green', text: '进行中' });
       else if (state === 'past') stateChip = el('span', { class: 'chip', text: '已结束' });
       else {
         var mins = Math.round((start - now) / 60000);
@@ -563,7 +586,7 @@
         style: {
           display: 'flex', gap: '12px', padding: '11px 0',
           borderBottom: i === items.length - 1 ? 'none' : '1px solid var(--line)',
-          opacity: state === 'past' ? '.62' : '1'
+          opacity: state === 'past' ? '.62' : (isOff ? '.55' : '1')
         }
       }, [
         el('div', { style: { width: '48px', flex: '0 0 48px', textAlign: 'right', paddingTop: '1px' } }, [
@@ -582,19 +605,36 @@
         el('div', {
           style: { flex: '1', minWidth: '0', cursor: 'pointer' },
           onclick: function () {
-            if (it.kind === 'course') global.__CourseDialog.detail(it.course.id);
+            if (it.kind === 'course' || isOff) global.__CourseDialog.detail(it.course.id);
             else if (it.kind === 'exam') { if (it.courseId) global.__CourseDialog.detail(it.courseId); }
             else global.EventDetail.open(it.event.id);
           }
         }, [
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
-            el('b', { style: { fontSize: '14px', fontWeight: '650' }, text: it.title }),
+            el('b', {
+              style: { fontSize: '14px', fontWeight: '650', textDecoration: isOff ? 'line-through' : 'none' },
+              text: it.title
+            }),
+            it.kind === 'course' && it.moveFrom ? el('span', { class: 'chip chip-blue', text: '调自 ' + it.moveFrom.slice(5).replace('-', '/') }) : null,
+            it.kind === 'course' && it.roomChanged ? el('span', { class: 'chip chip-amber', text: '换教室' }) : null,
             it.kind === 'event' ? el('span', { class: 'chip chip-primary', text: '日程' }) : null,
             it.kind === 'exam' ? el('span', { class: 'chip chip-red', text: '考试' }) : null,
-            stateChip
+            stateChip,
+            // 单次调整入口：今天这节课 停课/换教室/调课 就在这里点
+            (it.kind === 'course' || isOff) ? el('button', {
+              class: 'chip lesson-adj-btn',
+              text: '调整',
+              onclick: function (e) {
+                e.stopPropagation();
+                if (global.__LessonDialog) global.__LessonDialog.open(it.course.id, DateUtil.toStr(DateUtil.today()));
+              }
+            }) : null
           ]),
           el('div', {
-            style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' },
+            style: {
+              fontSize: '12px', color: 'var(--text-3)', marginTop: '2px',
+              textDecoration: isOff ? 'line-through' : 'none'
+            },
             text: it.sub
           })
         ])

@@ -339,6 +339,66 @@ function eq(label, got, want) {
   ok ? pass++ : fail++;
 }
 
+/* ==========================================================
+ * CourseException（直接 import 源文件——纯模块拆分后的新测法，
+ * 不再需要用括号平衡正则从 index.html 里掏代码）
+ * ========================================================== */
+const ceSrc = readFileSync(new URL('../assets/js/course-exception.js', import.meta.url), 'utf8');
+new Function(ceSrc)();
+const CE = globalThis.CourseException;
+
+const BASE = [
+  { courseId: 'c1', id: 'c1', day: 2, name: '高数', location: '教三 301' },
+  { courseId: 'c2', id: 'c2', day: 2, name: '英语', location: '外语楼 204' }
+];
+
+console.log('CourseException.normalize');
+eq('剔除缺 courseId 的', CE.normalize([{ type: 'cancel', date: '2026-10-01' }]), []);
+eq('剔除坏日期的', CE.normalize([{ courseId: 'c1', type: 'cancel', date: '10-01' }]), []);
+eq('保留合法的', CE.normalize([{ courseId: 'c1', type: 'cancel', date: '2026-10-01' }]).length, 1);
+
+console.log('CourseException.dayEffect');
+let r = CE.dayEffect(BASE, '2026-10-06', [
+  { courseId: 'c1', type: 'cancel', date: '2026-10-06' }
+]);
+eq('停课：kept 只剩另一门', r.kept.map(c => c.courseId), ['c2']);
+eq('停课：removed 带标记', r.removed.map(c => c.courseId + ':' + c._off), ['c1:cancel']);
+
+r = CE.dayEffect(BASE, '2026-10-06', [
+  { courseId: 'c1', type: 'room', date: '2026-10-06', location: '三教 402' }
+]);
+eq('换教室：kept 保留且覆盖地点', r.kept[0].location, '三教 402');
+eq('换教室：带 _exRoom 标记', r.kept[0]._exRoom, '三教 402');
+eq('换教室：不进 removed', r.removed, []);
+
+r = CE.dayEffect(BASE, '2026-10-06', [
+  { courseId: 'c2', type: 'move', date: '2026-10-06', toDate: '2026-10-10' }
+]);
+eq('调走：原日期移除', r.kept.map(c => c.courseId), ['c1']);
+eq('调走：removed 带 _moveTo', r.removed[0]._moveTo, '2026-10-10');
+
+eq('没例外的日子原样返回', CE.dayEffect(BASE, '2026-10-07', []).kept.length, 2);
+
+console.log('CourseException.moveIns');
+eq('调进目标日期', CE.moveIns([
+  { courseId: 'c1', type: 'move', date: '2026-10-06', toDate: '2026-10-10' },
+  { courseId: 'c2', type: 'move', date: '2026-10-07', toDate: '2026-10-11' }
+], '2026-10-10').length, 1);
+eq('停课不算调进', CE.moveIns([
+  { courseId: 'c1', type: 'cancel', date: '2026-10-06', toDate: '2026-10-10' }
+], '2026-10-10').length, 0);
+
+console.log('CourseException.forCourse');
+let fc = CE.forCourse([
+  { courseId: 'c1', type: 'cancel', date: '2026-10-06' },
+  { courseId: 'c1', type: 'room', date: '2026-10-13', location: '三教 402' },
+  { courseId: 'c1', type: 'move', date: '2026-10-08', toDate: '2026-10-11' },
+  { courseId: 'c2', type: 'cancel', date: '2026-10-06' }
+], 'c1');
+eq('excludes 去重收集三个原日期', fc.excludes, ['2026-10-06', '2026-10-13', '2026-10-08']);
+eq('rooms 一条', fc.rooms.length, 1);
+eq('moves 一条且带 toDate', fc.moves[0].toDate, '2026-10-11');
+
 console.log('TimeUtil.toMin');
 eq('08:30 -> 510', TimeUtil.toMin('08:30'), 510);
 eq('00:00 -> 0', TimeUtil.toMin('00:00'), 0);

@@ -177,6 +177,15 @@
       var myKids = isEdit ? Store.subtasksOf(taskId) : [];
       // 反查：这条待办上挂了哪些时间记录（番茄钟结束会自动写一条）
       var inv0 = isEdit ? Store.taskInvest(taskId) : null;
+      // 今天为这条待办划了多少计划块（Time-Blocking 的「计划」一头）
+      var planMin0 = isEdit ? Store.taskPlannedOn(taskId, DateUtil.toStr(DateUtil.today())) : 0;
+      var actualToday0 = isEdit ? (function () {
+        var min = 0;
+        (Store.activitiesOfTask(taskId) || []).forEach(function (a) {
+          if (a.date === DateUtil.toStr(DateUtil.today()) && !a.planned) min += TimeUtil.diffMin(a.start, a.end);
+        });
+        return min;
+      })() : 0;
 
       var courseOpts = [{ value: '', label: '不关联课程' }].concat(
         Store.courses.map(function (c) { return { value: c.id, label: c.name }; })
@@ -342,15 +351,20 @@
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote),
         /* ---- 已投入（时间记录的另一头） ---- */
-        (inv0 && inv0.minutes > 0) ? el('div', { class: 'field' }, [
-          el('label', { text: '已投入' }),
+        (inv0 && (inv0.minutes > 0 || planMin0 > 0)) ? el('div', { class: 'field' }, [
+          el('label', { text: '时间投入' }),
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
-            el('span', { class: 'chip chip-green', text: TimeUtil.humanMin(inv0.minutes) }),
-            el('span', {
+            (inv0 && inv0.minutes > 0) ? el('span', { class: 'chip chip-green', text: '已投入 ' + TimeUtil.humanMin(inv0.minutes) }) : null,
+            planMin0 > 0 ? el('span', { class: 'chip chip-blue', text: '今日计划 ' + TimeUtil.humanMin(planMin0) }) : null,
+            planMin0 > 0 ? el('span', {
+              style: { fontSize: '12.5px', color: actualToday0 >= planMin0 ? 'var(--text-3)' : 'var(--amber)' },
+              text: '今日实际 ' + TimeUtil.humanMin(actualToday0) + (actualToday0 >= planMin0 ? ' · 已达成' : ' · 还差 ' + TimeUtil.humanMin(planMin0 - actualToday0))
+            }) : null,
+            (inv0 && inv0.minutes > 0) ? el('span', {
               style: { fontSize: '12.5px', color: 'var(--text-3)' },
               text: inv0.count + ' 条记录' + (inv0.pomodoros ? ' · ' + inv0.pomodoros + ' 个番茄' : '') +
                     (inv0.last ? ' · 最近 ' + inv0.last.slice(5) : '')
-            })
+            }) : null
           ]),
           el('div', { class: 'task-invest-list' }, inv0.recent.map(function (a) {
             return el('button', {

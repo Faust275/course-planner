@@ -1482,10 +1482,23 @@
         });
       }
 
+      var exCount = Store.lessonExceptionsOfCourse(courseId).length;
+      var exField = V.field('单次调整', el('div', {}, [
+        el('button', {
+          class: 'btn btn-sm',
+          text: exCount ? ('本次停课 / 换教室 / 调课（已有 ' + exCount + ' 条）') : '本次停课 / 换教室 / 调课',
+          onclick: function () {
+            m.close();
+            setTimeout(function () { LessonDialog.open(courseId, DateUtil.toStr(DateUtil.today())); }, 200);
+          }
+        })
+      ]));
+
       var m = V.modal({
         title: '课程详情',
         body: [
           info,
+          exField,
           V.field('作业与待办', taskList)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -1545,6 +1558,135 @@
   global.UI.hStatusColor = function (t) {
     return t.status === 'done' ? 'var(--text-3)' : (t.status === 'doing' ? 'var(--amber)' : 'var(--primary)');
   };
+
+  /* ==========================================================
+   * 单次调课例外：本次停课 / 临时换教室 / 调课补课
+   * 只影响选中的那一天，不动整学期的周历规则。
+   * ========================================================== */
+  var LessonDialog = {
+    open: function (courseId, dateStr) {
+      var c = Store.getCourse(courseId);
+      if (!c) return;
+      var date = dateStr || DateUtil.toStr(DateUtil.today());
+
+      var dateInput = V.input({ type: 'date', value: date });
+      var list = el('div');
+      var m;
+
+      function fmtEx(e) {
+        var d = e.date.slice(5).replace('-', '/');
+        if (e.type === 'cancel') return d + ' 停课';
+        if (e.type === 'room') return d + ' 换教室 → ' + e.location;
+        var to = (e.toDate || '').slice(5).replace('-', '/');
+        var t = e.toPeriodId ? (function () {
+          var p = Store.getPeriod(e.toPeriodId);
+          return p ? p.name : '';
+        })() : (e.toStart ? e.toStart : '');
+        return d + ' 调课 → ' + to + (t ? ' ' + t : '');
+      }
+
+      function drawList() {
+        list.innerHTML = '';
+        var exs = Store.lessonExceptionsOfCourse(courseId);
+        if (!exs.length) {
+          list.appendChild(el('div', { class: 'ocr-hint', text: '这门课还没有任何单次调整。' }));
+          return;
+        }
+        exs.sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
+          list.appendChild(el('div', {
+            style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--line)' }
+          }, [
+            el('span', { text: fmtEx(e), style: { flex: '1', fontSize: '13px' } }),
+            el('button', {
+              class: 'btn btn-sm', text: '撤销',
+              onclick: function () { Store.removeCourseException(e.id); drawList(); }
+            })
+          ]));
+        });
+      }
+
+      function save(ex) {
+        Store.addCourseException(ex);
+        UI.toast('已记录：' + CourseException.TYPES[ex.type]);
+        drawList();
+      }
+
+      function cancelOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        save({ courseId: courseId, date: d, type: 'cancel' });
+      }
+
+      function roomOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        var inp = V.input({ type: 'text', placeholder: '新教室，如 三教 402' });
+        var box = el('div', {}, [
+          el('p', { class: 'ocr-hint', text: d + ' 的「' + c.name + '」改到哪里上课？' }),
+          inp
+        ]);
+        V.confirm({
+          title: '临时换教室',
+          message: '',
+          body: box,
+          okText: '确定'
+        }).then(function (ok) {
+          if (!ok) return;
+          var loc = inp.value.trim();
+          if (!loc) { UI.toast('教室不能为空', 'err'); return; }
+          save({ courseId: courseId, date: d, type: 'room', location: loc });
+        });
+      }
+
+      function moveOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        var toDate = V.input({ type: 'date', value: d });
+        var ps = [{ value: '', label: '时间不变' }].concat((Store.periods || []).map(function (p) {
+          return { value: p.id, label: p.name + ' ' + p.start + '–' + p.end };
+        }));
+        var periodSel = V.select(ps, '');
+        var box = el('div', {}, [
+          el('p', { class: 'ocr-hint', text: '把 ' + d + ' 的「' + c.name + '」调到哪天？' }),
+          V.field('调到', toDate),
+          V.field('节次', periodSel, '选「时间不变」就按原课的节次上')
+        ]);
+        V.confirm({
+          title: '调课到其它日期',
+          message: '',
+          body: box,
+          okText: '确定'
+        }).then(function (ok) {
+          if (!ok) return;
+          var td = toDate.value;
+          if (!td) { UI.toast('先选调到哪天', 'err'); return; }
+          if (td === d) { UI.toast('调到的日期不能和原日期一样', 'err'); return; }
+          save({ courseId: courseId, date: d, type: 'move', toDate: td, toPeriodId: periodSel.value || '' });
+        });
+      }
+
+      m = V.modal({
+        title: '本次课设置',
+        width: '460px',
+        body: [
+          el('p', { class: 'ocr-hint', text: '「' + c.name + '」· 只调整某一天，不影响整学期的课表。' }),
+          V.field('哪一天', dateInput, '默认今天；改日期可以管理其它天的单次调整'),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '10px 0 14px' } }, [
+            el('button', { class: 'btn btn-danger', text: '本次停课', onclick: cancelOne }),
+            el('button', { class: 'btn', text: '临时换教室', onclick: roomOne }),
+            el('button', { class: 'btn', text: '调课到其它天', onclick: moveOne })
+          ]),
+          V.field('已有的调整', list)
+        ],
+        footer: el('div', { class: 'modal-foot' }, [
+          el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } })
+        ])
+      });
+      drawList();
+    }
+  };
+
+  global.__LessonDialog = LessonDialog;
 
   global.__CourseDialog = CourseDialog;
   global.__SampleData = Sample;

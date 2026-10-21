@@ -560,6 +560,26 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .cp-toast .cp-update-btn:active { transform: scale(.96); }
 
+/* 单次调课：「调整」入口（chip 外观但要能点） */
+.cp-lesson-adj-btn {
+  cursor: pointer; border: 1px solid var(--line); background: transparent;
+  color: var(--text-3); font-size: 11px; padding: 2px 9px;
+}
+.cp-lesson-adj-btn:active { transform: scale(.95); }
+
+/* 计划专注块：虚线描边，一眼区分「打算学」和「已经学了」 */
+.cp-tb-cell.cp-plan { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .85); border: 2px dashed rgba(15, 23, 42, .45); }
+
+/* 待办抽屉 */
+.cp-tb-drawer-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 2px;
+  border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 8px;
+}
+.cp-tb-drawer-row:last-child { border-bottom: none; }
+.cp-tb-drawer-row:active { background: var(--bg-2, #f1f3f8); }
+.cp-tb-drawer-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-tb-drawer-tag { font-size: 11.5px; color: var(--text-3); flex: 0 0 auto; }
+
 /* ============ 响应式 ============ */
 @media (max-width: 900px) {
   .cp-toast-root { bottom: calc(var(--tabbar-h) + 22px); }
@@ -4284,6 +4304,120 @@ window.AK_OPS = [
 
 
 /* ==========================================================
+ * 单次调课例外（纯函数模块）
+ * ----------------------------------------------------------
+ * 课程表是按周次严格重复的周历，但大学里最常见的现实是：
+ * 「国庆把周二的课调到周六上」「第 8 周老师开会停课一次」
+ * 「实验课临时改去三教 402」。
+ * 本模块负责这些「只影响某一天」的例外判定，不碰学期规则：
+ *   - cancel：本次停课（当天不再出现这节课）
+ *   - room  ：临时换教室（只覆盖该日期实例的地点）
+ *   - move  ：调课补课（原日期移除，目标日期生成一条关联原课程的单次课）
+ *
+ * 刻意不依赖 Store / DateUtil：输入就是「基础课表实例 + 例外列表 + 日期」，
+ * 输出是纯数据。tests/run.mjs 直接 import 本文件测试，无需构建产物。
+ * 数据形状（Store 落库时保证）：
+ *   { id, courseId, date('YYYY-MM-DD'), type,
+ *     location?          // room：新教室
+ *     toDate?            // move：调到哪天
+ *     toPeriodId?        // move：调到哪节课（与 toStart 二选一，都空 = 时间不变）
+ *     toStart?, toEnd? } // move：自定义时间段
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var TYPES = { cancel: '停课', room: '换教室', move: '调课' };
+
+  function isDate(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+  /** 清洗：剔除缺字段的脏数据（导入旧备份 / 手改数据时的兜底） */
+  function normalize(list) {
+    return (list || []).filter(function (e) {
+      return e && e.courseId && isDate(e.date) && TYPES[e.type];
+    });
+  }
+
+  /** 某课某天的例外（同一门课同一天最多一条，Store 侧写入时保证） */
+  function find(list, courseId, dateStr) {
+    var l = normalize(list);
+    for (var i = 0; i < l.length; i++) {
+      if (l[i].courseId === courseId && l[i].date === dateStr) return l[i];
+    }
+    return null;
+  }
+
+  /**
+   * 某天的实际课表 = 基础课表 + 例外。
+   * @param base   当天按周历算出的课程实例（expandCourse 产物，带 courseId）
+   * @returns { kept, removed }
+   *   kept    生效的课程；换教室的返回副本并带 _exRoom（新教室）
+   *   removed 被停/被调走的课程；带 _off('cancel'|'move')，move 另带 _moveTo
+   */
+  function dayEffect(base, dateStr, list) {
+    var l = normalize(list);
+    var kept = [], removed = [];
+    (base || []).forEach(function (c) {
+      var ex = find(l, c.courseId, dateStr);
+      if (ex && (ex.type === 'cancel' || ex.type === 'move')) {
+        var off = {};
+        Object.keys(c).forEach(function (k) { off[k] = c[k]; });
+        off._off = ex.type;
+        off._exId = ex.id;
+        if (ex.type === 'move') off._moveTo = ex.toDate || '';
+        removed.push(off);
+      } else if (ex && ex.type === 'room' && ex.location) {
+        var cp = {};
+        Object.keys(c).forEach(function (k) { cp[k] = c[k]; });
+        cp.location = ex.location;
+        cp._exRoom = ex.location;
+        cp._exId = ex.id;
+        kept.push(cp);
+      } else {
+        kept.push(c);
+      }
+    });
+    return { kept: kept, removed: removed };
+  }
+
+  /** 调进某天的例外（Store 据此在目标日期生成关联原课程的单次课） */
+  function moveIns(list, dateStr) {
+    return normalize(list).filter(function (e) {
+      return e.type === 'move' && e.toDate === dateStr;
+    });
+  }
+
+  /**
+   * 一门课的全部例外，按导出 .ics 的需要分组：
+   *   excludes 原日期被移除（cancel / move / room 都要 EXDATE——
+   *            room 换的教室靠单独 VEVENT 才能带上新地点）
+   *   rooms    换教室（生成单独 VEVENT）
+   *   moves    调课（在 toDate 生成单独 VEVENT）
+   */
+  function forCourse(list, courseId) {
+    var l = normalize(list).filter(function (e) { return e.courseId === courseId; });
+    return {
+      excludes: l.map(function (e) { return e.date; })
+                 .filter(function (d, i, arr) { return arr.indexOf(d) === i; }),
+      rooms: l.filter(function (e) { return e.type === 'room' && e.location; }),
+      moves: l.filter(function (e) { return e.type === 'move' && isDate(e.toDate || '') })
+    };
+  }
+
+  global.CourseException = {
+    TYPES: TYPES,
+    normalize: normalize,
+    find: find,
+    dayEffect: dayEffect,
+    moveIns: moveIns,
+    forCourse: forCourse
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+
+
+/* ==========================================================
  * Store —— 数据层
  * 全部数据持久化到 localStorage
  * ========================================================== */
@@ -6007,6 +6141,7 @@ window.AK_OPS = [
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
       if (!state.courses) state.courses = [];
+      if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
@@ -6280,7 +6415,7 @@ window.AK_OPS = [
       var weekNo = this.currentWeek();
       var todayStr = DateUtil.toStr(now);
 
-      var courses = this.coursesOnDay(dow, weekNo).map(function (c) {
+      var courses = this.coursesOnDate(todayStr).map(function (c) {
         var t = Store.courseTime(c) || { start: '', end: '' };
         return { start: t.start || '', end: t.end || '', name: c.name, location: c.location || '' };
       });
@@ -7166,6 +7301,88 @@ window.AK_OPS = [
       });
     },
 
+    /* ===== 单次调课例外（停课 / 换教室 / 调课） =====
+     * 周历回答「这门课一般什么时候上」，例外回答「那一天到底上不上、在哪上」。
+     * 判定逻辑在 course-exception.js（纯模块），这里只管存取与拼装。 */
+
+    /** 某天的实际课表：基础周历 + 例外（去掉停课/调走的，换教室的带 _exRoom，
+     *  调进来的以原课程为模板带 _moveIn/_moveFrom）。今天显示、提醒、统计、
+     *  月历时间带全部走这里，别再用 coursesOnDay 直接当日历用。 */
+    coursesOnDate: function (dateStr) {
+      var d = DateUtil.parse(dateStr);
+      if (!d || !global.CourseException) return [];
+      var dow = DateUtil.isoDow(d);
+      var base = this.coursesOnDay(dow, this.weekOf(d));
+      var out = global.CourseException.dayEffect(base, dateStr, state.courseExceptions).kept;
+      var self = this;
+      global.CourseException.moveIns(state.courseExceptions, dateStr).forEach(function (e) {
+        var src = self.getCourse(e.courseId);
+        if (!src) return;
+        var inst = {};
+        Object.keys(src).forEach(function (k) { inst[k] = src[k]; });
+        inst.courseId = src.id;
+        inst._slot = null;
+        inst.day = dow;
+        inst._moveIn = e.id;
+        inst._moveFrom = e.date;
+        if (e.location) inst.location = e.location;
+        if (e.toPeriodId) {
+          inst.timeMode = 'period'; inst.periodId = e.toPeriodId;
+          inst.startTime = ''; inst.endTime = '';
+        } else if (e.toStart) {
+          inst.timeMode = 'custom'; inst.startTime = e.toStart;
+          inst.endTime = e.toEnd || e.toStart;
+        }
+        out.push(inst);
+      });
+      return out.sort(function (a, b) {
+        var ta = Store.courseTime(a), tb = Store.courseTime(b);
+        return (ta ? ta.start : '99:99') < (tb ? tb.start : '99:99') ? -1 : 1;
+      });
+    },
+
+    /** 某天被停 / 被调走的课（今日页灰显用，带 _off 与 _moveTo） */
+    canceledLessonsOn: function (dateStr) {
+      var d = DateUtil.parse(dateStr);
+      if (!d || !global.CourseException) return [];
+      var base = this.coursesOnDay(DateUtil.isoDow(d), this.weekOf(d));
+      return global.CourseException.dayEffect(base, dateStr, state.courseExceptions).removed;
+    },
+
+    /** 一门课的全部例外（课程详情弹窗管理用） */
+    lessonExceptionsOfCourse: function (courseId) {
+      return (state.courseExceptions || []).filter(function (e) { return e.courseId === courseId; });
+    },
+
+    /** 写入一条例外；同一门课同一天只留一条（后写的覆盖先写的） */
+    addCourseException: function (data) {
+      if (!data || !data.courseId || !data.date) return null;
+      var type = data.type === 'room' || data.type === 'move' ? data.type : 'cancel';
+      state.courseExceptions = (state.courseExceptions || []).filter(function (e) {
+        return !(e.courseId === data.courseId && e.date === data.date);
+      });
+      var ex = {
+        id: uid('cex'),
+        courseId: data.courseId,
+        date: data.date,
+        type: type,
+        location: (data.location || '').trim(),
+        toDate: data.toDate || '',
+        toPeriodId: data.toPeriodId || '',
+        toStart: data.toStart || '',
+        toEnd: data.toEnd || '',
+        createdAt: new Date().toISOString()
+      };
+      state.courseExceptions.push(ex);
+      this.emit();
+      return ex;
+    },
+
+    removeCourseException: function (id) {
+      state.courseExceptions = (state.courseExceptions || []).filter(function (e) { return e.id !== id; });
+      this.emit();
+    },
+
     /* ===== 一次性日程 ===== */
     addEvent: function (data) {
       var e = {
@@ -7242,7 +7459,8 @@ window.AK_OPS = [
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         taskId: String(data.taskId || ''),   // 挂在哪条待办上：双向关联的这一头
-        from: String(data.from || '')        // 记录来源：'block' = 月历里补录的时间块
+        from: String(data.from || ''),       // 记录来源：'block' = 月历里补录的时间块
+        planned: !!data.planned              // true = 计划专注块（还没发生，不进统计与投入）
       };
       state.activities.push(a);
       this.emit();
@@ -8179,7 +8397,9 @@ window.AK_OPS = [
           name: r.name || '时间块',
           type: r.type || 'other',
           from: 'block',
-          note: '月历时间块补录'
+          taskId: r.taskId || '',
+          planned: !!r.planned,
+          note: r.planned ? '月历计划专注块' : '月历时间块补录'
         });
       });
       this.emit();
@@ -8200,7 +8420,7 @@ window.AK_OPS = [
      * 否则同一段专注会被算两次。
      */
     taskInvest: function (taskId) {
-      var list = this.activitiesOfTask(taskId);
+      var list = this.activitiesOfTask(taskId).filter(function (a) { return !a.planned; });
       var minutes = 0, last = '';
       list.forEach(function (a) {
         minutes += TimeUtil.diffMin(a.start, a.end);
@@ -8214,8 +8434,18 @@ window.AK_OPS = [
       return { minutes: minutes, count: list.length, pomodoros: pomos, last: last, recent: recent };
     },
 
-    /** 打卡型的日期槽位 */
-    planSlots: function (plan) {
+    /** 某条待办在某天的「计划专注块」分钟数（from:'block' 且 planned） */
+    taskPlannedOn: function (taskId, dateStr) {
+      var min = 0;
+      (state.activities || []).forEach(function (a) {
+        if (a.taskId === taskId && a.date === dateStr && a.from === 'block' && a.planned) {
+          min += TimeUtil.diffMin(a.start, a.end);
+        }
+      });
+      return min;
+    },
+
+    /** 打卡型的日期槽位 */    planSlots: function (plan) {
       var slots = [];
       var start = DateUtil.parse(plan.startDate) || DateUtil.today();
       if (plan.type !== 'checkin') return slots;
@@ -8947,7 +9177,8 @@ window.AK_OPS = [
       var dow = DateUtil.isoDow(d);
       var weekNo = this.weekOf(d);
 
-      var courses = this.coursesOnDay(dow, weekNo);
+      // 单次例外生效后的课表：停课/调走的当天不再计入「上课」时长
+      var courses = this.coursesOnDate(dateStr);
       var cr = [], seen = {};
       courses.forEach(function (c) {
         var key = c.day + '|' + (c.periodId || ('t' + c.startTime + c.endTime));
@@ -8957,9 +9188,12 @@ window.AK_OPS = [
         if (t) cr = cr.concat(expandRange(t.start, t.end));
       });
 
-      var activities = this.activitiesOf(dateStr);
-      var ar = [];
-      activities.forEach(function (a) { ar = ar.concat(expandRange(a.start, a.end)); });
+    var activities = this.activitiesOf(dateStr);
+    var ar = [];
+    activities.forEach(function (a) {
+      if (a.planned) return;      // 计划块不是实际投入，不进统计
+      ar = ar.concat(expandRange(a.start, a.end));
+    });
 
       var events = this.eventsOf(dateStr);
       var er = [];
@@ -9080,6 +9314,7 @@ window.AK_OPS = [
         grades: obj.grades || {},
         periods: (obj.periods && obj.periods.length) ? obj.periods : ds.periods,
         courses: obj.courses || [],
+        courseExceptions: Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [],
         tasks: obj.tasks || [],
         taskSeq: obj.taskSeq || {},
         settings: Object.assign({}, ds.settings, obj.settings || {}),
@@ -10572,9 +10807,37 @@ window.AK_OPS = [
       return DateUtil.toStr(DateUtil.addDays(base, (weekNo - 1) * 7 + (day - 1)));
     }
 
-    /* ---- 课程：每个时段一条重复事件 ---- */
+    /** 该日期如果这门课确实有课，返回那个时段的 {start,end,oldLoc}；否则 null */
+    function timeForCourseDate(c, dateStr) {
+      var pd = DateUtil.parse(dateStr);
+      if (!pd) return null;
+      var weekNo = Math.floor(DateUtil.diffDays(pd, base) / 7) + 1;
+      var dow = DateUtil.isoDow(pd);
+      var hit = null;
+      (c.slots || []).forEach(function (s) {
+        if (!s || +s.day !== dow || hit) return;
+        var occ = slotOccurrences(c.startWeek, c.endWeek, c.weekType);
+        if (!occ) return;
+        var interval = (c.weekType === 'odd' || c.weekType === 'even') ? 2 : 1;
+        for (var k = 0; k < occ.count; k++) {
+          if (dateOfWeekDay(occ.first + k * interval, dow) === dateStr) {
+            var p = s.timeMode === 'custom'
+              ? { start: s.startTime || '08:00', end: s.endTime || s.startTime || '08:00' }
+              : periods[s.periodId];
+            if (p && p.start) hit = { start: p.start, end: p.end, oldLoc: s.location || c.location || '' };
+          }
+        }
+      });
+      return hit;
+    }
+
+    /* ---- 课程：每个时段一条重复事件；单次调课例外用 EXDATE 排掉，
+     *        换教室/调课在对应日期生成单独事件（RRULE 事件带不了单次变更） ---- */
     if (inc.courses !== false && base) {
+      var exList = global.CourseException ? global.CourseException.normalize(o.exceptions) : [];
       (o.courses || []).forEach(function (c) {
+        var fc = global.CourseException ? global.CourseException.forCourse(exList, c.id) : { excludes: [], rooms: [], moves: [] };
+
         (c.slots || []).forEach(function (s, i) {
           if (!s || !s.day) return;
           var p = s.timeMode === 'custom'
@@ -10583,6 +10846,13 @@ window.AK_OPS = [
           if (!p || !p.start) return;
           var occ = slotOccurrences(c.startWeek, c.endWeek, c.weekType);
           if (!occ) return;
+          var interval = (c.weekType === 'odd' || c.weekType === 'even') ? 2 : 1;
+          // 这个时段的所有上课日期（拿去跟例外的原日期求交集 → EXDATE）
+          var occDates = [];
+          for (var k = 0; k < occ.count; k++) occDates.push(dateOfWeekDay(occ.first + k * interval, +s.day));
+          var exLines = fc.excludes
+            .filter(function (d) { return occDates.indexOf(d) >= 0; })
+            .map(function (d) { return 'EXDATE:' + icsDT(d, p.start); });
           var date = dateOfWeekDay(occ.first, +s.day);
           var byday = BYDAY[(+s.day) - 1];
           if (!byday) return;
@@ -10596,10 +10866,45 @@ window.AK_OPS = [
           lines.push('DTSTART:' + icsDT(date, p.start));
           lines.push('DTEND:' + icsDT(date, p.end || p.start));
           lines.push('RRULE:' + rrule);
+          exLines.forEach(function (l) { lines.push(l); });
           lines.push('SUMMARY:' + icsEscape(c.name));
           if (loc) lines.push('LOCATION:' + icsEscape(loc));
           if (c.teacher) lines.push('DESCRIPTION:' + icsEscape(c.teacher));
           valarm(c.name, lead).forEach(function (l) { lines.push(l); });
+          lines.push('END:VEVENT');
+        });
+
+        /* 换教室：原日期已被 EXDATE 排掉，这里补一条新教室的单次事件 */
+        fc.rooms.forEach(function (e) {
+          var t = timeForCourseDate(c, e.date);
+          if (!t) return;
+          lines.push('BEGIN:VEVENT');
+          lines.push('UID:cex-' + e.id + '@course-planner');
+          lines.push('DTSTAMP:' + stamp);
+          lines.push('DTSTART:' + icsDT(e.date, t.start));
+          lines.push('DTEND:' + icsDT(e.date, t.end || t.start));
+          lines.push('SUMMARY:' + icsEscape(c.name));
+          lines.push('LOCATION:' + icsEscape(e.location));
+          lines.push('DESCRIPTION:' + icsEscape('临时换教室（原 ' + (t.oldLoc || c.location || '') + '）'));
+          valarm(c.name, lead).forEach(function (l) { lines.push(l); });
+          lines.push('END:VEVENT');
+        });
+
+        /* 调课：原日期已 EXDATE，在调到的日期生成关联原课程的单次事件 */
+        fc.moves.forEach(function (e) {
+          var t = e.toPeriodId
+            ? (periods[e.toPeriodId] || null)
+            : (e.toStart ? { start: e.toStart, end: e.toEnd || e.toStart } : timeForCourseDate(c, e.date));
+          if (!t || !t.start) return;
+          lines.push('BEGIN:VEVENT');
+          lines.push('UID:cex-' + e.id + '@course-planner');
+          lines.push('DTSTAMP:' + stamp);
+          lines.push('DTSTART:' + icsDT(e.toDate, t.start));
+          lines.push('DTEND:' + icsDT(e.toDate, t.end || t.start));
+          lines.push('SUMMARY:' + icsEscape(c.name + '（调课）'));
+          if (c.location || e.location) lines.push('LOCATION:' + icsEscape(e.location || c.location));
+          lines.push('DESCRIPTION:' + icsEscape('由 ' + e.date + ' 调至'));
+          valarm(c.name + '（调课）', lead).forEach(function (l) { lines.push(l); });
           lines.push('END:VEVENT');
         });
       });
@@ -10726,6 +11031,7 @@ window.AK_OPS = [
       semesterStart: DateUtil.toStr(Store.semesterStart()),
       periods: Store.periods,
       courses: courses,
+      exceptions: Store.state.courseExceptions || [],
       exams: o.exams ? exams : [],
       events: o.events ? Store.state.events : [],
       include: { courses: true, exams: !!o.exams, events: !!o.events },
@@ -10844,14 +11150,22 @@ window.AK_OPS = [
     } catch (e) { /* 声音不重要，失败就算了 */ }
   }
 
-  /** 今天要上的课（按今天星期几 + 本周是否在上） */
+  /** 今天要上的课（按今天星期几 + 本周是否在上；单次调课例外生效） */
   function todayLessons() {
     var today = DateUtil.today();
+    var todayStr = DateUtil.toStr(today);
     var dow = DateUtil.isoDow(today);
     var weekNo = Store.weekOf(today);
     var out = [];
+    // 单次例外：停课/调走的不提醒，换教室的用新教室，调进来的照样提醒
+    var exByCid = {};
+    (Store.canceledLessonsOn(todayStr) || []).forEach(function (c) { exByCid[c.courseId] = c; });
     semesterCourses().forEach(function (c) {
       if (!Store.courseInWeek(c, weekNo)) return;
+      if (exByCid[c.id]) return;
+      var roomEx = Store.lessonExceptionsOfCourse(c.id).filter(function (e) {
+        return e.type === 'room' && e.location && e.date === todayStr;
+      })[0];
       (c.slots || []).forEach(function (s) {
         if (!s || +s.day !== dow) return;
         var p = s.timeMode === 'custom'
@@ -10863,8 +11177,28 @@ window.AK_OPS = [
               return null;
             })();
         if (!p || !p.start) return;
-        out.push({ course: c, slot: s, period: p, startMin: TimeUtil.toMin(p.start) });
+        var courseRef = c;
+        if (roomEx) {
+          courseRef = {};
+          Object.keys(c).forEach(function (k) { courseRef[k] = c[k]; });
+          courseRef.location = roomEx.location;
+        }
+        out.push({ course: courseRef, slot: s, period: p, startMin: TimeUtil.toMin(p.start) });
       });
+    });
+    // 调进来的课：以原课程为模板，按调到的节次/时间提醒
+    (Store.coursesOnDate(todayStr) || []).forEach(function (c) {
+      if (!c._moveIn) return;
+      var p = c.timeMode === 'custom'
+        ? { id: '', start: c.startTime || '', end: c.endTime || c.startTime || '' }
+        : (function () {
+            for (var i = 0; i < Store.periods.length; i++) {
+              if (Store.periods[i].id === c.periodId) return Store.periods[i];
+            }
+            return null;
+          })();
+      if (!p || !p.start) return;
+      out.push({ course: c, slot: { day: dow, location: c.location || '' }, period: p, startMin: TimeUtil.toMin(p.start) });
     });
     return out.sort(function (a, b) { return a.startMin - b.startMin; });
   }
@@ -12882,10 +13216,23 @@ window.AK_OPS = [
         });
       }
 
+      var exCount = Store.lessonExceptionsOfCourse(courseId).length;
+      var exField = V.field('单次调整', el('div', {}, [
+        el('button', {
+          class: 'btn btn-sm',
+          text: exCount ? ('本次停课 / 换教室 / 调课（已有 ' + exCount + ' 条）') : '本次停课 / 换教室 / 调课',
+          onclick: function () {
+            m.close();
+            setTimeout(function () { LessonDialog.open(courseId, DateUtil.toStr(DateUtil.today())); }, 200);
+          }
+        })
+      ]));
+
       var m = V.modal({
         title: '课程详情',
         body: [
           info,
+          exField,
           V.field('作业与待办', taskList)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -12945,6 +13292,135 @@ window.AK_OPS = [
   global.UI.hStatusColor = function (t) {
     return t.status === 'done' ? 'var(--text-3)' : (t.status === 'doing' ? 'var(--amber)' : 'var(--primary)');
   };
+
+  /* ==========================================================
+   * 单次调课例外：本次停课 / 临时换教室 / 调课补课
+   * 只影响选中的那一天，不动整学期的周历规则。
+   * ========================================================== */
+  var LessonDialog = {
+    open: function (courseId, dateStr) {
+      var c = Store.getCourse(courseId);
+      if (!c) return;
+      var date = dateStr || DateUtil.toStr(DateUtil.today());
+
+      var dateInput = V.input({ type: 'date', value: date });
+      var list = el('div');
+      var m;
+
+      function fmtEx(e) {
+        var d = e.date.slice(5).replace('-', '/');
+        if (e.type === 'cancel') return d + ' 停课';
+        if (e.type === 'room') return d + ' 换教室 → ' + e.location;
+        var to = (e.toDate || '').slice(5).replace('-', '/');
+        var t = e.toPeriodId ? (function () {
+          var p = Store.getPeriod(e.toPeriodId);
+          return p ? p.name : '';
+        })() : (e.toStart ? e.toStart : '');
+        return d + ' 调课 → ' + to + (t ? ' ' + t : '');
+      }
+
+      function drawList() {
+        list.innerHTML = '';
+        var exs = Store.lessonExceptionsOfCourse(courseId);
+        if (!exs.length) {
+          list.appendChild(el('div', { class: 'ocr-hint', text: '这门课还没有任何单次调整。' }));
+          return;
+        }
+        exs.sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
+          list.appendChild(el('div', {
+            style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid var(--line)' }
+          }, [
+            el('span', { text: fmtEx(e), style: { flex: '1', fontSize: '13px' } }),
+            el('button', {
+              class: 'btn btn-sm', text: '撤销',
+              onclick: function () { Store.removeCourseException(e.id); drawList(); }
+            })
+          ]));
+        });
+      }
+
+      function save(ex) {
+        Store.addCourseException(ex);
+        UI.toast('已记录：' + CourseException.TYPES[ex.type]);
+        drawList();
+      }
+
+      function cancelOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        save({ courseId: courseId, date: d, type: 'cancel' });
+      }
+
+      function roomOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        var inp = V.input({ type: 'text', placeholder: '新教室，如 三教 402' });
+        var box = el('div', {}, [
+          el('p', { class: 'ocr-hint', text: d + ' 的「' + c.name + '」改到哪里上课？' }),
+          inp
+        ]);
+        V.confirm({
+          title: '临时换教室',
+          message: '',
+          body: box,
+          okText: '确定'
+        }).then(function (ok) {
+          if (!ok) return;
+          var loc = inp.value.trim();
+          if (!loc) { UI.toast('教室不能为空', 'err'); return; }
+          save({ courseId: courseId, date: d, type: 'room', location: loc });
+        });
+      }
+
+      function moveOne() {
+        var d = dateInput.value;
+        if (!d) { UI.toast('先选日期', 'err'); return; }
+        var toDate = V.input({ type: 'date', value: d });
+        var ps = [{ value: '', label: '时间不变' }].concat((Store.periods || []).map(function (p) {
+          return { value: p.id, label: p.name + ' ' + p.start + '–' + p.end };
+        }));
+        var periodSel = V.select(ps, '');
+        var box = el('div', {}, [
+          el('p', { class: 'ocr-hint', text: '把 ' + d + ' 的「' + c.name + '」调到哪天？' }),
+          V.field('调到', toDate),
+          V.field('节次', periodSel, '选「时间不变」就按原课的节次上')
+        ]);
+        V.confirm({
+          title: '调课到其它日期',
+          message: '',
+          body: box,
+          okText: '确定'
+        }).then(function (ok) {
+          if (!ok) return;
+          var td = toDate.value;
+          if (!td) { UI.toast('先选调到哪天', 'err'); return; }
+          if (td === d) { UI.toast('调到的日期不能和原日期一样', 'err'); return; }
+          save({ courseId: courseId, date: d, type: 'move', toDate: td, toPeriodId: periodSel.value || '' });
+        });
+      }
+
+      m = V.modal({
+        title: '本次课设置',
+        width: '460px',
+        body: [
+          el('p', { class: 'ocr-hint', text: '「' + c.name + '」· 只调整某一天，不影响整学期的课表。' }),
+          V.field('哪一天', dateInput, '默认今天；改日期可以管理其它天的单次调整'),
+          el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '10px 0 14px' } }, [
+            el('button', { class: 'btn btn-danger', text: '本次停课', onclick: cancelOne }),
+            el('button', { class: 'btn', text: '临时换教室', onclick: roomOne }),
+            el('button', { class: 'btn', text: '调课到其它天', onclick: moveOne })
+          ]),
+          V.field('已有的调整', list)
+        ],
+        footer: el('div', { class: 'modal-foot' }, [
+          el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } })
+        ])
+      });
+      drawList();
+    }
+  };
+
+  global.__LessonDialog = LessonDialog;
 
   global.__CourseDialog = CourseDialog;
   global.__SampleData = Sample;
@@ -13548,7 +14024,9 @@ window.AK_OPS = [
       var dow = DateUtil.isoDow(today);
       var weekNo = Store.currentWeek();
       var inTerm = weekNo >= 1 && weekNo <= Store.semester.weeks;
-      var courses = Store.coursesOnDay(dow, weekNo);
+      var todayStr = DateUtil.toStr(today);
+      // 单次例外生效后的课表：停课/调走的不算节数，调进来的算
+      var courses = Store.coursesOnDate(todayStr);
       // 「今日」只看顶层任务：子任务在父任务里展开看，避免同一件事刷两遍
       var todayTasks = Store.todayTasks().filter(function (t) { return !t.parentId; });
       var overdue = Store.overdueTasks().filter(function (t) { return !t.parentId; });
@@ -13720,12 +14198,13 @@ window.AK_OPS = [
             ])
           )
         ]));
-      } else if (!courses.length) {
-        section.appendChild(el('div', { class: 'card' }, [
+      } else {
+        // 生效课 + 被停/被调走的（灰显）一起进时间线；全被调走也不至于误以为没课
+        var dayItems = buildDayItems(courses, todayStr, true);
+        if (dayItems.length) section.appendChild(courseTimeline(dayItems, now));
+        else section.appendChild(el('div', { class: 'card' }, [
           V.empty(V.icons.today, '今天没有课', '可以安排自习，或者处理一下待办清单。')
         ]));
-      } else {
-        section.appendChild(courseTimeline(buildDayItems(courses, DateUtil.toStr(today)), now));
       }
       leftCol.appendChild(section);
 
@@ -14006,17 +14485,32 @@ window.AK_OPS = [
     }).length;
   }
 
-  /** 今日时间线：课程 + 一次性日程合并 */
-  function buildDayItems(courses, dateStr) {
+  /** 今日时间线：课程 + 一次性日程合并；withOff=true 时把被停/调走的课灰显带出来 */
+  function buildDayItems(courses, dateStr, withOff) {
     var items = [];
     courses.forEach(function (c) {
       var t = Store.courseTime(c) || { start: '--:--', end: '--:--', label: '—' };
       items.push({
         kind: 'course', sort: t.start, start: t.start, end: t.end,
-        title: c.name, sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
-        color: c.color, course: c
+        title: c.name,
+        sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
+        color: c.color, course: c,
+        moveFrom: c._moveIn ? c._moveFrom : '',      // 调进来的：显示「调自 X/X」
+        roomChanged: c._exRoom || ''                 // 换过教室的：显示「换教室」
       });
     });
+    if (withOff) {
+      Store.canceledLessonsOn(dateStr).forEach(function (c) {
+        var t = Store.courseTime(c) || { start: '--:--', end: '--:--', label: '—' };
+        items.push({
+          kind: 'course-off', sort: t.start, start: t.start, end: t.end,
+          title: c.name,
+          sub: [c.location, c.teacher].filter(Boolean).join(' · ') || t.label,
+          color: c.color, course: c,
+          offType: c._off, moveTo: c._moveTo || ''
+        });
+      });
+    }
     Store.examsOf(dateStr).forEach(function (e) {
       items.push({
         kind: 'exam', sort: e.start || '08:00', start: e.start || '—', end: e.end || '—',
@@ -14043,10 +14537,15 @@ window.AK_OPS = [
     items.forEach(function (it, i) {
       var start = timeToDate(it.start);
       var end = timeToDate(it.end);
-      var state = now < start ? 'future' : (now > end ? 'past' : 'now');
+      var isOff = it.kind === 'course-off';
+      var state = isOff ? 'off' : (now < start ? 'future' : (now > end ? 'past' : 'now'));
 
       var stateChip;
-      if (state === 'now') stateChip = el('span', { class: 'chip chip-green', text: '进行中' });
+      if (state === 'off') {
+        // 停课 / 已调走：灰色说明chip，不再给倒计时
+        stateChip = el('span', { class: 'chip', style: { background: 'var(--bg-2, #eef0f5)', color: 'var(--text-3)' },
+          text: it.offType === 'move' ? ('已调走 · 调至 ' + (it.moveTo || '').slice(5).replace('-', '/')) : '本次停课' });
+      } else if (state === 'now') stateChip = el('span', { class: 'chip chip-green', text: '进行中' });
       else if (state === 'past') stateChip = el('span', { class: 'chip', text: '已结束' });
       else {
         var mins = Math.round((start - now) / 60000);
@@ -14060,7 +14559,7 @@ window.AK_OPS = [
         style: {
           display: 'flex', gap: '12px', padding: '11px 0',
           borderBottom: i === items.length - 1 ? 'none' : '1px solid var(--line)',
-          opacity: state === 'past' ? '.62' : '1'
+          opacity: state === 'past' ? '.62' : (isOff ? '.55' : '1')
         }
       }, [
         el('div', { style: { width: '48px', flex: '0 0 48px', textAlign: 'right', paddingTop: '1px' } }, [
@@ -14079,19 +14578,36 @@ window.AK_OPS = [
         el('div', {
           style: { flex: '1', minWidth: '0', cursor: 'pointer' },
           onclick: function () {
-            if (it.kind === 'course') global.__CourseDialog.detail(it.course.id);
+            if (it.kind === 'course' || isOff) global.__CourseDialog.detail(it.course.id);
             else if (it.kind === 'exam') { if (it.courseId) global.__CourseDialog.detail(it.courseId); }
             else global.EventDetail.open(it.event.id);
           }
         }, [
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
-            el('b', { style: { fontSize: '14px', fontWeight: '650' }, text: it.title }),
+            el('b', {
+              style: { fontSize: '14px', fontWeight: '650', textDecoration: isOff ? 'line-through' : 'none' },
+              text: it.title
+            }),
+            it.kind === 'course' && it.moveFrom ? el('span', { class: 'chip chip-blue', text: '调自 ' + it.moveFrom.slice(5).replace('-', '/') }) : null,
+            it.kind === 'course' && it.roomChanged ? el('span', { class: 'chip chip-amber', text: '换教室' }) : null,
             it.kind === 'event' ? el('span', { class: 'chip chip-primary', text: '日程' }) : null,
             it.kind === 'exam' ? el('span', { class: 'chip chip-red', text: '考试' }) : null,
-            stateChip
+            stateChip,
+            // 单次调整入口：今天这节课 停课/换教室/调课 就在这里点
+            (it.kind === 'course' || isOff) ? el('button', {
+              class: 'chip lesson-adj-btn',
+              text: '调整',
+              onclick: function (e) {
+                e.stopPropagation();
+                if (global.__LessonDialog) global.__LessonDialog.open(it.course.id, DateUtil.toStr(DateUtil.today()));
+              }
+            }) : null
           ]),
           el('div', {
-            style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' },
+            style: {
+              fontSize: '12px', color: 'var(--text-3)', marginTop: '2px',
+              textDecoration: isOff ? 'line-through' : 'none'
+            },
             text: it.sub
           })
         ])
@@ -14295,7 +14811,7 @@ window.AK_OPS = [
 
     var dow = DateUtil.isoDow(d);
     var wk = Store.weekOf(d);
-    var courses = Store.coursesOnDay(dow, wk);
+    var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
 
     // 当天已记录的时间（分钟）
@@ -14351,7 +14867,7 @@ window.AK_OPS = [
     var d = DateUtil.parse(ds);
     var dow = DateUtil.isoDow(d);
     var wk = Store.weekOf(d);
-    var courses = Store.coursesOnDay(dow, wk);
+    var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
     var st = Store.dayStat(ds);
     var mins = {};
@@ -14383,6 +14899,9 @@ window.AK_OPS = [
     /* ---- 时间块补录 ---- */
     card.appendChild(blockEditor(ds));
 
+    /* ---- 待办抽屉：点待办一键划计划块 ---- */
+    card.appendChild(taskDrawer(ds));
+
     /* ---- 课程 ---- */
     if (courses.length) {
       card.appendChild(el('div', { class: 'cal-sub' }, ['课程']));
@@ -14393,7 +14912,12 @@ window.AK_OPS = [
         } }, [
           el('span', { class: 'cal-time', text: t ? t.start : '--:--' }),
           el('i', { class: 'cal-color', style: { background: c.color } }),
-          el('span', { class: 'cal-name', text: c.name + (c.location ? ' · ' + c.location : '') })
+          el('span', {
+            class: 'cal-name',
+            text: c.name + (c.location ? ' · ' + c.location : '') +
+                  (c._moveIn ? '（调自 ' + (c._moveFrom || '').slice(5).replace('-', '/') + '）' : '')
+          }),
+          c._exRoom ? el('span', { class: 'chip chip-amber', text: '换教室' }) : null
         ]));
       });
     }
@@ -14477,8 +15001,8 @@ window.AK_OPS = [
     for (var i = 0; i < SLOT_N; i++) slots[i] = null;
     var d = DateUtil.parse(ds);
 
-    /* 课程：最底层，只读 */
-    Store.coursesOnDay(DateUtil.isoDow(d), Store.weekOf(d)).forEach(function (c) {
+    /* 课程：最底层，只读（单次例外生效后的课表，停课/调走的不画） */
+    Store.coursesOnDate(ds).forEach(function (c) {
       var t = Store.courseTime(c);
       if (t && t.start && t.end) {
         paintRange(slots, t.start, t.end, { kind: 'course', color: c.color, label: c.name });
@@ -14501,29 +15025,42 @@ window.AK_OPS = [
       slots[slotOfMin(TimeUtil.toMin(m.time))] = { kind: 'meal', color: '#ef4444', label: '用餐' };
     });
 
-    /* 活动：象限里手动记的只读，时间块补录的可改 */
+    /* 活动：象限里手动记的只读，时间块补录/计划块的可改 */
     Store.activitiesOf(ds).forEach(function (a) {
       if (!a.start) return;
       var isBlock = a.from === 'block';
       paintRange(slots, a.start, a.end, {
         kind: isBlock ? 'block' : 'act',
         color: actOf(a.type).color,
-        label: isBlock ? actOf(a.type).label : (a.name || '活动'),
-        type: a.type
+        label: (isBlock && a.planned ? '计划 · ' : '') + (isBlock ? actOf(a.type).label : (a.name || '活动')),
+        type: a.type,
+        taskId: a.taskId || '',
+        planned: !!a.planned
       });
     });
     return slots;
   }
 
-  /** 把「时间块」那一层写回 Store（只动 from === 'block' 的记录） */
+  /** 把「时间块」那一层写回 Store（只动 from === 'block' 的记录）。
+   *  同类型 + 同关联待办 + 同计划/实际才合并成一条。 */
   function saveBlocks(ds, slots) {
     var runs = [];
     var i = 0;
     while (i < SLOT_N) {
       if (!slots[i] || slots[i].kind !== 'block') { i++; continue; }
       var j = i;
-      while (j < SLOT_N && slots[j] && slots[j].kind === 'block' && slots[j].type === slots[i].type) j++;
-      runs.push({ start: hmOfSlot(i), end: hmOfSlot(j), type: slots[i].type, name: actOf(slots[i].type).label });
+      while (j < SLOT_N && slots[j] && slots[j].kind === 'block' &&
+             slots[j].type === slots[i].type &&
+             (slots[j].taskId || '') === (slots[i].taskId || '') &&
+             !!slots[j].planned === !!slots[i].planned) j++;
+      var lbl = actOf(slots[i].type).label;
+      runs.push({
+        start: hmOfSlot(i), end: hmOfSlot(j),
+        type: slots[i].type,
+        name: slots[i].planned ? '计划 · ' + lbl : lbl,
+        taskId: slots[i].taskId || '',
+        planned: !!slots[i].planned
+      });
       i = j;
     }
     Store.saveTimeBlocks(ds, runs);
@@ -14547,7 +15084,8 @@ window.AK_OPS = [
         (function (idx) {
           var s = slots[idx];
           var cls = 'tb-cell' + (idx % 2 === 0 ? ' is-hour' : '') +
-                    (s ? ' has' : '') + (s && s.kind === 'block' ? ' editable' : '');
+                    (s ? ' has' : '') + (s && s.kind === 'block' ? ' editable' : '') +
+                    (s && s.planned ? ' plan' : '');
           bar.appendChild(el('div', {
             class: cls,
             style: s ? { background: s.color } : null,
@@ -14559,16 +15097,20 @@ window.AK_OPS = [
       }
       var mins = blockMin();
       info.textContent = mins
-        ? '时间块已记 ' + TimeUtil.humanMin(mins) + '（点格子可改或清除）'
+        ? '时间块已记 ' + TimeUtil.humanMin(mins) + '（虚线格是计划块，点格子可改或清除）'
         : '点格子补录：一次半小时，也可以一次涂 1 / 2 / 4 小时';
     }
 
-    function apply(idx, span, type) {
+    function apply(idx, span, type, taskId, planned) {
       for (var k = idx; k < idx + span && k < SLOT_N; k++) {
         // 只改「空」和「时间块」这两类格子，课程 / 睡眠 / 手动记录不动
         var cur = slots[k];
         if (cur && cur.kind !== 'block') continue;
-        slots[k] = type ? { kind: 'block', color: actOf(type).color, label: actOf(type).label, type: type } : null;
+        slots[k] = type ? {
+          kind: 'block', color: actOf(type).color,
+          label: (planned ? '计划 · ' : '') + actOf(type).label,
+          type: type, taskId: taskId || '', planned: !!planned
+        } : null;
       }
       saveBlocks(ds, slots);
       slots = readSlots(ds);      // 以 Store 为准重画，底层信息才不会被抹掉
@@ -14578,6 +15120,8 @@ window.AK_OPS = [
 
     function pick(idx) {
       var span = 1;
+      var taskId = '';
+      var planned = false;
       var m;
       var spanSeg = V.segment([
         { value: '1', label: '半小时' },
@@ -14590,9 +15134,23 @@ window.AK_OPS = [
       (global.ACT_TYPES || []).forEach(function (t) {
         typeBox.appendChild(el('button', {
           class: 'tb-type',
-          onclick: function () { m.close(); apply(idx, span, t.value); }
+          onclick: function () { m.close(); apply(idx, span, t.value, taskId, planned); }
         }, [el('i', { style: { background: t.color } }), t.label]));
       });
+
+      // 关联待办（可选）：划出来的时间就记在这条待办头上
+      var pend = Store.pendingTasks().filter(function (t) { return !t.parentId; }).slice(0, 30);
+      var taskSel = V.select(
+        [{ value: '', label: '不关联待办' }].concat(pend.map(function (t) {
+          return { value: t.id, label: t.title };
+        })), '');
+      taskSel.addEventListener('change', function () { taskId = taskSel.value; });
+
+      // 仅作计划：还没发生的时间安排，不进统计与已投入
+      var modeSeg = V.segment([
+        { value: 'act', label: '实际投入' },
+        { value: 'plan', label: '仅作计划' }
+      ], 'act', function (v) { planned = v === 'plan'; });
 
       m = V.modal({
         title: '这段时间在做什么',
@@ -14602,8 +15160,10 @@ window.AK_OPS = [
             text: hmOfSlot(idx) + ' 起，选完立刻生效'
           }),
           V.field('涂多久', spanSeg, '半小时一格；一次涂多格会自动合并成一条记录'),
-          V.field('类型', typeBox)
-        ],
+          V.field('类型', typeBox),
+          pend.length ? V.field('关联待办', taskSel, '关联后这段时长会记进待办的「已投入」') : null,
+          V.field('性质', modeSeg, '「仅作计划」画成虚线格，不进统计，事后可点格子改成实际')
+        ].filter(Boolean),
         footer: el('div', { class: 'modal-foot' }, [
           el('button', {
             class: 'btn btn-danger', text: '清除这段',
@@ -14649,6 +15209,83 @@ window.AK_OPS = [
       el('button', { class: 'btn btn-sm', onclick: clearAll }, ['清空这天的时间块'])
     ]));
     return wrap;
+  }
+
+  /* ==========================================================
+   * 待办抽屉：点一条待办，就在这天的时间轴上划一块计划
+   * 「我想在今天下午专门做待办 A」——不用想半天从几点开始，
+   * 先划 1 小时占住，实际做了多少由专注和补录说话。
+   * ========================================================== */
+  function taskDrawer(ds) {
+    var wrap = el('div', { class: 'card', style: { padding: '14px 16px', marginTop: '14px' } });
+    var pend = Store.pendingTasks().filter(function (t) { return !t.parentId; });
+    // 今天到期 / 已逾期的排前面，其余按截止日期
+    pend.sort(function (a, b) {
+      var da = a.dueDate || '9999-99-99', db = b.dueDate || '9999-99-99';
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+    pend = pend.slice(0, 8);
+
+    wrap.appendChild(el('div', { class: 'section-title' }, [
+      '待办抽屉',
+      el('span', { class: 'q-count', text: pend.length ? '点一条，划 1 小时计划块' : '' })
+    ]));
+
+    if (!pend.length) {
+      wrap.appendChild(el('div', { class: 'q-empty', text: '没有未完成的待办，去待办页加一条吧。' }));
+      return wrap;
+    }
+
+    function actualOn(t) {
+      var min = 0;
+      (Store.activitiesOfTask(t.id) || []).forEach(function (a) {
+        if (a.date === ds && !a.planned) min += TimeUtil.diffMin(a.start, a.end);
+      });
+      return min;
+    }
+
+    pend.forEach(function (t) {
+      var planned = Store.taskPlannedOn(t.id, ds);
+      var actual = actualOn(t);
+      var tag = [];
+      if (planned) tag.push('计划 ' + TimeUtil.humanMin(planned));
+      if (actual) tag.push('实际 ' + TimeUtil.humanMin(actual));
+      wrap.appendChild(el('div', {
+        class: 'tb-drawer-row',
+        onclick: function () { paintPlanned(ds, t); }
+      }, [
+        el('i', { class: 'cal-color', style: { background: '#0ea5e9' } }),
+        el('span', { class: 'tb-drawer-name', text: t.title }),
+        t.dueDate ? el('span', { class: 'chip', text: DateUtil.human(t.dueDate) }) : null,
+        tag.length ? el('span', { class: 'tb-drawer-tag', text: tag.join(' · ') }) : null
+      ]));
+    });
+    return wrap;
+  }
+
+  /** 在 ds 这天给待办 t 找第一个连续 1 小时空档，划一块「学习」计划块 */
+  function paintPlanned(ds, t) {
+    var slots = readSlots(ds);
+    var now = new Date();
+    var startIdx = (ds === DateUtil.toStr(DateUtil.today()))
+      ? Math.max(0, slotOfMin(now.getHours() * 60 + now.getMinutes()))
+      : slotOfMin(8 * 60);
+    var found = -1;
+    for (var i = startIdx; i + 1 < SLOT_N; i++) {
+      var a = slots[i], b = slots[i + 1];
+      if ((!a || a.kind === 'block') && (!b || b.kind === 'block')) { found = i; break; }
+    }
+    if (found < 0) { UI.toast('这天找不到连续 1 小时的空档', 'err'); return; }
+    for (var k = found; k < found + 2; k++) {
+      slots[k] = {
+        kind: 'block', type: 'study',
+        color: actOf('study').color, label: '计划 · 学习',
+        taskId: t.id, planned: true
+      };
+    }
+    saveBlocks(ds, slots);
+    view.render();
+    UI.toast('已为「' + (t.title.length > 10 ? t.title.slice(0, 10) + '…' : t.title) + '」划 1 小时计划块');
   }
 
   (window.VIEWS = window.VIEWS || []).push(view);
@@ -14724,9 +15361,9 @@ window.AK_OPS = [
         var dateStr = DateUtil.toStr(date);
         var items = [];
 
-        // 课程
+        // 课程（含单次调课例外：停课的不出现，调进来的会出现）
         if (viewState.showCourses) {
-          Store.coursesOnDay(DateUtil.isoDow(date), Store.weekOf(date)).forEach(function (c) {
+          Store.coursesOnDate(dateStr).forEach(function (c) {
             var t = Store.courseTime(c);
             items.push({
               kind: 'course', sort: t ? t.start : '00:00',
@@ -15614,7 +16251,7 @@ window.AK_OPS = [
       });
     }
 
-    Store.coursesOnDay(DateUtil.isoDow(d), Store.weekOf(d)).forEach(function (c) {
+    Store.coursesOnDate(DateUtil.toStr(d)).forEach(function (c) {
       var t = Store.courseTime(c);
       if (!t) return;
       TimeUtil.expand(t.start, t.end).forEach(function (x) {
@@ -16745,6 +17382,15 @@ window.AK_OPS = [
       var myKids = isEdit ? Store.subtasksOf(taskId) : [];
       // 反查：这条待办上挂了哪些时间记录（番茄钟结束会自动写一条）
       var inv0 = isEdit ? Store.taskInvest(taskId) : null;
+      // 今天为这条待办划了多少计划块（Time-Blocking 的「计划」一头）
+      var planMin0 = isEdit ? Store.taskPlannedOn(taskId, DateUtil.toStr(DateUtil.today())) : 0;
+      var actualToday0 = isEdit ? (function () {
+        var min = 0;
+        (Store.activitiesOfTask(taskId) || []).forEach(function (a) {
+          if (a.date === DateUtil.toStr(DateUtil.today()) && !a.planned) min += TimeUtil.diffMin(a.start, a.end);
+        });
+        return min;
+      })() : 0;
 
       var courseOpts = [{ value: '', label: '不关联课程' }].concat(
         Store.courses.map(function (c) { return { value: c.id, label: c.name }; })
@@ -16910,15 +17556,20 @@ window.AK_OPS = [
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote),
         /* ---- 已投入（时间记录的另一头） ---- */
-        (inv0 && inv0.minutes > 0) ? el('div', { class: 'field' }, [
-          el('label', { text: '已投入' }),
+        (inv0 && (inv0.minutes > 0 || planMin0 > 0)) ? el('div', { class: 'field' }, [
+          el('label', { text: '时间投入' }),
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
-            el('span', { class: 'chip chip-green', text: TimeUtil.humanMin(inv0.minutes) }),
-            el('span', {
+            (inv0 && inv0.minutes > 0) ? el('span', { class: 'chip chip-green', text: '已投入 ' + TimeUtil.humanMin(inv0.minutes) }) : null,
+            planMin0 > 0 ? el('span', { class: 'chip chip-blue', text: '今日计划 ' + TimeUtil.humanMin(planMin0) }) : null,
+            planMin0 > 0 ? el('span', {
+              style: { fontSize: '12.5px', color: actualToday0 >= planMin0 ? 'var(--text-3)' : 'var(--amber)' },
+              text: '今日实际 ' + TimeUtil.humanMin(actualToday0) + (actualToday0 >= planMin0 ? ' · 已达成' : ' · 还差 ' + TimeUtil.humanMin(planMin0 - actualToday0))
+            }) : null,
+            (inv0 && inv0.minutes > 0) ? el('span', {
               style: { fontSize: '12.5px', color: 'var(--text-3)' },
               text: inv0.count + ' 条记录' + (inv0.pomodoros ? ' · ' + inv0.pomodoros + ' 个番茄' : '') +
                     (inv0.last ? ' · 最近 ' + inv0.last.slice(5) : '')
-            })
+            }) : null
           ]),
           el('div', { class: 'task-invest-list' }, inv0.recent.map(function (a) {
             return el('button', {
