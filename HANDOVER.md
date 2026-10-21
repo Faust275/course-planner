@@ -12,9 +12,9 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | `ccec9a6` feat: 20 色板(palette.js) + 合成玉换算勘误(160→600) + 新手教程非核心关闭按钮/首屏提醒 + 8 项新功能介绍 |
+| 最后提交 | 工作区含未提交改动：**统计归位 + 积分系统联动 + 板块深层联动（B–G）**（详见 ROADMAP 末节）；上一提交 `ccec9a6` |
 | 单元测试 | `node tests/run.mjs` **567 条全过**（Palette / CourseException 直读源文件） |
-| UI 回归 | 23 个 `verify_*.mjs` 全部通过（需 Playwright；gesture_sw/course_ex/timeplan/onboard 自带或用 URL 变量指定服务） |
+| UI 回归 | 26 个 `verify_*.mjs` 全部通过（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口） |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 545 条纯函数单测
+node tests/run.mjs              # 567 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -46,7 +46,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 - **`assets/js/store.js`** —— 唯一的数据模型与持久化层。所有页面都通过它读写，不直接碰 localStorage/IndexedDB。含版本迁移、自动备份、同步码导出。改数据结构先改这里，并写迁移逻辑。
 - **`assets/js/ui.js`** —— `el()` 元素工厂、`V.modal/confirm/segment/select` 弹窗组件、Toast。
 - **`assets/js/router.js` / `app.js`** —— hash 深链接（`#/today`、`#/diary` 等）、启动 boot、SW 注册、安装提示。
-- **`assets/js/views/*.js`** —— 每个页面一个文件（课表、今日、日历、象限、待办、计划、目标、日记、记账、专注、统计、设置……），互不 import。
+- **`assets/js/views/*.js`** —— 每个页面一个文件（课表、今日、日历、待办、计划、目标、日记、记账、专注、设置……），互不 import。注意：**日程 / 象限 / 统计已由独立视图改为宿主页分页**（`calendar.js` 承载 `AgendaPane`，`tasks.js` 承载 `QuadrantPane` / `StatsPane`），地址是 `#/calendar/agenda`、`#/tasks/quadrant`、`#/tasks/stats`。
 - **`tests/run.mjs`** —— 纯函数单测，不依赖浏览器；`verify_*.mjs` 是 Playwright 端到端回归。
 - **一次性脚本**：`namespace_cp.py`（批量加类名前缀）、`sync_from_index.py`（从历史单文件反抽模块）已在迁移期发挥作用，新功能用不到。
 
