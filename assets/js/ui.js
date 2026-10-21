@@ -95,6 +95,33 @@
     }, 1900);
   }
 
+  /* ---------- 横滑手势 ----------
+   * 给视图根节点挂左右滑动：左滑（手指向左）触发 handlers.left，右滑触发 handlers.right。
+   * 用于课表切周、月历切月。三道防误触：
+   *  - 起点落在横向可滚动的子元素里则放弃（不抢表格的横滚）；
+   *  - 水平位移至少 60px 且明显大于垂直位移（1.5 倍），纵向滚动不受影响；
+   *  - 多指触摸直接放弃。全部 passive 监听，不阻塞滚动。 */
+  function addSwipe(elm, handlers) {
+    var sx = 0, sy = 0, tracking = false, skip = false;
+    elm.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      var t = e.touches[0];
+      sx = t.clientX; sy = t.clientY; tracking = true; skip = false;
+      for (var n = e.target; n && n !== elm; n = n.parentNode) {
+        if (n.nodeType === 1 && n.scrollWidth > n.clientWidth + 1) { skip = true; break; }
+      }
+    }, { passive: true });
+    elm.addEventListener('touchend', function (e) {
+      if (!tracking || skip) return;
+      tracking = false;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx < 0) { if (handlers.left) handlers.left(); }
+      else if (handlers.right) handlers.right();
+    }, { passive: true });
+  }
+
   /* ---------- Modal ---------- */
   var openCount = 0;
 
@@ -691,6 +718,7 @@
     el: el, appendAll: appendAll, svg: svg, frag: frag,
     $: $, $$: $$, escapeHTML: escapeHTML,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
+    addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,

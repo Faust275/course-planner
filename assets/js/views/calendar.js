@@ -56,6 +56,13 @@
     mount: function (host) {
       this.root = el('section', { class: 'view', id: 'view-calendar' });
       host.appendChild(this.root);
+
+      // 移动端横滑切月：左滑下个月，右滑上个月（与月份头箭头一致）
+      V.addSwipe(this.root, {
+        left: function () { shiftMonth(1); view.render(); },
+        right: function () { shiftMonth(-1); view.render(); }
+      });
+
       ensureCursor();
       this.render();
       return this.root;

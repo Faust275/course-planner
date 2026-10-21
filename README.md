@@ -56,6 +56,7 @@ course-planner-web/
 ├── verify_pwa.mjs            深链接：地址解析、落地、地址栏同步、manifest、file:// 模式
 ├── verify_goals.mjs          目标：三类关键结果、5 个上限、归档留档、月末复盘、搜索、同步、积分与成就
 ├── verify_tasklink.mjs       待办↔时间投入、月历时间块补录、统计「今年」档、弹窗空项回归
+├── verify_gesture_sw.mjs     横滑切周/切月手势、SW 更新（network-first、断网回退、更新 Toast）
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
 └── tests/run.mjs             纯函数单测（545 条）
 ```
@@ -177,6 +178,18 @@ node verify_goals.mjs       # 目标（三类关键结果、上限、归档、�
 
 统计与复盘的五档之外新增「今年」：1 月 1 日 → 今天，参照区间是去年同期（去年 1/1 → 去年的今天）。
 跨度半年以上时热力条自动从「按周」换成「按月」，一格一个月。
+
+## 横滑手势与 PWA 更新提示
+
+**横滑**：课表页左右滑切周、日历页左右滑切月（与页内箭头同向：左滑=下一个）。
+`UI.addSwipe` 三道防误触——起点在横向可滚动的子元素里不抢手势、水平位移 ≥60px
+且明显大于纵向位移才触发、全部 passive 监听不影响滚动。
+
+**PWA 更新**：`sw.js` 对页面导航请求走 **network-first**（断网才回退缓存），
+修复了旧 cache-first 策略下「sw.js 不变就永远拿不到新版 index.html」的坑；
+新 SW 被安装接管时页面右下角弹「应用已更新 · 立即刷新」Toast，点击即换新版。
+注意：SW 注册要求 `load` 事件，而 boot 在其后才跑完——app.js 里用 `onReady`
+兼容了「load 已触发」的情况，改这块时别把注册时机改回去。
 
 ## 工程约定
 

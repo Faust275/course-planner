@@ -481,6 +481,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes toastOut { to { opacity: 0; transform: translateY(8px); } }
 
+/* PWA 更新提示（带「立即刷新」按钮；toast-root 整体 pointer-events:none，这里单独恢复） */
+#cpUpdateToast { pointer-events: auto; }
+.cp-toast .cp-update-btn {
+  margin-left: 4px; border: none; cursor: pointer;
+  background: rgba(255, 255, 255, .14); color: #9ecbff;
+  font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 14px;
+}
+.cp-toast .cp-update-btn:active { transform: scale(.96); }
+
 /* ============ 响应式 ============ */
 @media (max-width: 900px) {
   .cp-toast-root { bottom: calc(var(--tabbar-h) + 22px); }

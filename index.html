@@ -551,6 +551,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes toastOut { to { opacity: 0; transform: translateY(8px); } }
 
+/* PWA 更新提示（带「立即刷新」按钮；toast-root 整体 pointer-events:none，这里单独恢复） */
+#cpUpdateToast { pointer-events: auto; }
+.cp-toast .cp-update-btn {
+  margin-left: 4px; border: none; cursor: pointer;
+  background: rgba(255, 255, 255, .14); color: #9ecbff;
+  font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 14px;
+}
+.cp-toast .cp-update-btn:active { transform: scale(.96); }
+
 /* ============ 响应式 ============ */
 @media (max-width: 900px) {
   .cp-toast-root { bottom: calc(var(--tabbar-h) + 22px); }
@@ -9253,6 +9262,33 @@ window.AK_OPS = [
     }, 1900);
   }
 
+  /* ---------- 横滑手势 ----------
+   * 给视图根节点挂左右滑动：左滑（手指向左）触发 handlers.left，右滑触发 handlers.right。
+   * 用于课表切周、月历切月。三道防误触：
+   *  - 起点落在横向可滚动的子元素里则放弃（不抢表格的横滚）；
+   *  - 水平位移至少 60px 且明显大于垂直位移（1.5 倍），纵向滚动不受影响；
+   *  - 多指触摸直接放弃。全部 passive 监听，不阻塞滚动。 */
+  function addSwipe(elm, handlers) {
+    var sx = 0, sy = 0, tracking = false, skip = false;
+    elm.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      var t = e.touches[0];
+      sx = t.clientX; sy = t.clientY; tracking = true; skip = false;
+      for (var n = e.target; n && n !== elm; n = n.parentNode) {
+        if (n.nodeType === 1 && n.scrollWidth > n.clientWidth + 1) { skip = true; break; }
+      }
+    }, { passive: true });
+    elm.addEventListener('touchend', function (e) {
+      if (!tracking || skip) return;
+      tracking = false;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx < 0) { if (handlers.left) handlers.left(); }
+      else if (handlers.right) handlers.right();
+    }, { passive: true });
+  }
+
   /* ---------- Modal ---------- */
   var openCount = 0;
 
@@ -9849,6 +9885,7 @@ window.AK_OPS = [
     el: el, appendAll: appendAll, svg: svg, frag: frag,
     $: $, $$: $$, escapeHTML: escapeHTML,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
+    addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,
@@ -12053,6 +12090,12 @@ window.AK_OPS = [
       this.root = el('section', { class: 'view', id: 'view-schedule' });
       host.appendChild(this.root);
 
+      // 移动端横滑切周：左滑下一周，右滑上一周（与顶部箭头一致）
+      V.addSwipe(this.root, {
+        left: function () { self.goWeek(self.week + 1); },
+        right: function () { self.goWeek(self.week - 1); }
+      });
+
       this.render();
       return this.root;
     },
@@ -14131,6 +14174,13 @@ window.AK_OPS = [
     mount: function (host) {
       this.root = el('section', { class: 'view', id: 'view-calendar' });
       host.appendChild(this.root);
+
+      // 移动端横滑切月：左滑下个月，右滑上个月（与月份头箭头一致）
+      V.addSwipe(this.root, {
+        left: function () { shiftMonth(1); view.render(); },
+        right: function () { shiftMonth(-1); view.render(); }
+      });
+
       ensureCursor();
       this.render();
       return this.root;
@@ -33933,15 +33983,47 @@ window.Pet = (function () {
     }).catch(function () {});
   }
 
+  /**
+   * PWA 更新提示：新 SW 被安装并接管（skipWaiting + clients.claim）后会触发
+   * controllerchange——此时页面跑的还是旧 HTML，弹一个可点击刷新的常驻 Toast。
+   * 首次安装（加载时本来就没有 controller 接管）不算更新，不弹。
+   */
+  function watchSwUpdate() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) { hadController = true; return; }
+      if (document.getElementById('cpUpdateToast')) return;
+      var btn = UI.el('button', { class: 'update-btn', onclick: function () { location.reload(); } }, ['立即刷新']);
+      var node = UI.el('div', { class: 'toast info', id: 'cpUpdateToast' }, [
+        UI.el('span', { text: '应用已更新' }),
+        btn
+      ]);
+      document.getElementById('toastRoot').appendChild(node);
+      setTimeout(function () {
+        if (!node.parentNode) return;
+        node.classList.add('cp-out');
+        setTimeout(function () { node.remove(); }, 220);
+      }, 15000);
+    });
+  }
+
+  /** load 事件可能在 boot() 完成前就已触发，这里做兼容（否则 SW 永远不注册） */
+  function onReady(fn) {
+    if (document.readyState === 'complete') fn();
+    else window.addEventListener('load', fn);
+  }
+
   async function boot() {
     await Store.init();
 
     // 离线 PWA：仅 http(s) 部署后生效；file:// 直接双击打开时自动跳过
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
         (location.protocol === 'http:' || location.protocol === 'https:')) {
-      window.addEventListener('load', function () {
+      onReady(function () {
         navigator.serviceWorker.register('sw.js').catch(function () {});
       });
+      watchSwUpdate();
     }
     installManifest();
 

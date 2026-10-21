@@ -214,15 +214,47 @@
     }).catch(function () {});
   }
 
+  /**
+   * PWA 更新提示：新 SW 被安装并接管（skipWaiting + clients.claim）后会触发
+   * controllerchange——此时页面跑的还是旧 HTML，弹一个可点击刷新的常驻 Toast。
+   * 首次安装（加载时本来就没有 controller 接管）不算更新，不弹。
+   */
+  function watchSwUpdate() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) { hadController = true; return; }
+      if (document.getElementById('cpUpdateToast')) return;
+      var btn = UI.el('button', { class: 'update-btn', onclick: function () { location.reload(); } }, ['立即刷新']);
+      var node = UI.el('div', { class: 'toast info', id: 'cpUpdateToast' }, [
+        UI.el('span', { text: '应用已更新' }),
+        btn
+      ]);
+      document.getElementById('toastRoot').appendChild(node);
+      setTimeout(function () {
+        if (!node.parentNode) return;
+        node.classList.add('cp-out');
+        setTimeout(function () { node.remove(); }, 220);
+      }, 15000);
+    });
+  }
+
+  /** load 事件可能在 boot() 完成前就已触发，这里做兼容（否则 SW 永远不注册） */
+  function onReady(fn) {
+    if (document.readyState === 'complete') fn();
+    else window.addEventListener('load', fn);
+  }
+
   async function boot() {
     await Store.init();
 
     // 离线 PWA：仅 http(s) 部署后生效；file:// 直接双击打开时自动跳过
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator &&
         (location.protocol === 'http:' || location.protocol === 'https:')) {
-      window.addEventListener('load', function () {
+      onReady(function () {
         navigator.serviceWorker.register('sw.js').catch(function () {});
       });
+      watchSwUpdate();
     }
     installManifest();
 

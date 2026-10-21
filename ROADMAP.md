@@ -416,3 +416,35 @@
 - 同步码两档 + 分片，无服务器也能换设备
 - 批量导入课表 + 时间冲突检测
 - 上课提醒走 .ics 导出，锁屏也响且不经服务器（竞品多为自建推送）
+
+## 横滑手势 + PWA 更新机制（已实施）
+
+### 背景（外部审查建议采纳记录）
+
+审查给出三条建议，核实后：① Esc 关弹窗**早已实现**（ui.js 弹窗打开即绑 Escape）；
+② 移动端横滑切周/切月未实现，采纳；③ SW 更新提示采纳，但审查说的「加 skipWaiting」
+诊断有误——sw.js 一直有 skipWaiting+claim，真坑是 index.html 也走 cache-first，
+sw.js 字节不变就永远不重新 install，新版发不出去。
+
+### 横滑手势
+
+- `ui.js` 新增 `UI.addSwipe(el, {left, right})`：课表挂到视图根（左滑下一周），
+  月历同理（左滑下个月）。防误触：起点在横向可滚子元素内放弃、|dx|≥60 且 |dx|>|dy|×1.5、
+  passive 监听。
+- 课表第 1 周右滑、越界方向由 `goWeek` 的 clamp 兜底。
+
+### SW 更新
+
+- sw.js：`req.mode === 'navigate'` 改 **network-first**，成功回写 `./index.html`
+  缓存，失败回退缓存——发新版不再依赖 sw.js 改字节。
+- app.js：监听 `controllerchange`（加载时已有 controller 才算更新，首次安装不弹），
+  弹常驻 15s 的「应用已更新 · 立即刷新」Toast（`#cpUpdateToast`，toast-root 整体
+  pointer-events:none，CSS 单独恢复）。
+- **顺手修了一个存量 bug**：SW 注册原来挂在 `window load` 上，而 boot 在 load 之后
+  才执行完，监听器永远不触发——**SW 此前从未注册成功过**。现用 `onReady` 兼容
+  readyState。单测/旧 verify 都没覆盖 SW 注册，新 verify_gesture_sw.mjs 补上了。
+
+### 验证
+
+`verify_gesture_sw.mjs`（18 项，自带临时目录静态服务，可原地改文件模拟发新版）：
+横滑 9 项 + SW 9 项，含断网回退、新 SW 接管弹 Toast、点击刷新、离线能力保留。

@@ -690,6 +690,12 @@
       this.root = el('section', { class: 'view', id: 'view-schedule' });
       host.appendChild(this.root);
 
+      // 移动端横滑切周：左滑下一周，右滑上一周（与顶部箭头一致）
+      V.addSwipe(this.root, {
+        left: function () { self.goWeek(self.week + 1); },
+        right: function () { self.goWeek(self.week - 1); }
+      });
+
       this.render();
       return this.root;
     },
