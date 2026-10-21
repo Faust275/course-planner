@@ -154,13 +154,18 @@ const LEDGER_RANGESSrc = (() => {
   }
   return 'var LEDGER_RANGES = ' + html.slice(open, j + 1) + ';';
 })();
-const weekBoundsSrc = extractFnFrom('weekBounds', STATS_ANCHOR);
-const monthBoundsSrc = extractFnFrom('monthBounds', STATS_ANCHOR);
-const rangeDatesSrc = extractFnFrom('rangeDates', STATS_ANCHOR);
-const compareRangeSrc = extractFnFrom('compareRange', STATS_ANCHOR);
-const perDaySrc = extractFnFrom('perDay', STATS_ANCHOR);
-// sleepByNight 定义在 RANGES 之前（紧跟 expandRange），所以从头找
-const sleepByNightSrc = extractFnFrom('sleepByNight', 0);
+const weekBoundsSrc = extractFn('weekBounds');
+const monthBoundsSrc = extractFn('monthBounds');
+// 统计口径的纯实现已搬到 stats-calc.js（模板里排在 store.js 之前），
+// 从文件头取第一份；rangeDates/compareRange 在沙箱里再包一层，补 RANGES 与当前学期
+const rangeDatesPureSrc = extractFn('rangeDates').replace('function rangeDates(', 'function rangeDatesPure(');
+const compareRangePureSrc = extractFn('compareRange').replace('function compareRange(', 'function compareRangePure(');
+const perDaySrc = extractFn('perDay');
+const eachDateSrc = extractFn('eachDate');
+const sumDaySegmentsSrc = extractFn('sumDaySegments');
+const rangeSummarySrc = extractFn('rangeSummary');
+// sleepByNight 也在 stats-calc.js
+const sleepByNightSrc = extractFn('sleepByNight');
 const heatLevelSrc = extractFn('heatLevel');   // stats.js 已改为 StatsPane，全局唯一
 
 // 日记 / 心情：MOODS 枚举 + 归属判定 + 统计
@@ -263,9 +268,10 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${LEDGER_RANGESSrc}
   ${weekBoundsSrc}
   ${monthBoundsSrc}
-  ${rangeDatesSrc}
-  ${compareRangeSrc}
   ${perDaySrc}
+  ${eachDateSrc}
+  ${sumDaySegmentsSrc}
+  ${rangeSummarySrc}
   ${sleepByNightSrc}
   ${heatLevelSrc}
   ${MOODSSrc}
@@ -287,6 +293,18 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
       return state.semesters[0];
     }
   };
+  ${rangeDatesPureSrc}
+  ${compareRangePureSrc}
+  // 模拟 store.js 的薄封装：把 RANGES / 当前学期注入纯函数
+  function rangeDates(key, sem) {
+    return rangeDatesPure(key, {
+      util: DateUtil, ranges: RANGES, today: DateUtil.today(),
+      semester: sem || Store.currentSemester()
+    });
+  }
+  function compareRange(key, r) {
+    return compareRangePure(key, r || rangeDates(key), { util: DateUtil, ranges: RANGES });
+  }
   ${SUBTASK_DEFAULTSSrc}
   ${subOptsSrc}
   ${isChildSrc}
@@ -300,6 +318,9 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${goalReviewDueSrc}
   ${goalReviewTextSrc}
   ${goalDaysSrc}
+  // stats-calc.js 的依赖注入助手：不传就用测试里已提取的 DateUtil / TimeUtil
+  function D(u) { return u || DateUtil; }
+  function T(u) { return u || TimeUtil; }
   var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
@@ -310,7 +331,8 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      annivNext, wrapText, measure, hexToRgb, tint,
                      subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
                      krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText, goalDays,
-                     RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
+                     RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay, eachDate,
+                     sumDaySegments, rangeSummary,
                      weekBounds, monthBounds, sleepByNight, heatLevel,
                      MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
                      diaryDatePrompt, moodStats, diaryOn, diariesSorted };
@@ -324,7 +346,8 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         nextDueDate, repeatExpired, sanitizeRepeat,
         annivNext, wrapText, measure, hexToRgb, tint,
         subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
-        RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
+        RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay, eachDate,
+        sumDaySegments, rangeSummary,
         weekBounds, monthBounds, sleepByNight, heatLevel,
         MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
         diaryDatePrompt, moodStats, diaryOn, diariesSorted,
@@ -1275,6 +1298,77 @@ console.log('统计口径：compareRange 往前挪一个周期');
   eq('滑动窗口参照段等长', p30.days, 30);
   eq('滑动窗口参照段紧邻前一段', p30.to, '2026-09-21');
   eq('滑动窗口参照段 from', p30.from, '2026-08-23');
+}
+
+console.log('统计口径：eachDate 区间展开');
+{
+  eq('三天含两端', eachDate('2026-10-01', '2026-10-03').length, 3);
+  eq('首日正确', eachDate('2026-10-01', '2026-10-03')[0], '2026-10-01');
+  eq('末日正确', eachDate('2026-10-01', '2026-10-03')[2], '2026-10-03');
+  eq('跨月连续', eachDate('2026-08-30', '2026-09-02').join(','), '2026-08-30,2026-08-31,2026-09-01,2026-09-02');
+  eq('反向区间为空', eachDate('2026-10-03', '2026-10-01').length, 0);
+  eq('非法输入为空', eachDate('xx', 'yy').length, 0);
+}
+
+console.log('统计口径：sumDaySegments 单日汇总');
+{
+  // 23:00–07:00 的课跨午夜，expandRange 会拆成两段；合并后仍是 480 分钟
+  const s = sumDaySegments({
+    sleep: 420,
+    course: expandRange('23:00', '07:00'),
+    event: [],
+    activity: [[9 * 60, 10 * 60]],
+    meal: [[12 * 60, 12 * 60 + 30]]
+  });
+  const by = {};
+  s.segments.forEach(x => { by[x.key] = x.minutes; });
+  eq('睡眠原样', by.sleep, 420);
+  eq('跨午夜课程合并为 480', by.course, 480);
+  eq('活动 60', by.activity, 60);
+  eq('用餐 30', by.meal, 30);
+  eq('未记录 = 1440 - 已记', by.idle, 1440 - (420 + 480 + 60 + 30));
+  eq('recorded 不含 idle', s.recorded, 420 + 480 + 60 + 30);
+  eq('段数固定 6 段', s.segments.length, 6);
+  eq('末段是 idle', s.segments[5].key, 'idle');
+
+  // 全都为空：整天未记录
+  const empty = sumDaySegments({});
+  eq('空输入 idle = 1440', empty.idle, 1440);
+  eq('空输入 recorded = 0', empty.recorded, 0);
+
+  // 重叠区间只算一次
+  const overlap = sumDaySegments({ activity: [[600, 660], [630, 720]] });
+  eq('重叠活动合并为 120', overlap.segments.filter(x => x.key === 'activity')[0].minutes, 120);
+
+  // 超过 1440 不出现负的未记录
+  const over = sumDaySegments({ sleep: 1500 });
+  eq('超额时 idle 不为负', over.idle, 0);
+}
+
+console.log('统计口径：rangeSummary 区间汇总');
+{
+  const d1 = sumDaySegments({ sleep: 420, activity: [[600, 660]] });
+  const d2 = sumDaySegments({ sleep: 480, activity: [[600, 720]] });
+  const r = rangeSummary([
+    { date: '2026-10-20', segments: d1.segments },
+    { date: '2026-10-21', segments: d2.segments }
+  ], DateUtil);
+  const by = {};
+  r.segments.forEach(x => { by[x.key] = x.minutes; });
+  eq('天数 = 2', r.days, 2);
+  eq('总容量 = 2 × 1440', r.total, 2880);
+  eq('睡眠累加', by.sleep, 900);
+  eq('活动累加', by.activity, 180);
+  eq('recorded 不含 idle', r.recorded, 900 + 180);
+  eq('pct 按总容量算', r.pct, Math.round((900 + 180) / 2880 * 100));
+  eq('daily 每天一条', r.daily.length, 2);
+  eq('daily 带 date', r.daily[1].date, '2026-10-21');
+  eq('daily 的 recorded', r.daily[0].recorded, 420 + 60);
+  eq('daily 的 idle', r.daily[0].idle, 1440 - 480);
+
+  const zero = rangeSummary([], DateUtil);
+  eq('空区间 pct = 0', zero.pct, 0);
+  eq('空区间 days = 0', zero.days, 0);
 }
 
 console.log('统计口径：perDay 日均');
