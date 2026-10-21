@@ -20,7 +20,8 @@ course-planner-web/
 ├── assets/css/style.css      全部样式
 ├── assets/js/
 │   ├── store.js              数据模型 + 持久化（IndexedDB / localStorage）+ 迁移
-│   ├── stats-calc.js         统计计算（积分聚合 / 账本聚合 / 课程投入，纯函数）
+│   ├── stats-calc.js         统计与区间计算（纯函数）：区间展开/合并、rangeDates、单日与区间汇总、
+│   │                         积分流水、账本构成、课程投入；日期工具由参数注入，可脱离 Store 单测
 │   ├── ui.js                 元素创建 el() / 弹窗 / Toast（含 cp- 运行时前缀钩子）
 │   ├── app.js                启动 boot、导航、Service Worker 注册、安装提示
 │   ├── router.js             hash 深链接（#/today、#/tasks/diary）+ 别名

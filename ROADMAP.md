@@ -570,7 +570,7 @@ sw.js 字节不变就永远不重新 install，新版发不出去。
 ### 数据拆分
 
 - 新增 `assets/js/stats-calc.js`（纯函数）：`sumBySource` / `seriesFromLog` / `ledgerBreakdown` / `sumByCourse`；`store.js` 只保留薄封装。
-- 记录费率、健康阈值、里程成就、统计开关都进对应数据表 / 设置默认；深层 `rangeDates/dayStat` 抽取仍延期（测试加载器按文本提取，风险高）。
+- 记录费率、健康阈值、里程成就、统计开关都进对应数据表 / 设置默认；深层 `rangeDates/dayStat` 的抽取当时延期（测试加载器按文本提取，风险高），已在下一节完成。
 
 ### 验证
 
@@ -615,3 +615,44 @@ sw.js 字节不变就永远不重新 install，新版发不出去。
 - 新增 `verify_settings_cat.mjs`（57 项）：6 张分类卡、22 项逐一点开、三级返回、两个方向的深链、汉堡已移除、390px 无横向溢出且分类单列、0 控制台报错。
 - 同步 5 个回归脚本的多步点击路径：`verify_diary`（识别与数据 → 数据管理）、`verify_goals`（奖励与目标 → 目标）、`verify_ics`（记录与统计 → 上课提醒）、`verify_pwa`（首页与模块 → 桌面与快捷）、`verify_subtask`（记录与统计 → 子任务）。
 - `tests/run.mjs` 567 / 0；全量 verify 全过。
+
+## 数据拆分收尾：时间口径与每日汇总（已实施）
+
+### 目标
+
+上一轮把积分 / 账本 / 课程聚合搬进 `stats-calc.js`，但 `rangeDates` / `dayStat` / `rangeStat` 仍在 `store.js`。这一轮把**能纯化的部分**搬完，`Store` 只保留「取哪些数据 + 缓存」。
+
+### 边界怎么划
+
+| 逻辑 | 归属 | 理由 |
+|---|---|---|
+| `expandRange` / `mergeTotal` / `sleepByNight` | stats-calc | 只吃字符串与区间，纯 |
+| `weekBounds` / `monthBounds` / `rangeDates` / `compareRange` / `perDay` / `eachDate` | stats-calc | 只吃日期与口径表，纯 |
+| `sumDaySegments`（单日 5 段 + 未记录） | stats-calc | 吃已取好的区间，纯 |
+| `rangeSummary`（区间累加、pct、daily） | stats-calc | 吃每天 segments，纯 |
+| `Store.dayStat` / `rangeStat` | store.js | 依赖 `coursesOnDate` / `mealsOf` / `sleepMinutes` 与版本号缓存，属于数据层职责 |
+
+### 依赖注入
+
+`stats-calc.js` 不再直接读全局 `DateUtil` / `TimeUtil`，而是：
+
+```js
+StatsCalc.rangeDates('week', { util: DateUtil, ranges: RANGES, today, semester })
+```
+
+缺省时回退全局，浏览器调用无需改；单测可以只喂日期字符串。
+`store.js` 里保留同名薄封装（`function rangeDates(key, sem)`），调用点一行没动。
+
+### 测试加载器的改法
+
+`tests/run.mjs` 靠「从 `index.html` 文本里提取函数」做断言。函数搬到 `stats-calc.js` 后：
+
+- 提取锚点从 `var RANGES = {` 改为文件头（`stats-calc.js` 在模板里排在 `store.js` 前）；
+- `rangeDates` / `compareRange` 提取后改名 `...Pure`，在沙箱里包一层补 `RANGES` 与当前学期；
+- 补 `D()` / `T()` 两个注入助手，避免 `ReferenceError`。
+
+### 验证
+
+- `tests/run.mjs` 从 **567 → 597**，新增 `eachDate`（6）、`sumDaySegments`（9）、`rangeSummary`（10）三组。
+- 全量 `verify_*.mjs` 通过；重点回归 `verify_stats`（49 项）、`verify_bg`（板块联动 12 项）、`verify_timeplan`（17 项）均 0 失败。
+- `store.js` 从 5095 行降到 4981 行：实现搬走约 210 行，留下薄封装与口径注释，统计口径全部有单测兜底。
