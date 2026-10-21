@@ -12,9 +12,9 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 工作区含未提交改动：**统计归位 + 积分系统联动 + 板块深层联动（B–G）**（详见 ROADMAP 末节）；上一提交 `ccec9a6` |
+| 最后提交 | 工作区含未提交改动：**设置三级结构 + 移除手机抽屉**（详见 ROADMAP 末节）；上一提交 `55a6cc2` |
 | 单元测试 | `node tests/run.mjs` **567 条全过**（Palette / CourseException 直读源文件） |
-| UI 回归 | 26 个 `verify_*.mjs` 全部通过（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口） |
+| UI 回归 | 27 个 `verify_*.mjs` 全部通过（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口） |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |
@@ -61,6 +61,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 5. **时间块补录只动 `from:'block'` 那层**：睡眠/用餐/课程/手动活动只读，防止冲掉用户认真填过的数据。
 6. **数据口径用自然日历**：统计跨午夜睡眠归属、目标周期冻结等口径都有单测钉死，改动先跑 `node tests/run.mjs`。
 7. **弹窗子项过滤**：`ui.js` 的 `arrayify` 会滤掉 `null/false`，往弹窗塞条件渲染的节点时依赖它，别绕过。
+8. **设置页是三级状态**：`CAT`（当前分类）+ `SUB`（当前具体页），两者都在 `settings.js` 的 IIFE 里。外部跳转只走 `SettingsView.go(key)` 或 `App.go('settings', {tab:key})`，不要直接改 `SUB`——`onEnter` 会先清空状态，直接改会被覆盖。新增条目时必须给 `SUBS[]` 补 `group`，否则分类页筛不出来。
 
 ## 六、日常开发循环
 
