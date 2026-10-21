@@ -176,9 +176,15 @@
     return api;
   }
 
+  /**
+   * 弹窗的 body / footer 允许写 `(条件) ? el(...) : null` 这种条件项，
+   * 所以这里要把空项滤掉——不然 appendChild(null) 会直接把弹窗打断
+   * （待办弹窗「没有子任务时」就是这么挂的）。
+   */
   function arrayify(x) {
     if (x == null) return [];
-    return Array.isArray(x) ? x : [x];
+    var arr = Array.isArray(x) ? x : [x];
+    return arr.filter(function (n) { return n != null && n !== false; });
   }
 
   function topClose() {

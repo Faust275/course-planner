@@ -913,6 +913,13 @@
       var fNote = V.input({ placeholder: '可选', value: a0 ? a0.note : '' });
       var fTags = V.tagInput(a0 ? (a0.tags || []).join(',') : '', { placeholder: '如 学习/数学' });
 
+      // 时间记录 → 待办 的这一头：挂上之后这段时间会算进那条待办的「已投入」
+      var taskOpts = [{ value: '', label: '不关联待办' }].concat(
+        (Store.tasks || []).filter(function (t) { return t.status !== 'done' && !t.parentId; })
+          .slice(0, 80).map(function (t) { return { value: t.id, label: t.title }; })
+      );
+      var fTask = V.select(taskOpts, a0 ? (a0.taskId || '') : '');
+
       var m = V.modal({
         title: isEdit ? '编辑活动' : '记录活动',
         body: [
@@ -923,6 +930,7 @@
             V.field('结束', fEnd)
           ]),
           V.field('标签', fTags),
+          V.field('关联待办', fTask, '挂上后，这段时间会算进那条待办的「已投入」'),
           V.field('备注', fNote)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -942,7 +950,7 @@
               var d = {
                 date: dateStr, name: fName.value, type: type,
                 start: fStart.value, end: fEnd.value,
-                note: fNote.value, tags: fTags.getValue()
+                note: fNote.value, tags: fTags.getValue(), taskId: fTask.value
               };
               if (!d.name.trim()) { UI.toast('请填写在做什么', 'err'); fName.focus(); return; }
               if (d.end <= d.start) { UI.toast('结束时间要晚于开始时间', 'err'); return; }

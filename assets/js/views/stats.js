@@ -9,7 +9,7 @@
   var el = V.el;
 
   /** 周期：今天 / 本周 / 本月 / 本学期（自然日历口径，见 store.js 的 RANGES） */
-  var RANGE_KEYS = ['day', 'week', 'month', 'term'];
+  var RANGE_KEYS = ['day', 'week', 'month', 'term', 'year'];
   var curRange = 'week';
   /** 图表类型：pie 饼状图 / bar 方形图 */
   var chartType = 'bar';
@@ -317,14 +317,31 @@
   function heatCard(st) {
     var card = el('div', { class: 'card cp-chart-card' });
     var days = st.cur.daily;
-    var byWeek = days.length >= 14;
+    var byMonth = days.length >= 120;   // 半年以上：一格一个月，52 个周格子挤在一起没法看
+    var byWeek = !byMonth && days.length >= 14;
 
     card.appendChild(el('div', { class: 'section-title' }, [
-      byWeek ? '每周记录了多少' : '每天记录了多少'
+      byMonth ? '每月记录了多少' : (byWeek ? '每周记录了多少' : '每天记录了多少')
     ]));
 
     var groups = [];
-    if (byWeek) {
+    if (byMonth) {
+      var curM = null;
+      days.forEach(function (d) {
+        // d.d 是 Date 对象（不是字符串），别用 String() 拼键
+        var mKey = d.d.getFullYear() + '-' + d.d.getMonth();
+        if (!curM || curM.key !== mKey) {
+          curM = { key: mKey, cells: [] };
+          groups.push(curM);
+        }
+        curM.cells.push(d);
+      });
+      groups.forEach(function (g) {
+        var d0 = g.cells[0].d;
+        var full = new Date(d0.getFullYear(), d0.getMonth() + 1, 0).getDate();
+        g.partial = g.cells.length < full;
+      });
+    } else if (byWeek) {
       var curW = null;
       days.forEach(function (d) {
         var dow = DateUtil.isoDow(d.d);
@@ -344,10 +361,11 @@
       g.perDay = sum / g.cells.length;
     });
 
-    var strip = el('div', { class: 'cp-heat' + (byWeek ? '' : ' cp-is-daily') });
+    var strip = el('div', { class: 'cp-heat' + (byMonth ? ' cp-is-monthly' : (byWeek ? '' : ' cp-is-daily')) });
     groups.forEach(function (g, i) {
       var level = heatLevel(g.perDay);
-      var label = byWeek ? '第 ' + (i + 1) + ' 周' : md(g.cells[0].date);
+      var label = byMonth ? (g.cells[0].d.getMonth() + 1) + ' 月'
+        : (byWeek ? '第 ' + (i + 1) + ' 周' : md(g.cells[0].date));
       var tip = label + '：日均 ' + hmText(g.perDay) +
         (g.partial ? '（不完整周，只有 ' + g.cells.length + ' 天）' : '');
       strip.appendChild(el('div', {
@@ -355,7 +373,7 @@
         title: tip
       }, [
         el('b', { text: g.perDay > 0 ? Math.round(g.perDay / 60 * 10) / 10 + 'h' : '—' }),
-        el('span', { text: byWeek ? g.cells.length + '天' : String(g.cells[0].d.getDate()) })
+        el('span', { text: byMonth ? g.cells.length + '天' : (byWeek ? g.cells.length + '天' : String(g.cells[0].d.getDate())) })
       ]));
     });
     card.appendChild(strip);
@@ -363,11 +381,14 @@
     // 一格代表什么，说清楚
     card.appendChild(el('div', {
       class: 'cp-stats-note-inline',
-      text: byWeek
-        ? '一格一周，颜色深浅按这一周的每天平均记录量算，刻度固定（一天记满 16 小时为最深）。' +
-          '首尾两周天数不满 7 天，用虚线框标出来。'
-        : '一格一天，颜色深浅按当天的记录量算，刻度固定（记满 16 小时为最深）。' +
-          '跨度短的时候按周分组只剩一两格，看不出趋势，所以改成逐日。'
+      text: byMonth
+        ? '一格一个月，颜色深浅按这一个月的每天平均记录量算，刻度固定（一天记满 16 小时为最深）。' +
+          '最后一个多月还没过完，用虚线框标出来。'
+        : (byWeek
+          ? '一格一周，颜色深浅按这一周的每天平均记录量算，刻度固定（一天记满 16 小时为最深）。' +
+            '首尾两周天数不满 7 天，用虚线框标出来。'
+          : '一格一天，颜色深浅按当天的记录量算，刻度固定（记满 16 小时为最深）。' +
+            '跨度短的时候按周分组只剩一两格，看不出趋势，所以改成逐日。')
     }));
 
     if (byWeek && groups.length > 1 && groups[0].partial && groups[groups.length - 1].partial) {

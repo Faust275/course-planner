@@ -169,7 +169,7 @@ check('统计视图不进底部/侧边导航', navHasStats === false);
 
 const tabs = await p.evaluate(() =>
   [...document.querySelectorAll('#view-stats .cp-week-bar .cp-dim-tab')].map(x => x.textContent.trim()));
-check('五档周期齐全', JSON.stringify(tabs) === JSON.stringify(['今天', '本周', '本月', '本学期']), tabs);
+check('六档周期齐全（含今年）', JSON.stringify(tabs) === JSON.stringify(['今天', '本周', '本月', '本学期', '今年']), tabs);
 
 const cards = await p.evaluate(() =>
   [...document.querySelectorAll('#view-stats .cp-stat-cell .cp-stat-label')].map(x => x.textContent.trim()));

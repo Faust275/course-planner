@@ -83,6 +83,16 @@
       var pr = kids.length ? Store.subtaskProgress(t.id) : null;
 
       var meta = [];
+      // 时间投入：待办 → 时间记录 的这一头（番茄钟关联后自动累计）
+      var inv = Store.taskInvest(t.id);
+      if (inv.minutes > 0) {
+        meta.push(el('span', {
+          class: 'chip chip-green',
+          style: { padding: '0 6px', fontSize: '10.5px' },
+          title: inv.count + ' 条记录' + (inv.pomodoros ? ' · ' + inv.pomodoros + ' 个番茄' : ''),
+          text: '已投入 ' + TimeUtil.humanMin(inv.minutes)
+        }));
+      }
       if (course) {
         meta.push(el('span', {
           style: { display: 'inline-flex', alignItems: 'center', gap: '4px' }
@@ -165,6 +175,8 @@
                      : (preset.parentId ? Store.getTask(preset.parentId) : null);
       // 已有子任务的父任务不能再挂到别人下面（只允许一层）
       var myKids = isEdit ? Store.subtasksOf(taskId) : [];
+      // 反查：这条待办上挂了哪些时间记录（番茄钟结束会自动写一条）
+      var inv0 = isEdit ? Store.taskInvest(taskId) : null;
 
       var courseOpts = [{ value: '', label: '不关联课程' }].concat(
         Store.courses.map(function (c) { return { value: c.id, label: c.name }; })
@@ -329,6 +341,37 @@
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote),
+        /* ---- 已投入（时间记录的另一头） ---- */
+        (inv0 && inv0.minutes > 0) ? el('div', { class: 'field' }, [
+          el('label', { text: '已投入' }),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
+            el('span', { class: 'chip chip-green', text: TimeUtil.humanMin(inv0.minutes) }),
+            el('span', {
+              style: { fontSize: '12.5px', color: 'var(--text-3)' },
+              text: inv0.count + ' 条记录' + (inv0.pomodoros ? ' · ' + inv0.pomodoros + ' 个番茄' : '') +
+                    (inv0.last ? ' · 最近 ' + inv0.last.slice(5) : '')
+            })
+          ]),
+          el('div', { class: 'task-invest-list' }, inv0.recent.map(function (a) {
+            return el('button', {
+              class: 'task-invest-row',
+              onclick: function () {
+                m.close();
+                var q = App.views.filter(function (x) { return x.id === 'quadrant'; })[0];
+                if (q) q.date = a.date;
+                App.go('quadrant');
+              }
+            }, [
+              el('span', { class: 'task-invest-date', text: a.date.slice(5) }),
+              el('span', { text: a.start + '–' + a.end }),
+              el('span', { class: 'task-invest-name', text: a.name || '活动' })
+            ]);
+          })),
+          el('div', {
+            class: 'ocr-hint',
+            text: '番茄钟关联这条待办时，那段时间会自动算进来；点上面任意一条会跳到象限页那一天。'
+          })
+        ]) : null,
         /* ---- 已有子任务时的说明 ---- */
         (isEdit && myKids.length) ? el('div', { class: 'field' }, [
           el('label', { text: '子任务（' + myKids.filter(function (c) { return c.status === 'done'; }).length + '/' + myKids.length + '）' }),

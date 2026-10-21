@@ -1559,5 +1559,20 @@ console.log('目标：周期天数（决定发不发积分）');
   eq('空对象返回 0', goalDays({}), 0);
 }
 
+
+console.log('统计：今年档（自然年口径）');
+{
+  const nowD = new Date();
+  const Y = nowD.getFullYear();
+  const yr = rangeDates('year');
+  eq('year 从 1 月 1 日起', yr.from, Y + '-01-01');
+  eq('year 截到今天（不把未来空白天算进分母）', yr.to, DateUtil.toStr(nowD));
+  const cr = compareRange('year', yr);
+  eq('year 的参照是去年同长区间', cr.days, yr.days);
+  eq('year 参照从去年 1 月 1 日起', cr.from, (Y - 1) + '-01-01');
+  eq('month 档不受影响', rangeDates('month').key, 'month');
+  eq('term 档仍不做对比', compareRange('term', rangeDates('term')), null);
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

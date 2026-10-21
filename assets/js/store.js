@@ -564,6 +564,7 @@
     week:  { key: 'week',  name: '本周', mode: 'cal', days: 7 },
     month: { key: 'month', name: '本月', mode: 'cal', days: 30 },
     term:  { key: 'term',  name: '本学期', mode: 'cal', days: 120 },
+    year:  { key: 'year',  name: '今年', mode: 'cal', days: 365 },
     recent7:  { key: 'recent7',  name: '最近 7 天',  mode: 'win', days: 7 },
     recent30: { key: 'recent30', name: '最近 30 天', mode: 'win', days: 30 }
   };
@@ -608,6 +609,10 @@
     } else if (R.key === 'month') {
       var mb = monthBounds(today);
       from = mb.from; to = today < mb.to ? today : mb.to;
+    } else if (R.key === 'year') {
+      // 自然年：1 月 1 日 → 今天。年初那几天区间很短，调用方按 days 显示
+      from = new Date(today.getFullYear(), 0, 1);
+      to = today;
     } else if (R.key === 'term') {
       var s = sem || (state && Store.currentSemester ? Store.currentSemester() : null);
       var start = (s && DateUtil.parse(s.startDate)) || DateUtil.weekStart(today);
@@ -652,6 +657,16 @@
       };
     }
     if (r.key === 'term') return null;   // 没有「上一学期」的可靠数据，不做比较
+    if (r.key === 'year') {
+      // 去年同期：去年 1 月 1 日 → 去年的「今天」（2/29 遇平年落到 2/28）
+      var py = new Date(from.getFullYear() - 1, 0, 1);
+      var pyTo = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
+      if (pyTo.getDate() !== to.getDate()) pyTo = new Date(to.getFullYear() - 1, to.getMonth() + 1, 0);
+      return {
+        from: DateUtil.toStr(py), to: DateUtil.toStr(pyTo),
+        days: DateUtil.diffDays(pyTo, py) + 1, key: 'year', mode: 'cal'
+      };
+    }
     // 滑动窗口：紧邻的等长区间
     var n = r.days;
     var pf = DateUtil.addDays(from, -n);
@@ -2942,7 +2957,9 @@
         name: (data.name || '').trim() || '未命名活动',
         type: data.type || 'other',
         tags: normalizeTags(data.tags),
-        note: (data.note || '').trim()
+        note: (data.note || '').trim(),
+        taskId: String(data.taskId || ''),   // 挂在哪条待办上：双向关联的这一头
+        from: String(data.from || '')        // 记录来源：'block' = 月历里补录的时间块
       };
       state.activities.push(a);
       this.emit();
@@ -3304,7 +3321,8 @@
           name: extra.name || '专注',
           type: 'study',
           tags: extra.tags,
-          note: '番茄钟自动记录'
+          note: '番茄钟自动记录',
+          taskId: taskId || ''
         });
       }
       state.pomodoro.timer = {
@@ -3856,6 +3874,61 @@
     goalProgressOf: function (g) {
       if (!g) return { pct: 0, counted: 0, total: 0, rows: [] };
       return goalProgress(g, this.goalCtx(g));
+    },
+
+    /**
+     * 覆写某天由「月历时间块」产生的活动记录。
+     * 只动 from === 'block' 的那部分，手动在象限记的活动（有名字、备注）不碰，
+     * 否则一次补录会把之前认真填的记录冲掉。
+     * @param {string} dateStr
+     * @param {Array} runs [{ start:'09:00', end:'10:30', type:'study', name:'学习' }]
+     */
+    saveTimeBlocks: function (dateStr, runs) {
+      state.activities = (state.activities || []).filter(function (a) {
+        return !(a.date === dateStr && a.from === 'block');
+      });
+      var self = this;
+      (runs || []).forEach(function (r) {
+        self.addActivity({
+          date: dateStr,
+          start: r.start,
+          end: r.end || r.start,
+          name: r.name || '时间块',
+          type: r.type || 'other',
+          from: 'block',
+          note: '月历时间块补录'
+        });
+      });
+      this.emit();
+      return this.activitiesOf(dateStr).filter(function (a) { return a.from === 'block'; });
+    },
+
+    /* ---------------- 待办 ↔ 时间投入 ---------------- */
+
+    /** 挂在某条待办上的活动记录（含番茄钟自动写入的） */
+    activitiesOfTask: function (taskId) {
+      if (!taskId) return [];
+      return (state.activities || []).filter(function (a) { return a.taskId === taskId; });
+    },
+
+    /**
+     * 这条待办累计投入了多少时间。
+     * 只统计活动记录（番茄钟结束时会写一条），分钟数不再从 sessions 里加一遍，
+     * 否则同一段专注会被算两次。
+     */
+    taskInvest: function (taskId) {
+      var list = this.activitiesOfTask(taskId);
+      var minutes = 0, last = '';
+      list.forEach(function (a) {
+        minutes += TimeUtil.diffMin(a.start, a.end);
+        if (a.date > last) last = a.date;
+      });
+      var pomos = (state.pomodoro.sessions || []).filter(function (s) { return s.taskId === taskId; }).length;
+      var recent = list.slice().sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return String(a.start) < String(b.start) ? 1 : -1;
+      }).slice(0, 5);
+      return { minutes: minutes, count: list.length, pomodoros: pomos, last: last, recent: recent };
     },
 
     /** 打卡型的日期槽位 */
