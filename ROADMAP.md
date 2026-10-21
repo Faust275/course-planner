@@ -656,3 +656,70 @@ StatsCalc.rangeDates('week', { util: DateUtil, ranges: RANGES, today, semester }
 - `tests/run.mjs` 从 **567 → 597**，新增 `eachDate`（6）、`sumDaySegments`（9）、`rangeSummary`（10）三组。
 - 全量 `verify_*.mjs` 通过；重点回归 `verify_stats`（49 项）、`verify_bg`（板块联动 12 项）、`verify_timeplan`（17 项）均 0 失败。
 - `store.js` 从 5095 行降到 4981 行：实现搬走约 210 行，留下薄封装与口径注释，统计口径全部有单测兜底。
+
+## 商城（月卡 + 满潜兑换）、侧栏折叠、合成玉图标、应用图标（已实施）
+
+### 商店落点
+
+新开顶级导航会挤掉底部栏（已有 22 项、`MAX_TABS=5`），所以放进「收集」的第四个分页：
+干员图鉴 / 我的森林 / 成就 / 商店。商店页不渲染森林与成就概览卡，直接看余额。
+
+### 计价：双币折算
+
+积分本来就是两套池子（`pm.points` 森林积分、`pm.jade` 合成玉，1 积分 = 180 玉），
+切到抽卡模式后 `points` 不再增长。所以商城统一按「等值积分」标价：
+
+- `shopBalance()` 返回 `points` / `jade` / `total = points + jade / 180`；
+- `spendPoints(n)` 先扣 `points`，不够的部分按 `180:1` 扣 `jade`，两池都不够则整笔拒绝（不产生半扣）；
+- 返利走 `addPoints()`，按当前模式进对应池，并记 `src='card'` 流水。
+
+### 月卡规则
+
+| 项 | 规则 |
+|---|---|
+| 售价 / 有效期 | 300 积分 / 30 天（购买当天算第 1 天） |
+| 每日返还 | 当天首次进入任意模块时 +10，`App.go` 里触发 `touchActive()` |
+| 周全勤 | 滚动窗口：最近连续 7 天都有记录 +10；用 `weekAwardEnd` 防止窗口重叠重复发 |
+| 30 天全勤 | 有效期 30 天一天不漏再 +50（一次） |
+| 漏签 | 只损失当天 10 分与所在窗口，**有效期不顺延** |
+| 到期 | 可再次购买；有效期内重复购买被拒 |
+
+30 天全勤总返 390（300 + 4×10 + 50），净赚 90。
+
+### 满潜重复改造
+
+原实现是抽卡时直接 `pm.points += pts`，绕过了 `addPoints`：抽卡模式下加到积分池而不是合成玉、
+不写流水、`earned` 不增。现在改为：
+
+- 抽到第 7 份及以后写入 `shop.dupPool: [{n, r, pts, at}]`，不再自动入账；
+- 商店「一键兑换」→ `jade += Σ pts × 180`（6★ 7200 / 5★ 4500 / 4★ 2160 / 3★ 1080）；
+- 兑换是资产形式转换，不记 `earned`、不写积分流水，只写 `shop.log`；
+- 老数据不回滚：已转化的 `hit.dupPts` 保留为「累计满潜重复」，`dupPool` 从空开始。
+
+### 侧边栏折叠
+
+- 顶栏左侧 `#btnCollapse`（`.cp-desk-only`，≤900px 不显示）；
+- `.cp-app.cp-mini` 把 `--sidebar-w` 从 236 改到 68，隐藏品牌文字、模块名、学期卡，图标居中；
+- 状态存 `settings.ui.sidebarMini`，`boot()` 里 `applySidebarMini()` 早于 `buildNav()`，避免首屏跳动。
+
+### 合成玉图标
+
+`V.jade(size)` 返回内联 SVG：金色多面体 + 三段渐变（顶面 / 中面 / 暗面）+ 腰线 + 高光窄条。
+每个实例生成唯一渐变 id；path 用内联 `style` 上色，压过全局 `svg { fill: none; stroke: currentColor }`。
+若 `settings.assets.jadeIcon` 有本地导入的图片，优先返回 `<img>`（预留给原图导入）。
+
+### 应用图标
+
+新增 `make_logos_icon.py`：读一张方形头像，圆形裁切 + 深蓝径向渐变底 + 亮环，
+输出 192 / 512 / 512-maskable（安全区 60%）/ 180-apple-touch。
+图标文件加进 `.git/info/exclude`，仓库保留默认日历图标，本机用角色图。
+模板的 `rel="icon"` / `apple-touch-icon` 改为外链（不再内联 SVG），`manifest` 的 maskable 指向新文件。
+
+> 已安装的 PWA 不会自动换图标，必须卸载后重新添加。
+
+### 验证
+
+- 新增 `verify_shop.mjs`（31 项）：分页入口、余额三格、购买扣 300 返 10、重复购买被拒、
+  7 天签到点、30 天全勤 390、漏第 5 天 320、漏第 1 天 330、双币扣款与拒绝、满潜兑换 9360、
+  兑换后池清空、390px 无溢出、0 控制台错误。
+- `tests/run.mjs` 597 / 0 不变；全量 `verify_*.mjs` 全过。
