@@ -11,9 +11,8 @@
 <meta content="default" name="apple-mobile-web-app-status-bar-style">
 <meta content="课表" name="apple-mobile-web-app-title">
 <meta content="telephone=no" name="format-detection">
-<link href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f46e5'/%3E%3Crect x='12' y='16' width='40' height='34' rx='5' fill='%23fff'/%3E%3Crect x='12' y='16' width='40' height='9' fill='%236366f1'/%3E%3Cg fill='%234f46e5'%3E%3Crect x='18' y='29' width='11' height='6' rx='2'/%3E%3Crect x='35' y='29' width='11' height='6' rx='2'/%3E%3Crect x='18' y='39' width='11' height='6' rx='2'/%3E%3Crect x='35' y='39' width='11' height='6' rx='2'/%3E%3C/g%3E%3C/svg%3E" rel="icon">
-<link href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f46e5'/%3E%3Crect x='12' y='16' width='40' height='34' rx='5' fill='%23fff'/%3E%3Crect x='12' y='16' width='40' height='9' fill='%236366f1'/%3E%3Cg fill='%234f46e5'%3E%3Crect x='18' y='29' width='11' height='6' rx='2'/%3E%3Crect x='35' y='29' width='11' height='6' rx='2'/%3E%3Crect x='18' y='39' width='11' height='6' rx='2'/%3E%3Crect x='35' y='39' width='11' height='6' rx='2'/%3E%3C/g%3E%3C/svg%3E" rel="apple-touch-icon">
-<link color="#4f46e5" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f46e5'/%3E%3Crect x='12' y='16' width='40' height='34' rx='5' fill='%23fff'/%3E%3Crect x='12' y='16' width='40' height='9' fill='%236366f1'/%3E%3Cg fill='%234f46e5'%3E%3Crect x='18' y='29' width='11' height='6' rx='2'/%3E%3Crect x='35' y='29' width='11' height='6' rx='2'/%3E%3Crect x='18' y='39' width='11' height='6' rx='2'/%3E%3Crect x='35' y='39' width='11' height='6' rx='2'/%3E%3C/g%3E%3C/svg%3E" rel="mask-icon">
+<link href="icon-192.png" rel="icon">
+<link href="apple-touch-icon.png" rel="apple-touch-icon">
 <title>课表 Course Planner</title>
 </head>
 <body>
@@ -41,6 +40,9 @@
   <!-- 主内容区 -->
   <main class="cp-main">
     <header class="cp-topbar">
+      <button class="cp-icon-btn cp-desk-only" id="btnCollapse" aria-label="折叠侧边栏" title="折叠侧边栏" style="margin-right:8px;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><path d="M9.2 4.5v15"/><path d="M15.4 9.6L13 12l2.4 2.4"/></svg>
+      </button>
       <h1 class="cp-topbar-title" id="viewTitle">课程表</h1>
       <div class="cp-topbar-actions" id="viewActions"></div>
       <button class="cp-icon-btn" id="btnSearch" aria-label="搜索" title="搜索（Ctrl/⌘ + K）" style="margin-left:6px;flex:0 0 auto">
@@ -232,6 +234,19 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cp-term-card b { display: block; font-size: 13px; color: var(--primary-hover); margin-bottom: 3px; }
 .cp-term-card .cp-term-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; }
 .cp-term-card .cp-term-row span:last-child { font-weight: 600; color: var(--primary); }
+
+/* ---- 侧边栏折叠（桌面端） ---- */
+.cp-sidebar { transition: width .2s var(--ease-out), padding .2s var(--ease-out); }
+.cp-desk-only { display: grid; }
+.cp-app.cp-mini { --sidebar-w: 68px; }
+.cp-mini .cp-sidebar { padding: 14px 10px 10px; }
+.cp-mini .cp-brand { padding: 0 0 16px; justify-content: center; }
+.cp-mini .cp-brand-text,
+.cp-mini .cp-nav-item span,
+.cp-mini .cp-sidebar-foot { display: none; }
+.cp-mini .cp-nav { gap: 5px; }
+.cp-mini .cp-nav-item { justify-content: center; padding: 10px 0; }
+.cp-mini .cp-nav-item svg { flex: 0 0 20px; }
 
 /* ---- 主区 ---- */
 .cp-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -585,6 +600,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .cp-app { flex-direction: column; }
   /* 窄屏不再有抽屉：底部 tabbar +「更多」已经覆盖全部模块，侧边栏直接收起 */
   .cp-sidebar { display: none; }
+  .cp-desk-only { display: none !important; }
   .cp-tabbar { display: flex; }
   .cp-view-wrap { padding: 14px 12px calc(var(--tabbar-h) + 18px); }
   .cp-grid-scroll { max-height: calc(100dvh - 128px); overflow: auto; overscroll-behavior-x: contain; }
@@ -2664,6 +2680,10 @@ input[type="range"]::-moz-range-thumb {
 .cp-jade-tag svg { width: 13px; height: 13px; color: #00c8b4; fill: currentColor; }
 .cp-jade-tag b { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* 合成玉彩色图标（内部 path 用内联 style 上色，覆盖全局 stroke 规则） */
+.cp-jade-glyph { display: inline-block; vertical-align: -.16em; flex: 0 0 auto; stroke: none; overflow: visible; }
+.cp-jade-img { object-fit: contain; border-radius: 4px; }
+
 .cp-gc-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 12px; border-radius: 11px; background: var(--surface-2); margin-bottom: 12px;
@@ -2822,13 +2842,52 @@ input[type="range"]::-moz-range-thumb {
 .cp-rw-rule b { font-weight: 600; text-align: right; }
 
 /* ===== 抽卡页：我的干员 / 寻访数据 标签页 ===== */
-.cp-gacha-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.cp-gacha-tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+.cp-gacha-tabs::-webkit-scrollbar { display: none; }
 .cp-gacha-tab {
-  flex: 1; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2);
+  flex: 1 0 auto; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2);
   border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: .15s;
+  white-space: nowrap;
 }
 .cp-gacha-tab.cp-active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .cp-gacha-tabpane { margin-top: 2px; }
+
+/* ===== 商店 ===== */
+.cp-shop-pane { display: flex; flex-direction: column; gap: 12px; }
+.cp-shop-bal { display: flex; gap: 8px; padding: 14px 10px; }
+.cp-shop-bal-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.cp-shop-bal-item b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cp-shop-bal-item span { font-size: 11.5px; color: var(--text-3); }
+.cp-shop-note { font-size: 11.5px; color: var(--text-3); line-height: 1.65; padding: 0 2px; }
+.cp-shop-block { padding: 14px 16px; }
+.cp-shop-desc { font-size: 12.5px; color: var(--text-2); line-height: 1.78; margin: 6px 0 10px; }
+.cp-shop-sub { font-size: 12px; color: #b45309; margin: 4px 0; }
+.cp-shop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 6px 0; }
+.cp-shop-row b { font-size: 15px; }
+.cp-shop-row span { font-size: 12px; color: var(--text-3); }
+.cp-shop-row-sub { margin-top: 10px; }
+.cp-shop-bar { height: 7px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin: 8px 0 2px; }
+.cp-shop-bar i { display: block; height: 100%; border-radius: 4px; transition: width .3s;
+  background: linear-gradient(90deg, var(--primary-light), var(--primary)); }
+.cp-shop-label { font-size: 11.5px; color: var(--text-3); margin: 12px 0 6px; }
+.cp-shop-dots { display: flex; gap: 6px; }
+.cp-shop-dot {
+  flex: 1; height: 30px; display: grid; place-items: center;
+  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 12px; color: var(--text-3);
+}
+.cp-shop-dot.cp-on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 700; }
+.cp-shop-badge {
+  display: inline-block; margin-top: 10px; font-size: 11.5px; color: var(--primary);
+  background: var(--primary-weak); padding: 3px 9px; border-radius: 999px;
+}
+.cp-shop-log {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 12px;
+}
+.cp-shop-log:last-child { border-bottom: none; }
+.cp-shop-log span { color: var(--text-3); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.cp-shop-log b { font-weight: 500; text-align: right; }
 
 /* ===== 寻访数据 ===== */
 .cp-grec { display: flex; flex-direction: column; gap: 10px; }
@@ -5053,6 +5112,7 @@ window.AK_OPS = [
         nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
         navOrder: [],   // 自定义模块顺序（空 = 用默认顺序）
+        ui: { sidebarMini: false },   // 桌面侧边栏是否折叠成图标条
         tagMeta: {},    // 标签自定义图标与颜色：{ '学习': {icon:'book', color:'#4f46e5'} }
         fav: { poems: [], words: [] },   // 收藏的每日一句（索引）与每日一词（单词）
         diet: {            // 每日热量目标与三餐配比
@@ -5130,7 +5190,13 @@ window.AK_OPS = [
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
-      usage: {}                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
+      usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
+      shop: {                   // 商城：月卡 / 潜能兑换
+        card: null,             // 月卡 { startDate, endDate, days:{}, weekAwardEnd, fullAwarded, paid, gained }
+        activeDays: {},         // 近 120 天「用过任意功能」的日期：{ 'YYYY-MM-DD': 1 }
+        dupPool: [],            // 满潜重复待兑换：[{ n, r, pts, at }]
+        log: []                 // 最近 100 条商城记录
+      }
     };
   }
 
@@ -5503,7 +5569,13 @@ window.AK_OPS = [
     PITY_STEP: 2,          // 每抽 +2%
     TEN_GUARANTEE: 5,      // 十连保底至少五星
     POT_MAX: 5,            // 潜能上限（干员最多 6 份复制，潜能 0~5）
-    DUP_POINTS: { 6: 40, 5: 25, 4: 12, 3: 6 }  // 满潜能后，每多抽一份转化的积分（按星级）
+    DUP_POINTS: { 6: 40, 5: 25, 4: 12, 3: 6 },  // 满潜能后，每多抽一份转化的积分（按星级）
+    /* —— 商城 —— */
+    CARD_PRICE: 300,       // 月卡售价（积分）
+    CARD_DAYS: 30,         // 月卡有效天数
+    CARD_DAILY: 10,        // 每天用任意功能返还的积分
+    CARD_WEEK_BONUS: 10,   // 滚动 7 天全勤的额外奖励
+    CARD_FULL_BONUS: 50    // 30 天全勤的额外奖励
   };
 
   var TREE_SPECIES = [
@@ -6461,6 +6533,8 @@ window.AK_OPS = [
         { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, state.settings.health || {});
       if (!state.settings.nav) state.settings.nav = ds.settings.nav;
       if (!Array.isArray(state.settings.navOrder)) state.settings.navOrder = [];
+      if (!state.settings.ui || typeof state.settings.ui !== 'object') state.settings.ui = { sidebarMini: false };
+      if (typeof state.settings.ui.sidebarMini !== 'boolean') state.settings.ui.sidebarMini = false;
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
       if (!state.settings.ocr) state.settings.ocr = ds.settings.ocr;
       var defNav = ds.settings.nav;
@@ -6521,6 +6595,12 @@ window.AK_OPS = [
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
+      // 商城：老版本没有这块，逐项补默认（dupPool 不回溯老数据，避免重复发放）
+      if (!state.shop || typeof state.shop !== 'object') state.shop = {};
+      if (!state.shop.activeDays || typeof state.shop.activeDays !== 'object') state.shop.activeDays = {};
+      if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
+      if (!Array.isArray(state.shop.log)) state.shop.log = [];
+      if (state.shop.card == null) state.shop.card = null;
       if (!state.taskSeq) state.taskSeq = {};
       if (!state.periods || !state.periods.length) state.periods = ds.periods;
 
@@ -8229,11 +8309,198 @@ window.AK_OPS = [
       return pm.mode;
     },
 
+    /**
+     * 扣积分（双币折算）：优先扣森林积分，不够时按 1 积分 = 180 合成玉 补扣。
+     * 两池都不够则返回 false，且不产生任何变动。
+     */
     spendPoints: function (n) {
+      n = Math.round(n);
+      if (n <= 0) return true;
       var pm = state.pomodoro;
-      if (pm.points < n) return false;
-      pm.points -= n;
+      if (pm.points >= n) { pm.points -= n; return true; }
+      var need = n - pm.points;
+      var jadeNeed = need * POMO.JADE_PER_POINT;
+      if (pm.jade < jadeNeed) return false;
+      pm.points = 0;
+      pm.jade -= jadeNeed;
       return true;
+    },
+
+    /* ===== 商城 ===== */
+
+    /** 余额：森林积分 / 合成玉 / 等值积分 */
+    shopBalance: function () {
+      var pm = state.pomodoro;
+      return {
+        points: pm.points,
+        jade: pm.jade,
+        total: Math.round((pm.points + pm.jade / POMO.JADE_PER_POINT) * 100) / 100
+      };
+    },
+
+    /** 月卡剩余天数（含当天）；未购买或已过期返回 0 */
+    cardDaysLeft: function () {
+      var c = state.shop.card;
+      if (!c) return 0;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (today > c.endDate) return 0;
+      return DateUtil.diffDays(DateUtil.parse(c.endDate), DateUtil.parse(today)) + 1;
+    },
+
+    /** 月卡展示状态：只读，供 UI 用 */
+    cardInfo: function () {
+      var c = state.shop.card;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (!c) return { active: false, bought: false };
+      var left = this.cardDaysLeft();
+      var total = POMO.CARD_DAYS;
+      var signed = 0;
+      for (var i = 0; i < total; i++) {
+        var k = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(c.startDate), i));
+        if (c.days && c.days[k]) signed++;
+      }
+      return {
+        active: left > 0,
+        bought: true,
+        startDate: c.startDate,
+        endDate: c.endDate,
+        daysLeft: left,
+        daysTotal: total,
+        signedDays: signed,
+        todaySigned: !!(c.days && c.days[today]),
+        paid: c.paid || 0,
+        gained: c.gained || 0,
+        fullAwarded: !!c.fullAwarded
+      };
+    },
+
+    /** 购买月卡：扣 300 积分（双币折算），当天即算第一天并返 10 分 */
+    buyCard: function () {
+      var sh = state.shop;
+      var left = this.cardDaysLeft();
+      if (left > 0) return { ok: false, msg: '月卡还剩 ' + left + ' 天，到期后才能再买' };
+      if (this.totalPoints() < POMO.CARD_PRICE) {
+        return { ok: false, msg: '积分不足，还差 ' + Math.ceil(POMO.CARD_PRICE - this.totalPoints()) };
+      }
+      if (!this.spendPoints(POMO.CARD_PRICE)) return { ok: false, msg: '积分不足' };
+      var today = DateUtil.toStr(DateUtil.today());
+      sh.card = {
+        startDate: today,
+        endDate: DateUtil.toStr(DateUtil.addDays(DateUtil.today(), POMO.CARD_DAYS - 1)),
+        days: {},
+        weekAwardEnd: '',
+        fullAwarded: false,
+        paid: POMO.CARD_PRICE,
+        gained: 0
+      };
+      sh.log.unshift({ at: Date.now(), type: 'card', text: '购买月卡 −' + POMO.CARD_PRICE + ' 积分' });
+      this.trimShopLog();
+      this.save();
+      this.touchActive();     // 购买当天就用上了，直接结算首日
+      return { ok: true };
+    },
+
+    /** 记录「今天用过应用」，并结算月卡。任意模块进入时调用 */
+    touchActive: function () {
+      var t = DateUtil.toStr(DateUtil.today());
+      var sh = state.shop;
+      var dirty = false;
+      if (!sh.activeDays[t]) { sh.activeDays[t] = 1; dirty = true; }
+      // 只留最近 120 天，避免无限增长
+      var keys = Object.keys(sh.activeDays).sort();
+      if (keys.length > 120) {
+        keys.slice(0, keys.length - 120).forEach(function (k) { delete sh.activeDays[k]; });
+        dirty = true;
+      }
+      if (this.settleCard()) dirty = true;
+      if (dirty) this.save();
+    },
+
+    /**
+     * 结算当天月卡。
+     * 规则：有效期 30 天内，每天首次「用过任意功能」返 10 分；
+     * 任意连续 7 天全勤额外 +10（滚动窗口，发过后窗口不重叠）；
+     * 30 天一天不漏再 +50。漏签只损失当天和该窗口，有效期不顺延。
+     */
+    settleCard: function () {
+      var sh = state.shop;
+      var c = sh.card;
+      if (!c) return false;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (today < c.startDate || today > c.endDate) return false;
+      if (c.days[today]) return false;
+
+      c.days[today] = 1;
+      var gained = POMO.CARD_DAILY;
+      this.addPoints(POMO.CARD_DAILY, 'card');
+
+      // 滚动 7 天：窗口 = [today-6, today]，与上一次发奖窗口不重叠才发
+      var winStart = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -6));
+      var lastEnd = c.weekAwardEnd || '';
+      if (!lastEnd || winStart > lastEnd) {
+        var all = true;
+        for (var i = 0; i < 7; i++) {
+          var k = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(winStart), i));
+          if (!c.days[k]) { all = false; break; }
+        }
+        if (all) {
+          this.addPoints(POMO.CARD_WEEK_BONUS, 'card');
+          gained += POMO.CARD_WEEK_BONUS;
+          c.weekAwardEnd = today;
+        }
+      }
+
+      // 30 天全勤
+      if (!c.fullAwarded) {
+        var full = true;
+        for (var j = 0; j < POMO.CARD_DAYS; j++) {
+          var kk = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(c.startDate), j));
+          if (!c.days[kk]) { full = false; break; }
+        }
+        if (full) {
+          this.addPoints(POMO.CARD_FULL_BONUS, 'card');
+          gained += POMO.CARD_FULL_BONUS;
+          c.fullAwarded = true;
+        }
+      }
+
+      c.gained = (c.gained || 0) + gained;
+      sh.log.unshift({
+        at: Date.now(), type: 'card',
+        text: '月卡每日返还 +' + gained + (gained > POMO.CARD_DAILY ? '（含全勤奖励）' : '')
+      });
+      this.trimShopLog();
+      return true;
+    },
+
+    /** 满潜重复干员：待兑换份数与可换合成玉 */
+    dupPoolInfo: function () {
+      var pool = state.shop.dupPool || [];
+      var pts = 0;
+      pool.forEach(function (d) { pts += d.pts || 0; });
+      return { count: pool.length, points: pts, jade: pts * POMO.JADE_PER_POINT };
+    },
+
+    /** 一键把满潜重复兑换成合成玉（资产形式转换，不计入累计获得） */
+    exchangeDup: function () {
+      var sh = state.shop;
+      var info = this.dupPoolInfo();
+      if (!info.count) return { ok: false, count: 0, jade: 0 };
+      state.pomodoro.jade += info.jade;
+      sh.dupPool = [];
+      sh.log.unshift({
+        at: Date.now(), type: 'exchange',
+        text: '兑换 ' + info.count + ' 份重复干员 → ' + info.jade + ' 合成玉'
+      });
+      this.trimShopLog();
+      this.save();
+      this.emit();
+      return { ok: true, count: info.count, jade: info.jade };
+    },
+
+    trimShopLog: function () {
+      var log = state.shop.log;
+      if (log.length > 100) log.length = 100;
     },
 
     /** 结束一次专注：minutes 为实际专注分钟，extra 可带起止时间用于写入象限 */
@@ -8405,12 +8672,15 @@ window.AK_OPS = [
         }
         if (hit) {
           hit.count = (hit.count || 1) + 1;
-          // 潜能 = max(0, min(复制数-1, 上限))；达到上限（6 份）后，多余复制转化为积分
+          // 潜能 = max(0, min(复制数-1, 上限))；达到上限（6 份）后，多余复制存入商城待兑换
           if (hit.count > POMO.POT_MAX + 1) {
             var pts = POMO.DUP_POINTS[o.r] || POMO.DUP_POINTS[3];
-            pm.points += pts;
-            hit.dupPts = (hit.dupPts || 0) + pts;
+            if (!state.shop) state.shop = { activeDays: {}, dupPool: [], log: [], card: null };
+            if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
+            state.shop.dupPool.push({ n: o.n, r: o.r, pts: pts, at: Date.now() });
+            hit.dupPts = (hit.dupPts || 0) + pts;   // 历史累计（含改造前已转化的部分）
             out.converted += pts;
+            out.convertedCount = (out.convertedCount || 0) + 1;
           }
         } else {
           pm.gacha.ops.push({ n: o.n, r: o.r, p: o.p, img: o.img, count: 1, at: Date.now() });
@@ -9912,6 +10182,51 @@ window.AK_OPS = [
     return s;
   }
 
+  /* ---------- 合成玉：彩色多面体图标 ----------
+   * 按明日方舟「合成玉」的金色晶体造型重绘的矢量图，随尺寸缩放不糊。
+   * 若用户在设置里导入过本地图片（settings.assets.jadeIcon），优先用图片。
+   */
+  var jadeSeq = 0;
+  function jade(size) {
+    size = size || 16;
+    var custom = (global.Store && global.Store.state && Store.state.settings &&
+      Store.state.settings.assets && Store.state.settings.assets.jadeIcon) || '';
+    if (custom) {
+      var im = document.createElement('img');
+      im.src = custom;
+      im.alt = '合成玉';
+      im.className = 'cp-jade-glyph cp-jade-img';
+      im.style.width = size + 'px';
+      im.style.height = size + 'px';
+      return im;
+    }
+    var id = 'cpjg' + (++jadeSeq);
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', 'cp-jade-glyph');
+    s.setAttribute('width', size);
+    s.setAttribute('height', size);
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML =
+      '<defs>' +
+        '<linearGradient id="' + id + 'a" x1="0" y1="0" x2=".9" y2="1">' +
+          '<stop offset="0" stop-color="#FFEDB4"/><stop offset=".45" stop-color="#FFC93F"/><stop offset="1" stop-color="#EF8B1C"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + 'b" x1="0" y1="0" x2=".2" y2="1">' +
+          '<stop offset="0" stop-color="#FFD873"/><stop offset="1" stop-color="#CE6A14"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + 'c" x1="0" y1="0" x2="1" y2=".6">' +
+          '<stop offset="0" stop-color="#FFF8DE"/><stop offset="1" stop-color="#FFE39A"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+      '<path d="M12 1.7 20.4 8.8 12 22.3 3.6 8.8Z" style="fill:url(#' + id + 'b);stroke:none"/>' +
+      '<path d="M12 1.7 16.5 8.8 12 22.3 7.5 8.8Z" style="fill:url(#' + id + 'a);stroke:none"/>' +
+      '<path d="M12 1.7 20.4 8.8H3.6Z" style="fill:url(#' + id + 'c);stroke:none"/>' +
+      '<path d="M7.5 8.8 9.6 10.6 9 18.2 7.5 8.8Z" style="fill:#FFF9E8;stroke:none;opacity:.5"/>' +
+      '<path d="M3.6 8.8h16.8" style="fill:none;stroke:#FFF7DE;stroke-width:.7;opacity:.8"/>';
+    return s;
+  }
+
   /** 通过 innerHTML 字符串创建元素 */
   function frag(html) {
     var t = document.createElement('template');
@@ -10565,7 +10880,7 @@ window.AK_OPS = [
   }
 
   global.UI = {
-    el: el, appendAll: appendAll, svg: svg, frag: frag,
+    el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
     $: $, $$: $$, escapeHTML: escapeHTML,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,
@@ -17642,9 +17957,9 @@ window.AK_OPS = [
    * ========================================================== */
   var SRC_LABELS = {
     focus: '专注', task: '完成待办', plan: '计划', goal: '目标 / KR',
-    ach: '成就', sleep: '睡眠', meal: '饮食', activity: '活动', other: '其他'
+    ach: '成就', sleep: '睡眠', meal: '饮食', activity: '活动', card: '月卡', other: '其他'
   };
-  var SRC_ORDER = ['focus', 'task', 'plan', 'goal', 'ach', 'sleep', 'meal', 'activity', 'other'];
+  var SRC_ORDER = ['focus', 'task', 'plan', 'goal', 'ach', 'sleep', 'meal', 'activity', 'card', 'other'];
 
   /* ==========================================================
    * 消费构成（账本 → 统计）：每日支出小柱 + 分类构成
@@ -21812,7 +22127,7 @@ window.AK_OPS = [
   /** 合成玉图标 + 数字 */
   function jadeTag(n) {
     return el('span', { class: 'jade-tag', title: '合成玉' }, [
-      V.svg(V.icons.jade, 13),
+      V.jade(13),
       el('b', { text: String(Math.round(n)) })
     ]);
   }
@@ -21868,7 +22183,7 @@ window.AK_OPS = [
     if (pot > 0) {
       box.appendChild(el('span', {
         class: 'op-pot',
-        title: '潜能 ' + pot + (op.dupPts ? '（已转化 ' + op.dupPts + ' 积分）' : ''),
+        title: '潜能 ' + pot + (op.dupPts ? '（累计满潜重复 ' + op.dupPts + ' 积分）' : ''),
         text: '★'.repeat(pot)
       }));
     }
@@ -21984,7 +22299,8 @@ window.AK_OPS = [
         pulling = false;
         lockFoot(false);
         if (list && list.converted) {
-          V.toast('满潜能重复干员，已转化 ' + list.converted + ' 积分');
+          V.toast('满潜重复 ' + (list.convertedCount || 1) + ' 份已存入商店，可换 ' +
+            (list.converted * POMO.JADE_PER_POINT) + ' 合成玉');
         }
       });
     }
@@ -22057,7 +22373,7 @@ window.AK_OPS = [
       el('div', { class: 'od-info' }, [
         el('b', { text: rec.n }),
         el('span', { text: rec.r + '★ · ' + (rec.p || '—') + (tags.length ? ' · ' + tags.join(' / ') : '') }),
-        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + pot + (maxpot ? '（满潜）' : '') + (rec.dupPts ? ' · 已转化 ' + rec.dupPts + ' 积分' : '') })
+        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + pot + (maxpot ? '（满潜）' : '') + (rec.dupPts ? ' · 累计满潜重复 ' + rec.dupPts + ' 积分' : '') })
       ])
     ]);
 
@@ -22814,11 +23130,14 @@ window.AK_OPS = [
         if (Store.isAchieved(a)) done++;
       });
 
-      var statCards = [];
-      if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
-      statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
-      statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
-      root.appendChild(el('div', { class: 'task-summary' }, statCards));
+      // 商店页不需要「森林 / 成就」概览卡，直接看余额
+      if (this.tab !== 'shop') {
+        var statCards = [];
+        if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
+        statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
+        statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
+        root.appendChild(el('div', { class: 'task-summary' }, statCards));
+      }
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
         (!isForest) ? el('button', {
@@ -22835,13 +23154,162 @@ window.AK_OPS = [
           class: 'gacha-tab' + (this.tab === 'ach' ? ' active' : ''),
           text: '成就 ' + done,
           onclick: function () { self.tab = 'ach'; self.render(); }
+        }),
+        el('button', {
+          class: 'gacha-tab' + (this.tab === 'shop' ? ' active' : ''),
+          text: '商店',
+          onclick: function () { self.tab = 'shop'; self.render(); }
         })
       ].filter(Boolean));
       root.appendChild(tabs);
 
       if (this.tab === 'ach') root.appendChild(this.achPane());
       else if (this.tab === 'forest') root.appendChild(this.forestPane());
+      else if (this.tab === 'shop') root.appendChild(this.shopPane());
       else root.appendChild(this.opsPane());
+    },
+
+    /* ==========================================================
+     * 商店：月卡 + 满潜重复兑换
+     * ========================================================== */
+    shopPane: function () {
+      var self = this;
+      var wrap = el('div', { class: 'shop-pane' });
+      var bal = Store.shopBalance();
+      var info = Store.cardInfo();
+      var dup = Store.dupPoolInfo();
+
+      /* ---- 余额 ---- */
+      var balCard = el('div', { class: 'card shop-bal' });
+      [
+        [bal.points, '森林积分'],
+        [bal.jade, '合成玉'],
+        [bal.total, '等值积分']
+      ].forEach(function (x) {
+        balCard.appendChild(el('div', { class: 'shop-bal-item' }, [
+          el('b', { text: String(x[0]) }),
+          el('span', { text: x[1] })
+        ]));
+      });
+      wrap.appendChild(balCard);
+      wrap.appendChild(el('div', {
+        class: 'shop-note',
+        text: '商城统一按积分计价（1 积分 = ' + POMO.JADE_PER_POINT +
+          ' 合成玉）。扣款先扣森林积分，不够的部分再按比例扣合成玉。'
+      }));
+
+      /* ---- 月卡 ---- */
+      var cardBox = el('div', { class: 'card shop-block' });
+      cardBox.appendChild(el('div', { class: 'section-title' }, ['月卡']));
+
+      function buy() {
+        var r = Store.buyCard();
+        if (!r.ok) { V.toast(r.msg, 'err'); return; }
+        V.toast('月卡已开通，今天已返 ' + POMO.CARD_DAILY + ' 积分');
+        self.render();
+      }
+
+      if (!info.active) {
+        if (info.bought) {
+          cardBox.appendChild(el('div', {
+            class: 'shop-sub', text: '上一张月卡已在 ' + info.endDate + ' 到期'
+          }));
+        }
+        cardBox.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '花 ' + POMO.CARD_PRICE + ' 积分开通 30 天：每天用任意功能返 ' +
+            POMO.CARD_DAILY + ' 分；任意连续 7 天全勤额外 +' + POMO.CARD_WEEK_BONUS +
+            '；30 天一天不漏再 +' + POMO.CARD_FULL_BONUS + '。漏签只损失当天和该窗口，有效期不顺延。'
+        }));
+        cardBox.appendChild(el('button', {
+          class: 'btn btn-primary btn-block btn-lg',
+          text: '开通月卡（' + POMO.CARD_PRICE + ' 积分）',
+          onclick: buy
+        }));
+      } else {
+        cardBox.appendChild(el('div', { class: 'shop-row' }, [
+          el('b', { text: '剩余 ' + info.daysLeft + ' 天' }),
+          el('span', { text: '已签 ' + info.signedDays + '/' + info.daysTotal + ' 天' })
+        ]));
+
+        /* 30 天进度条 */
+        var bar = el('div', { class: 'shop-bar' });
+        bar.appendChild(el('i', {
+          style: { width: Math.round(info.signedDays / info.daysTotal * 100) + '%' }
+        }));
+        cardBox.appendChild(bar);
+
+        /* 滚动 7 天：最近 7 天的签到点 */
+        var dots = el('div', { class: 'shop-dots' });
+        var c = Store.state.shop.card;
+        for (var i = 6; i >= 0; i--) {
+          var d = DateUtil.addDays(DateUtil.today(), -i);
+          var key = DateUtil.toStr(d);
+          var on = !!(c.days && c.days[key]);
+          dots.appendChild(el('span', {
+            class: 'shop-dot' + (on ? ' on' : ''),
+            title: key + (on ? ' 已签到' : ' 未签到'),
+            text: String(d.getDate())
+          }));
+        }
+        cardBox.appendChild(el('div', { class: 'shop-label', text: '最近 7 天（连续 7 天全勤 +' + POMO.CARD_WEEK_BONUS + '）' }));
+        cardBox.appendChild(dots);
+
+        cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
+          el('span', {
+            text: info.todaySigned ? '今天已返 ' + POMO.CARD_DAILY + ' 积分' : '今天还没结算，进入任意模块即可'
+          }),
+          el('b', { text: '累计返 ' + info.gained + ' 积分' })
+        ]));
+        if (info.fullAwarded) {
+          cardBox.appendChild(el('div', { class: 'shop-badge', text: '30 天全勤奖励已领取' }));
+        }
+      }
+      wrap.appendChild(cardBox);
+
+      /* ---- 满潜重复兑换 ---- */
+      var exBox = el('div', { class: 'card shop-block' });
+      exBox.appendChild(el('div', { class: 'section-title' }, ['满潜重复兑换']));
+      if (dup.count > 0) {
+        exBox.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '待兑换 ' + dup.count + ' 份重复干员，按星级折算共 ' + dup.points +
+            ' 积分，可换 ' + dup.jade + ' 合成玉。'
+        }));
+        exBox.appendChild(el('button', {
+          class: 'btn btn-primary btn-block',
+          onclick: function () {
+            var r = Store.exchangeDup();
+            if (!r.ok) { V.toast('没有可兑换的重复干员', 'err'); return; }
+            V.toast('已兑换 ' + r.jade + ' 合成玉');
+            self.render();
+          }
+        }, [V.jade(16), '一键兑换 ' + dup.jade + ' 合成玉']));
+      } else {
+        exBox.appendChild(el('div', {
+          class: 'q-empty',
+          text: '暂无待兑换的重复干员。抽到满潜（6 份）之后，多余的复制会存到这里。'
+        }));
+      }
+      wrap.appendChild(exBox);
+
+      /* ---- 记录 ---- */
+      var logs = (Store.state.shop.log || []).slice(0, 8);
+      if (logs.length) {
+        var lg = el('div', { class: 'card shop-block' });
+        lg.appendChild(el('div', { class: 'section-title' }, ['最近记录']));
+        logs.forEach(function (l) {
+          var d = new Date(l.at);
+          var p = function (x) { return (x < 10 ? '0' : '') + x; };
+          lg.appendChild(el('div', { class: 'shop-log' }, [
+            el('span', { text: (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) }),
+            el('b', { text: l.text })
+          ]));
+        });
+        wrap.appendChild(lg);
+      }
+
+      return wrap;
     },
 
     /* ==========================================================
@@ -22863,7 +23331,7 @@ window.AK_OPS = [
       card.appendChild(el('button', {
         class: 'btn btn-primary btn-block btn-lg', style: { marginBottom: '12px' },
         onclick: function () { Gacha.open(); }
-      }, [V.svg(V.icons.jade, 17), '去寻访（' + POMO.PULL_COST + ' 合成玉 / 次）']));
+      }, [V.jade(17), '去寻访（' + POMO.PULL_COST + ' 合成玉 / 次）']));
 
       if (!owned.length) {
         card.appendChild(el('div', {
@@ -27142,7 +27610,7 @@ window.AK_OPS = [
         el('button', {
           class: 'btn btn-primary',
           onclick: function () { if (global.Gacha) Gacha.open(); }
-        }, [V.svg(V.icons.jade, 16), '去寻访']),
+        }, [V.jade(16), '去寻访']),
         el('button', {
           class: 'btn',
           onclick: function () { if (global.Gacha) Gacha.openOps(); }
@@ -35730,6 +36198,9 @@ window.Pet = (function () {
     App.currentId = id;
     App.current = v;
 
+    // 进入任意模块就算「今天用过」：月卡在这里结算，必须早于渲染，界面上的余额才是新的
+    if (Store.touchActive) Store.touchActive();
+
     UI.$$('.cp-view').forEach(function (n) { n.classList.remove('cp-active'); });
     if (!v.root) v.mount(UI.$('#views'));
     v.root.classList.add('cp-active');
@@ -35783,6 +36254,28 @@ window.Pet = (function () {
       '<div class="cp-term-row"><span>当前周次</span><span>' + (inTerm ? '第 ' + cw + ' 周' : '假期中') + '</span></div>' +
       '<div class="cp-term-row"><span>课程 / 待办</span><span>' + total + ' / ' + pendingTasks + '</span></div>';
     UI.$('#brandSub').textContent = DateUtil.weekdayCN(DateUtil.today()) + ' · ' + DateUtil.toStr(DateUtil.today()).slice(5);
+  }
+
+  /* ---------- 侧边栏折叠（仅桌面） ---------- */
+  /** 把设置里的折叠状态贴到 DOM；首屏渲染前调用，避免先撑开再收起 */
+  function applySidebarMini() {
+    var ui = Store.state.settings.ui || {};
+    var mini = !!ui.sidebarMini;
+    var app = document.querySelector('.cp-app');
+    if (app) app.classList.toggle('cp-mini', mini);
+    var btn = UI.$('#btnCollapse');
+    if (btn) {
+      btn.title = mini ? '展开侧边栏' : '折叠侧边栏';
+      btn.setAttribute('aria-label', btn.title);
+    }
+  }
+
+  function toggleSidebarMini() {
+    var s = Store.state.settings;
+    if (!s.ui) s.ui = { sidebarMini: false };
+    s.ui.sidebarMini = !s.ui.sidebarMini;
+    Store.save();
+    applySidebarMini();
   }
 
   /* ---------- 启动 ---------- */
@@ -35850,6 +36343,7 @@ window.Pet = (function () {
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
     if (global.Remind) Remind.start();
     if (global.Theme) { Theme.apply(); Theme.applyBackground(); }
+    applySidebarMini();
     sortViews();
     buildNav();
 
@@ -35865,6 +36359,9 @@ window.Pet = (function () {
     });
 
     // 全局搜索：顶栏按钮 + Ctrl/⌘ + K
+    var collapseBtn = UI.$('#btnCollapse');
+    if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebarMini);
+
     var searchBtn = UI.$('#btnSearch');
     if (searchBtn) searchBtn.addEventListener('click', function () {
       if (global.Search) Search.open();

@@ -3283,7 +3283,7 @@
         el('button', {
           class: 'btn btn-primary',
           onclick: function () { if (global.Gacha) Gacha.open(); }
-        }, [V.svg(V.icons.jade, 16), '去寻访']),
+        }, [V.jade(16), '去寻访']),
         el('button', {
           class: 'btn',
           onclick: function () { if (global.Gacha) Gacha.openOps(); }

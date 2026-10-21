@@ -182,6 +182,7 @@
         nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
         navOrder: [],   // 自定义模块顺序（空 = 用默认顺序）
+        ui: { sidebarMini: false },   // 桌面侧边栏是否折叠成图标条
         tagMeta: {},    // 标签自定义图标与颜色：{ '学习': {icon:'book', color:'#4f46e5'} }
         fav: { poems: [], words: [] },   // 收藏的每日一句（索引）与每日一词（单词）
         diet: {            // 每日热量目标与三餐配比
@@ -259,7 +260,13 @@
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
-      usage: {}                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
+      usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
+      shop: {                   // 商城：月卡 / 潜能兑换
+        card: null,             // 月卡 { startDate, endDate, days:{}, weekAwardEnd, fullAwarded, paid, gained }
+        activeDays: {},         // 近 120 天「用过任意功能」的日期：{ 'YYYY-MM-DD': 1 }
+        dupPool: [],            // 满潜重复待兑换：[{ n, r, pts, at }]
+        log: []                 // 最近 100 条商城记录
+      }
     };
   }
 
@@ -632,7 +639,13 @@
     PITY_STEP: 2,          // 每抽 +2%
     TEN_GUARANTEE: 5,      // 十连保底至少五星
     POT_MAX: 5,            // 潜能上限（干员最多 6 份复制，潜能 0~5）
-    DUP_POINTS: { 6: 40, 5: 25, 4: 12, 3: 6 }  // 满潜能后，每多抽一份转化的积分（按星级）
+    DUP_POINTS: { 6: 40, 5: 25, 4: 12, 3: 6 },  // 满潜能后，每多抽一份转化的积分（按星级）
+    /* —— 商城 —— */
+    CARD_PRICE: 300,       // 月卡售价（积分）
+    CARD_DAYS: 30,         // 月卡有效天数
+    CARD_DAILY: 10,        // 每天用任意功能返还的积分
+    CARD_WEEK_BONUS: 10,   // 滚动 7 天全勤的额外奖励
+    CARD_FULL_BONUS: 50    // 30 天全勤的额外奖励
   };
 
   var TREE_SPECIES = [
@@ -1590,6 +1603,8 @@
         { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, state.settings.health || {});
       if (!state.settings.nav) state.settings.nav = ds.settings.nav;
       if (!Array.isArray(state.settings.navOrder)) state.settings.navOrder = [];
+      if (!state.settings.ui || typeof state.settings.ui !== 'object') state.settings.ui = { sidebarMini: false };
+      if (typeof state.settings.ui.sidebarMini !== 'boolean') state.settings.ui.sidebarMini = false;
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
       if (!state.settings.ocr) state.settings.ocr = ds.settings.ocr;
       var defNav = ds.settings.nav;
@@ -1650,6 +1665,12 @@
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
+      // 商城：老版本没有这块，逐项补默认（dupPool 不回溯老数据，避免重复发放）
+      if (!state.shop || typeof state.shop !== 'object') state.shop = {};
+      if (!state.shop.activeDays || typeof state.shop.activeDays !== 'object') state.shop.activeDays = {};
+      if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
+      if (!Array.isArray(state.shop.log)) state.shop.log = [];
+      if (state.shop.card == null) state.shop.card = null;
       if (!state.taskSeq) state.taskSeq = {};
       if (!state.periods || !state.periods.length) state.periods = ds.periods;
 
@@ -3358,11 +3379,198 @@
       return pm.mode;
     },
 
+    /**
+     * 扣积分（双币折算）：优先扣森林积分，不够时按 1 积分 = 180 合成玉 补扣。
+     * 两池都不够则返回 false，且不产生任何变动。
+     */
     spendPoints: function (n) {
+      n = Math.round(n);
+      if (n <= 0) return true;
       var pm = state.pomodoro;
-      if (pm.points < n) return false;
-      pm.points -= n;
+      if (pm.points >= n) { pm.points -= n; return true; }
+      var need = n - pm.points;
+      var jadeNeed = need * POMO.JADE_PER_POINT;
+      if (pm.jade < jadeNeed) return false;
+      pm.points = 0;
+      pm.jade -= jadeNeed;
       return true;
+    },
+
+    /* ===== 商城 ===== */
+
+    /** 余额：森林积分 / 合成玉 / 等值积分 */
+    shopBalance: function () {
+      var pm = state.pomodoro;
+      return {
+        points: pm.points,
+        jade: pm.jade,
+        total: Math.round((pm.points + pm.jade / POMO.JADE_PER_POINT) * 100) / 100
+      };
+    },
+
+    /** 月卡剩余天数（含当天）；未购买或已过期返回 0 */
+    cardDaysLeft: function () {
+      var c = state.shop.card;
+      if (!c) return 0;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (today > c.endDate) return 0;
+      return DateUtil.diffDays(DateUtil.parse(c.endDate), DateUtil.parse(today)) + 1;
+    },
+
+    /** 月卡展示状态：只读，供 UI 用 */
+    cardInfo: function () {
+      var c = state.shop.card;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (!c) return { active: false, bought: false };
+      var left = this.cardDaysLeft();
+      var total = POMO.CARD_DAYS;
+      var signed = 0;
+      for (var i = 0; i < total; i++) {
+        var k = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(c.startDate), i));
+        if (c.days && c.days[k]) signed++;
+      }
+      return {
+        active: left > 0,
+        bought: true,
+        startDate: c.startDate,
+        endDate: c.endDate,
+        daysLeft: left,
+        daysTotal: total,
+        signedDays: signed,
+        todaySigned: !!(c.days && c.days[today]),
+        paid: c.paid || 0,
+        gained: c.gained || 0,
+        fullAwarded: !!c.fullAwarded
+      };
+    },
+
+    /** 购买月卡：扣 300 积分（双币折算），当天即算第一天并返 10 分 */
+    buyCard: function () {
+      var sh = state.shop;
+      var left = this.cardDaysLeft();
+      if (left > 0) return { ok: false, msg: '月卡还剩 ' + left + ' 天，到期后才能再买' };
+      if (this.totalPoints() < POMO.CARD_PRICE) {
+        return { ok: false, msg: '积分不足，还差 ' + Math.ceil(POMO.CARD_PRICE - this.totalPoints()) };
+      }
+      if (!this.spendPoints(POMO.CARD_PRICE)) return { ok: false, msg: '积分不足' };
+      var today = DateUtil.toStr(DateUtil.today());
+      sh.card = {
+        startDate: today,
+        endDate: DateUtil.toStr(DateUtil.addDays(DateUtil.today(), POMO.CARD_DAYS - 1)),
+        days: {},
+        weekAwardEnd: '',
+        fullAwarded: false,
+        paid: POMO.CARD_PRICE,
+        gained: 0
+      };
+      sh.log.unshift({ at: Date.now(), type: 'card', text: '购买月卡 −' + POMO.CARD_PRICE + ' 积分' });
+      this.trimShopLog();
+      this.save();
+      this.touchActive();     // 购买当天就用上了，直接结算首日
+      return { ok: true };
+    },
+
+    /** 记录「今天用过应用」，并结算月卡。任意模块进入时调用 */
+    touchActive: function () {
+      var t = DateUtil.toStr(DateUtil.today());
+      var sh = state.shop;
+      var dirty = false;
+      if (!sh.activeDays[t]) { sh.activeDays[t] = 1; dirty = true; }
+      // 只留最近 120 天，避免无限增长
+      var keys = Object.keys(sh.activeDays).sort();
+      if (keys.length > 120) {
+        keys.slice(0, keys.length - 120).forEach(function (k) { delete sh.activeDays[k]; });
+        dirty = true;
+      }
+      if (this.settleCard()) dirty = true;
+      if (dirty) this.save();
+    },
+
+    /**
+     * 结算当天月卡。
+     * 规则：有效期 30 天内，每天首次「用过任意功能」返 10 分；
+     * 任意连续 7 天全勤额外 +10（滚动窗口，发过后窗口不重叠）；
+     * 30 天一天不漏再 +50。漏签只损失当天和该窗口，有效期不顺延。
+     */
+    settleCard: function () {
+      var sh = state.shop;
+      var c = sh.card;
+      if (!c) return false;
+      var today = DateUtil.toStr(DateUtil.today());
+      if (today < c.startDate || today > c.endDate) return false;
+      if (c.days[today]) return false;
+
+      c.days[today] = 1;
+      var gained = POMO.CARD_DAILY;
+      this.addPoints(POMO.CARD_DAILY, 'card');
+
+      // 滚动 7 天：窗口 = [today-6, today]，与上一次发奖窗口不重叠才发
+      var winStart = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -6));
+      var lastEnd = c.weekAwardEnd || '';
+      if (!lastEnd || winStart > lastEnd) {
+        var all = true;
+        for (var i = 0; i < 7; i++) {
+          var k = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(winStart), i));
+          if (!c.days[k]) { all = false; break; }
+        }
+        if (all) {
+          this.addPoints(POMO.CARD_WEEK_BONUS, 'card');
+          gained += POMO.CARD_WEEK_BONUS;
+          c.weekAwardEnd = today;
+        }
+      }
+
+      // 30 天全勤
+      if (!c.fullAwarded) {
+        var full = true;
+        for (var j = 0; j < POMO.CARD_DAYS; j++) {
+          var kk = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(c.startDate), j));
+          if (!c.days[kk]) { full = false; break; }
+        }
+        if (full) {
+          this.addPoints(POMO.CARD_FULL_BONUS, 'card');
+          gained += POMO.CARD_FULL_BONUS;
+          c.fullAwarded = true;
+        }
+      }
+
+      c.gained = (c.gained || 0) + gained;
+      sh.log.unshift({
+        at: Date.now(), type: 'card',
+        text: '月卡每日返还 +' + gained + (gained > POMO.CARD_DAILY ? '（含全勤奖励）' : '')
+      });
+      this.trimShopLog();
+      return true;
+    },
+
+    /** 满潜重复干员：待兑换份数与可换合成玉 */
+    dupPoolInfo: function () {
+      var pool = state.shop.dupPool || [];
+      var pts = 0;
+      pool.forEach(function (d) { pts += d.pts || 0; });
+      return { count: pool.length, points: pts, jade: pts * POMO.JADE_PER_POINT };
+    },
+
+    /** 一键把满潜重复兑换成合成玉（资产形式转换，不计入累计获得） */
+    exchangeDup: function () {
+      var sh = state.shop;
+      var info = this.dupPoolInfo();
+      if (!info.count) return { ok: false, count: 0, jade: 0 };
+      state.pomodoro.jade += info.jade;
+      sh.dupPool = [];
+      sh.log.unshift({
+        at: Date.now(), type: 'exchange',
+        text: '兑换 ' + info.count + ' 份重复干员 → ' + info.jade + ' 合成玉'
+      });
+      this.trimShopLog();
+      this.save();
+      this.emit();
+      return { ok: true, count: info.count, jade: info.jade };
+    },
+
+    trimShopLog: function () {
+      var log = state.shop.log;
+      if (log.length > 100) log.length = 100;
     },
 
     /** 结束一次专注：minutes 为实际专注分钟，extra 可带起止时间用于写入象限 */
@@ -3534,12 +3742,15 @@
         }
         if (hit) {
           hit.count = (hit.count || 1) + 1;
-          // 潜能 = max(0, min(复制数-1, 上限))；达到上限（6 份）后，多余复制转化为积分
+          // 潜能 = max(0, min(复制数-1, 上限))；达到上限（6 份）后，多余复制存入商城待兑换
           if (hit.count > POMO.POT_MAX + 1) {
             var pts = POMO.DUP_POINTS[o.r] || POMO.DUP_POINTS[3];
-            pm.points += pts;
-            hit.dupPts = (hit.dupPts || 0) + pts;
+            if (!state.shop) state.shop = { activeDays: {}, dupPool: [], log: [], card: null };
+            if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
+            state.shop.dupPool.push({ n: o.n, r: o.r, pts: pts, at: Date.now() });
+            hit.dupPts = (hit.dupPts || 0) + pts;   // 历史累计（含改造前已转化的部分）
             out.converted += pts;
+            out.convertedCount = (out.convertedCount || 0) + 1;
           }
         } else {
           pm.gacha.ops.push({ n: o.n, r: o.r, p: o.p, img: o.img, count: 1, at: Date.now() });

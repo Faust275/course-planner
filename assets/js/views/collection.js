@@ -60,11 +60,14 @@
         if (Store.isAchieved(a)) done++;
       });
 
-      var statCards = [];
-      if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
-      statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
-      statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
-      root.appendChild(el('div', { class: 'task-summary' }, statCards));
+      // 商店页不需要「森林 / 成就」概览卡，直接看余额
+      if (this.tab !== 'shop') {
+        var statCards = [];
+        if (!isForest) statCards.push(V.statCard(s.owned, '已获得干员', 'var(--amber)'));
+        statCards.push(V.statCard(pm.trees.length, '我的森林（棵）', 'var(--green)'));
+        statCards.push(V.statCard(done, '成就', 'var(--text-2)'));
+        root.appendChild(el('div', { class: 'task-summary' }, statCards));
+      }
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
         (!isForest) ? el('button', {
@@ -81,13 +84,162 @@
           class: 'gacha-tab' + (this.tab === 'ach' ? ' active' : ''),
           text: '成就 ' + done,
           onclick: function () { self.tab = 'ach'; self.render(); }
+        }),
+        el('button', {
+          class: 'gacha-tab' + (this.tab === 'shop' ? ' active' : ''),
+          text: '商店',
+          onclick: function () { self.tab = 'shop'; self.render(); }
         })
       ].filter(Boolean));
       root.appendChild(tabs);
 
       if (this.tab === 'ach') root.appendChild(this.achPane());
       else if (this.tab === 'forest') root.appendChild(this.forestPane());
+      else if (this.tab === 'shop') root.appendChild(this.shopPane());
       else root.appendChild(this.opsPane());
+    },
+
+    /* ==========================================================
+     * 商店：月卡 + 满潜重复兑换
+     * ========================================================== */
+    shopPane: function () {
+      var self = this;
+      var wrap = el('div', { class: 'shop-pane' });
+      var bal = Store.shopBalance();
+      var info = Store.cardInfo();
+      var dup = Store.dupPoolInfo();
+
+      /* ---- 余额 ---- */
+      var balCard = el('div', { class: 'card shop-bal' });
+      [
+        [bal.points, '森林积分'],
+        [bal.jade, '合成玉'],
+        [bal.total, '等值积分']
+      ].forEach(function (x) {
+        balCard.appendChild(el('div', { class: 'shop-bal-item' }, [
+          el('b', { text: String(x[0]) }),
+          el('span', { text: x[1] })
+        ]));
+      });
+      wrap.appendChild(balCard);
+      wrap.appendChild(el('div', {
+        class: 'shop-note',
+        text: '商城统一按积分计价（1 积分 = ' + POMO.JADE_PER_POINT +
+          ' 合成玉）。扣款先扣森林积分，不够的部分再按比例扣合成玉。'
+      }));
+
+      /* ---- 月卡 ---- */
+      var cardBox = el('div', { class: 'card shop-block' });
+      cardBox.appendChild(el('div', { class: 'section-title' }, ['月卡']));
+
+      function buy() {
+        var r = Store.buyCard();
+        if (!r.ok) { V.toast(r.msg, 'err'); return; }
+        V.toast('月卡已开通，今天已返 ' + POMO.CARD_DAILY + ' 积分');
+        self.render();
+      }
+
+      if (!info.active) {
+        if (info.bought) {
+          cardBox.appendChild(el('div', {
+            class: 'shop-sub', text: '上一张月卡已在 ' + info.endDate + ' 到期'
+          }));
+        }
+        cardBox.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '花 ' + POMO.CARD_PRICE + ' 积分开通 30 天：每天用任意功能返 ' +
+            POMO.CARD_DAILY + ' 分；任意连续 7 天全勤额外 +' + POMO.CARD_WEEK_BONUS +
+            '；30 天一天不漏再 +' + POMO.CARD_FULL_BONUS + '。漏签只损失当天和该窗口，有效期不顺延。'
+        }));
+        cardBox.appendChild(el('button', {
+          class: 'btn btn-primary btn-block btn-lg',
+          text: '开通月卡（' + POMO.CARD_PRICE + ' 积分）',
+          onclick: buy
+        }));
+      } else {
+        cardBox.appendChild(el('div', { class: 'shop-row' }, [
+          el('b', { text: '剩余 ' + info.daysLeft + ' 天' }),
+          el('span', { text: '已签 ' + info.signedDays + '/' + info.daysTotal + ' 天' })
+        ]));
+
+        /* 30 天进度条 */
+        var bar = el('div', { class: 'shop-bar' });
+        bar.appendChild(el('i', {
+          style: { width: Math.round(info.signedDays / info.daysTotal * 100) + '%' }
+        }));
+        cardBox.appendChild(bar);
+
+        /* 滚动 7 天：最近 7 天的签到点 */
+        var dots = el('div', { class: 'shop-dots' });
+        var c = Store.state.shop.card;
+        for (var i = 6; i >= 0; i--) {
+          var d = DateUtil.addDays(DateUtil.today(), -i);
+          var key = DateUtil.toStr(d);
+          var on = !!(c.days && c.days[key]);
+          dots.appendChild(el('span', {
+            class: 'shop-dot' + (on ? ' on' : ''),
+            title: key + (on ? ' 已签到' : ' 未签到'),
+            text: String(d.getDate())
+          }));
+        }
+        cardBox.appendChild(el('div', { class: 'shop-label', text: '最近 7 天（连续 7 天全勤 +' + POMO.CARD_WEEK_BONUS + '）' }));
+        cardBox.appendChild(dots);
+
+        cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
+          el('span', {
+            text: info.todaySigned ? '今天已返 ' + POMO.CARD_DAILY + ' 积分' : '今天还没结算，进入任意模块即可'
+          }),
+          el('b', { text: '累计返 ' + info.gained + ' 积分' })
+        ]));
+        if (info.fullAwarded) {
+          cardBox.appendChild(el('div', { class: 'shop-badge', text: '30 天全勤奖励已领取' }));
+        }
+      }
+      wrap.appendChild(cardBox);
+
+      /* ---- 满潜重复兑换 ---- */
+      var exBox = el('div', { class: 'card shop-block' });
+      exBox.appendChild(el('div', { class: 'section-title' }, ['满潜重复兑换']));
+      if (dup.count > 0) {
+        exBox.appendChild(el('div', {
+          class: 'shop-desc',
+          text: '待兑换 ' + dup.count + ' 份重复干员，按星级折算共 ' + dup.points +
+            ' 积分，可换 ' + dup.jade + ' 合成玉。'
+        }));
+        exBox.appendChild(el('button', {
+          class: 'btn btn-primary btn-block',
+          onclick: function () {
+            var r = Store.exchangeDup();
+            if (!r.ok) { V.toast('没有可兑换的重复干员', 'err'); return; }
+            V.toast('已兑换 ' + r.jade + ' 合成玉');
+            self.render();
+          }
+        }, [V.jade(16), '一键兑换 ' + dup.jade + ' 合成玉']));
+      } else {
+        exBox.appendChild(el('div', {
+          class: 'q-empty',
+          text: '暂无待兑换的重复干员。抽到满潜（6 份）之后，多余的复制会存到这里。'
+        }));
+      }
+      wrap.appendChild(exBox);
+
+      /* ---- 记录 ---- */
+      var logs = (Store.state.shop.log || []).slice(0, 8);
+      if (logs.length) {
+        var lg = el('div', { class: 'card shop-block' });
+        lg.appendChild(el('div', { class: 'section-title' }, ['最近记录']));
+        logs.forEach(function (l) {
+          var d = new Date(l.at);
+          var p = function (x) { return (x < 10 ? '0' : '') + x; };
+          lg.appendChild(el('div', { class: 'shop-log' }, [
+            el('span', { text: (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) }),
+            el('b', { text: l.text })
+          ]));
+        });
+        wrap.appendChild(lg);
+      }
+
+      return wrap;
     },
 
     /* ==========================================================
@@ -109,7 +261,7 @@
       card.appendChild(el('button', {
         class: 'btn btn-primary btn-block btn-lg', style: { marginBottom: '12px' },
         onclick: function () { Gacha.open(); }
-      }, [V.svg(V.icons.jade, 17), '去寻访（' + POMO.PULL_COST + ' 合成玉 / 次）']));
+      }, [V.jade(17), '去寻访（' + POMO.PULL_COST + ' 合成玉 / 次）']));
 
       if (!owned.length) {
         card.appendChild(el('div', {

@@ -62,6 +62,51 @@
     return s;
   }
 
+  /* ---------- 合成玉：彩色多面体图标 ----------
+   * 按明日方舟「合成玉」的金色晶体造型重绘的矢量图，随尺寸缩放不糊。
+   * 若用户在设置里导入过本地图片（settings.assets.jadeIcon），优先用图片。
+   */
+  var jadeSeq = 0;
+  function jade(size) {
+    size = size || 16;
+    var custom = (global.Store && global.Store.state && Store.state.settings &&
+      Store.state.settings.assets && Store.state.settings.assets.jadeIcon) || '';
+    if (custom) {
+      var im = document.createElement('img');
+      im.src = custom;
+      im.alt = '合成玉';
+      im.className = 'cp-jade-glyph cp-jade-img';
+      im.style.width = size + 'px';
+      im.style.height = size + 'px';
+      return im;
+    }
+    var id = 'cpjg' + (++jadeSeq);
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', 'cp-jade-glyph');
+    s.setAttribute('width', size);
+    s.setAttribute('height', size);
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML =
+      '<defs>' +
+        '<linearGradient id="' + id + 'a" x1="0" y1="0" x2=".9" y2="1">' +
+          '<stop offset="0" stop-color="#FFEDB4"/><stop offset=".45" stop-color="#FFC93F"/><stop offset="1" stop-color="#EF8B1C"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + 'b" x1="0" y1="0" x2=".2" y2="1">' +
+          '<stop offset="0" stop-color="#FFD873"/><stop offset="1" stop-color="#CE6A14"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="' + id + 'c" x1="0" y1="0" x2="1" y2=".6">' +
+          '<stop offset="0" stop-color="#FFF8DE"/><stop offset="1" stop-color="#FFE39A"/>' +
+        '</linearGradient>' +
+      '</defs>' +
+      '<path d="M12 1.7 20.4 8.8 12 22.3 3.6 8.8Z" style="fill:url(#' + id + 'b);stroke:none"/>' +
+      '<path d="M12 1.7 16.5 8.8 12 22.3 7.5 8.8Z" style="fill:url(#' + id + 'a);stroke:none"/>' +
+      '<path d="M12 1.7 20.4 8.8H3.6Z" style="fill:url(#' + id + 'c);stroke:none"/>' +
+      '<path d="M7.5 8.8 9.6 10.6 9 18.2 7.5 8.8Z" style="fill:#FFF9E8;stroke:none;opacity:.5"/>' +
+      '<path d="M3.6 8.8h16.8" style="fill:none;stroke:#FFF7DE;stroke-width:.7;opacity:.8"/>';
+    return s;
+  }
+
   /** 通过 innerHTML 字符串创建元素 */
   function frag(html) {
     var t = document.createElement('template');
@@ -715,7 +760,7 @@
   }
 
   global.UI = {
-    el: el, appendAll: appendAll, svg: svg, frag: frag,
+    el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
     $: $, $$: $$, escapeHTML: escapeHTML,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,

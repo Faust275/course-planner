@@ -234,9 +234,9 @@
    * ========================================================== */
   var SRC_LABELS = {
     focus: '专注', task: '完成待办', plan: '计划', goal: '目标 / KR',
-    ach: '成就', sleep: '睡眠', meal: '饮食', activity: '活动', other: '其他'
+    ach: '成就', sleep: '睡眠', meal: '饮食', activity: '活动', card: '月卡', other: '其他'
   };
-  var SRC_ORDER = ['focus', 'task', 'plan', 'goal', 'ach', 'sleep', 'meal', 'activity', 'other'];
+  var SRC_ORDER = ['focus', 'task', 'plan', 'goal', 'ach', 'sleep', 'meal', 'activity', 'card', 'other'];
 
   /* ==========================================================
    * 消费构成（账本 → 统计）：每日支出小柱 + 分类构成

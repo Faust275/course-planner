@@ -84,7 +84,7 @@
   /** 合成玉图标 + 数字 */
   function jadeTag(n) {
     return el('span', { class: 'jade-tag', title: '合成玉' }, [
-      V.svg(V.icons.jade, 13),
+      V.jade(13),
       el('b', { text: String(Math.round(n)) })
     ]);
   }
@@ -140,7 +140,7 @@
     if (pot > 0) {
       box.appendChild(el('span', {
         class: 'op-pot',
-        title: '潜能 ' + pot + (op.dupPts ? '（已转化 ' + op.dupPts + ' 积分）' : ''),
+        title: '潜能 ' + pot + (op.dupPts ? '（累计满潜重复 ' + op.dupPts + ' 积分）' : ''),
         text: '★'.repeat(pot)
       }));
     }
@@ -256,7 +256,8 @@
         pulling = false;
         lockFoot(false);
         if (list && list.converted) {
-          V.toast('满潜能重复干员，已转化 ' + list.converted + ' 积分');
+          V.toast('满潜重复 ' + (list.convertedCount || 1) + ' 份已存入商店，可换 ' +
+            (list.converted * POMO.JADE_PER_POINT) + ' 合成玉');
         }
       });
     }
@@ -329,7 +330,7 @@
       el('div', { class: 'od-info' }, [
         el('b', { text: rec.n }),
         el('span', { text: rec.r + '★ · ' + (rec.p || '—') + (tags.length ? ' · ' + tags.join(' / ') : '') }),
-        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + pot + (maxpot ? '（满潜）' : '') + (rec.dupPts ? ' · 已转化 ' + rec.dupPts + ' 积分' : '') })
+        el('span', { class: 'od-dim', text: '已获得 ' + (rec.count || 1) + ' 次 · 潜能 ' + pot + (maxpot ? '（满潜）' : '') + (rec.dupPts ? ' · 累计满潜重复 ' + rec.dupPts + ' 积分' : '') })
       ])
     ]);
 

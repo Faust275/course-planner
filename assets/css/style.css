@@ -166,6 +166,19 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cp-term-card .cp-term-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; }
 .cp-term-card .cp-term-row span:last-child { font-weight: 600; color: var(--primary); }
 
+/* ---- 侧边栏折叠（桌面端） ---- */
+.cp-sidebar { transition: width .2s var(--ease-out), padding .2s var(--ease-out); }
+.cp-desk-only { display: grid; }
+.cp-app.cp-mini { --sidebar-w: 68px; }
+.cp-mini .cp-sidebar { padding: 14px 10px 10px; }
+.cp-mini .cp-brand { padding: 0 0 16px; justify-content: center; }
+.cp-mini .cp-brand-text,
+.cp-mini .cp-nav-item span,
+.cp-mini .cp-sidebar-foot { display: none; }
+.cp-mini .cp-nav { gap: 5px; }
+.cp-mini .cp-nav-item { justify-content: center; padding: 10px 0; }
+.cp-mini .cp-nav-item svg { flex: 0 0 20px; }
+
 /* ---- 主区 ---- */
 .cp-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
@@ -518,6 +531,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .cp-app { flex-direction: column; }
   /* 窄屏不再有抽屉：底部 tabbar +「更多」已经覆盖全部模块，侧边栏直接收起 */
   .cp-sidebar { display: none; }
+  .cp-desk-only { display: none !important; }
   .cp-tabbar { display: flex; }
   .cp-view-wrap { padding: 14px 12px calc(var(--tabbar-h) + 18px); }
   .cp-grid-scroll { max-height: calc(100dvh - 128px); overflow: auto; overscroll-behavior-x: contain; }
@@ -2597,6 +2611,10 @@ input[type="range"]::-moz-range-thumb {
 .cp-jade-tag svg { width: 13px; height: 13px; color: #00c8b4; fill: currentColor; }
 .cp-jade-tag b { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* 合成玉彩色图标（内部 path 用内联 style 上色，覆盖全局 stroke 规则） */
+.cp-jade-glyph { display: inline-block; vertical-align: -.16em; flex: 0 0 auto; stroke: none; overflow: visible; }
+.cp-jade-img { object-fit: contain; border-radius: 4px; }
+
 .cp-gc-head {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 12px; border-radius: 11px; background: var(--surface-2); margin-bottom: 12px;
@@ -2755,13 +2773,52 @@ input[type="range"]::-moz-range-thumb {
 .cp-rw-rule b { font-weight: 600; text-align: right; }
 
 /* ===== 抽卡页：我的干员 / 寻访数据 标签页 ===== */
-.cp-gacha-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.cp-gacha-tabs { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+.cp-gacha-tabs::-webkit-scrollbar { display: none; }
 .cp-gacha-tab {
-  flex: 1; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2);
+  flex: 1 0 auto; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface-2);
   border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; transition: .15s;
+  white-space: nowrap;
 }
 .cp-gacha-tab.cp-active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .cp-gacha-tabpane { margin-top: 2px; }
+
+/* ===== 商店 ===== */
+.cp-shop-pane { display: flex; flex-direction: column; gap: 12px; }
+.cp-shop-bal { display: flex; gap: 8px; padding: 14px 10px; }
+.cp-shop-bal-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.cp-shop-bal-item b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cp-shop-bal-item span { font-size: 11.5px; color: var(--text-3); }
+.cp-shop-note { font-size: 11.5px; color: var(--text-3); line-height: 1.65; padding: 0 2px; }
+.cp-shop-block { padding: 14px 16px; }
+.cp-shop-desc { font-size: 12.5px; color: var(--text-2); line-height: 1.78; margin: 6px 0 10px; }
+.cp-shop-sub { font-size: 12px; color: #b45309; margin: 4px 0; }
+.cp-shop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 6px 0; }
+.cp-shop-row b { font-size: 15px; }
+.cp-shop-row span { font-size: 12px; color: var(--text-3); }
+.cp-shop-row-sub { margin-top: 10px; }
+.cp-shop-bar { height: 7px; border-radius: 4px; background: var(--surface-2); overflow: hidden; margin: 8px 0 2px; }
+.cp-shop-bar i { display: block; height: 100%; border-radius: 4px; transition: width .3s;
+  background: linear-gradient(90deg, var(--primary-light), var(--primary)); }
+.cp-shop-label { font-size: 11.5px; color: var(--text-3); margin: 12px 0 6px; }
+.cp-shop-dots { display: flex; gap: 6px; }
+.cp-shop-dot {
+  flex: 1; height: 30px; display: grid; place-items: center;
+  border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 12px; color: var(--text-3);
+}
+.cp-shop-dot.cp-on { background: var(--primary-weak); border-color: var(--primary); color: var(--primary); font-weight: 700; }
+.cp-shop-badge {
+  display: inline-block; margin-top: 10px; font-size: 11.5px; color: var(--primary);
+  background: var(--primary-weak); padding: 3px 9px; border-radius: 999px;
+}
+.cp-shop-log {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 12px;
+}
+.cp-shop-log:last-child { border-bottom: none; }
+.cp-shop-log span { color: var(--text-3); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.cp-shop-log b { font-weight: 500; text-align: right; }
 
 /* ===== 寻访数据 ===== */
 .cp-grec { display: flex; flex-direction: column; gap: 10px; }

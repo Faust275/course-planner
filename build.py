@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """把 src/index.template.html + assets 打包为单文件 index.html（CSS/JS 全内联）。
 
+图标保持外链（icon-192.png / apple-touch-icon.png），不进构建产物——
+角色立绘有版权，仓库只放生成脚本，图标由本机自己生成。
 用法: python3 build.py
 """
 import pathlib

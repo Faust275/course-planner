@@ -129,6 +129,9 @@
     App.currentId = id;
     App.current = v;
 
+    // 进入任意模块就算「今天用过」：月卡在这里结算，必须早于渲染，界面上的余额才是新的
+    if (Store.touchActive) Store.touchActive();
+
     UI.$$('.cp-view').forEach(function (n) { n.classList.remove('cp-active'); });
     if (!v.root) v.mount(UI.$('#views'));
     v.root.classList.add('cp-active');
@@ -182,6 +185,28 @@
       '<div class="cp-term-row"><span>当前周次</span><span>' + (inTerm ? '第 ' + cw + ' 周' : '假期中') + '</span></div>' +
       '<div class="cp-term-row"><span>课程 / 待办</span><span>' + total + ' / ' + pendingTasks + '</span></div>';
     UI.$('#brandSub').textContent = DateUtil.weekdayCN(DateUtil.today()) + ' · ' + DateUtil.toStr(DateUtil.today()).slice(5);
+  }
+
+  /* ---------- 侧边栏折叠（仅桌面） ---------- */
+  /** 把设置里的折叠状态贴到 DOM；首屏渲染前调用，避免先撑开再收起 */
+  function applySidebarMini() {
+    var ui = Store.state.settings.ui || {};
+    var mini = !!ui.sidebarMini;
+    var app = document.querySelector('.cp-app');
+    if (app) app.classList.toggle('cp-mini', mini);
+    var btn = UI.$('#btnCollapse');
+    if (btn) {
+      btn.title = mini ? '展开侧边栏' : '折叠侧边栏';
+      btn.setAttribute('aria-label', btn.title);
+    }
+  }
+
+  function toggleSidebarMini() {
+    var s = Store.state.settings;
+    if (!s.ui) s.ui = { sidebarMini: false };
+    s.ui.sidebarMini = !s.ui.sidebarMini;
+    Store.save();
+    applySidebarMini();
   }
 
   /* ---------- 启动 ---------- */
@@ -249,6 +274,7 @@
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
     if (global.Remind) Remind.start();
     if (global.Theme) { Theme.apply(); Theme.applyBackground(); }
+    applySidebarMini();
     sortViews();
     buildNav();
 
@@ -264,6 +290,9 @@
     });
 
     // 全局搜索：顶栏按钮 + Ctrl/⌘ + K
+    var collapseBtn = UI.$('#btnCollapse');
+    if (collapseBtn) collapseBtn.addEventListener('click', toggleSidebarMini);
+
     var searchBtn = UI.$('#btnSearch');
     if (searchBtn) searchBtn.addEventListener('click', function () {
       if (global.Search) Search.open();
