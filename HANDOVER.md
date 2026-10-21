@@ -12,9 +12,9 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | `cdc8ed0` feat: 课表/月历横滑切换 + PWA 更新机制（SW network-first、更新 Toast） |
-| 单元测试 | `node tests/run.mjs` **545 条全过** |
-| UI 回归 | 20 个 `verify_*.mjs` 全部通过（需 Playwright；`verify_gesture_sw.mjs` 自带静态服务，直接跑即可） |
+| 最后提交 | `07453ef` feat: 单次调课/停课/调休 + 待办抽屉与计划专注块（Time-Blocking） |
+| 单元测试 | `node tests/run.mjs` **561 条全过** |
+| UI 回归 | 22 个 `verify_*.mjs` 全部通过（需 Playwright；gesture_sw/course_ex/timeplan 自带或用 URL 变量指定服务） |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |
