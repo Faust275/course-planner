@@ -9,8 +9,11 @@
   var V = UI;
   var el = V.el;
 
-  /** 当前所在的二级设置页（空 = 首页） */
+  /** 当前所在的具体设置页（空 = 不在具体页） */
   var SUB = '';
+
+  /** 当前所在的分类页（空 = 设置首页） */
+  var CAT = '';
 
   /** 标签页里当前选中的预设分组 */
   var TAG_GROUP = '学习';
@@ -31,12 +34,35 @@
     ocr: { name: '图片识别', desc: '导入课表的识别方式与云端接口' },
     gpa: { name: '成绩与 GPA', desc: '学分绩点的换算规则与成绩单导出' },
     fav: { name: '收藏的词句', desc: '收藏过的每日一句与每日一词' },
+    diary: { name: '日记', desc: '凌晨归属与心情统计' },
     diet: { name: '饮食与热量', desc: '每日热量目标、三餐配比与营养素' },
     data: { name: '数据管理', desc: '同步码、备份文件与清空' },
     remind: { name: '上课提醒', desc: '页面内提醒，以及导出到系统日历' },
     about: { name: '使用提示', desc: '各模块的用法说明' },
     pet: { name: '桌宠（开发）', desc: '龙泡泡桌宠：开发者开关与本地素材注入，仅自用' }
   };
+
+  /**
+   * 设置首页的一级分类。顺序决定卡片顺序，`group` 字段把下面的条目挂上来。
+   * 具体页的 key 不能和这里的 key 重名（reward 是具体页，分类用 award）。
+   */
+  var CATS = [
+    { key: 'basic', name: '基础设置', desc: '课程时间、学期周次、外观与标签', icon: V.icons.settings, color: '#4f46e5' },
+    { key: 'module', name: '首页与模块', desc: '底部导航显示哪些模块、桌面快捷方式', icon: V.icons.home, color: '#0ea5e9' },
+    { key: 'record', name: '记录与统计', desc: '子任务联动、饮食、统计与 GPA', icon: V.icons.chart, color: '#10b981' },
+    { key: 'award', name: '奖励与目标', desc: '目标复盘、森林积分、抽卡与收藏', icon: V.icons.jade, color: '#00a89a' },
+    { key: 'sync', name: '识别与数据', desc: '语音、图片识别与备份同步', icon: V.icons.download, color: '#f59e0b' },
+    { key: 'help', name: '帮助', desc: '新手教程与各模块说明', icon: V.icons.bookOpen, color: '#8b5cf6' }
+  ];
+
+  function catOf(key) {
+    return CATS.filter(function (c) { return c.key === key; })[0] || null;
+  }
+
+  function groupOf(subKey) {
+    var it = SUBS.filter(function (s) { return s.key === subKey; })[0];
+    return it ? it.group : '';
+  }
 
   /**
    * 打开标签编辑弹窗
@@ -92,39 +118,50 @@
       return this.root;
     },
 
-    onEnter: function () { SUB = ''; this.render(); },
+    onEnter: function () { SUB = ''; CAT = ''; this.render(); },
 
-    /** 深链接（#/settings/desktop）直接落到某个二级页；进来时 onEnter 已清过 SUB */
-    setTab: function (sub) {
-      if (!sub || !SUB_META[sub]) return;
-      SUB = sub;
+    /**
+     * 深链接直接落到分类页或具体页：
+     * #/settings/basic → 基础设置列表；#/settings/desktop → 桌面与快捷，返回时回到它所在的分类
+     */
+    setTab: function (key) {
+      if (!key) return;
+      if (catOf(key)) { CAT = key; SUB = ''; this.render(); return; }
+      if (!SUB_META[key]) return;
+      SUB = key;
+      CAT = groupOf(key);
       this.render();
     },
 
-    getTab: function () { return SUB || null; },
+    getTab: function () { return SUB || CAT || null; },
 
     render: function () {
       var root = this.root;
       root.innerHTML = '';
 
-      // 二级页也进地址（#/settings/desktop）：刷新、分享都能回到同一页
+      // 分类页与具体页都进地址（#/settings/basic、#/settings/desktop）
       if (global.Router && global.App && App.currentId === 'settings') {
-        Router.set('settings', SUB || null);
+        Router.set('settings', SUB || CAT || null);
       }
 
       // 「新手教程」没有独立页面，直接弹引导
       if (SUB === 'guide') {
-        SUB = '';
+        SUB = ''; CAT = '';
+        // 地址别停在 #/settings/guide：界面其实是首页，刷新也不该再弹一次
+        if (global.Router && global.App && App.currentId === 'settings') Router.set('settings', null);
         this.home();
         if (global.Onboard) Onboard.start({ from: 'settings' });
         return;
       }
       root.style.maxWidth = '760px';
 
-      if (!SUB) { this.home(); return; }
+      if (!SUB && !CAT) { this.home(); return; }
 
-      /* ---- 二级页：返回条 ---- */
+      if (!SUB) { this.catPage(); return; }
+
+      /* ---- 具体页：返回条（返回分类页） ---- */
       var meta = SUB_META[SUB] || { name: '设置', desc: '' };
+      var parent = catOf(CAT);
       root.appendChild(el('div', { class: 'set-head' }, [
         el('button', {
           class: 'btn btn-sm',
@@ -136,7 +173,7 @@
             }
             SUB = ''; view.render();
           }
-        }, [V.svg(V.icons.left, 15), '返回']),
+        }, [V.svg(V.icons.left, 15), parent ? parent.name : '设置']),
         el('div', { class: 'set-head-title' }, [
           el('b', { text: meta.name }),
           el('span', { text: meta.desc })
@@ -1429,40 +1466,32 @@
   /* ==========================================================
    * 设置首页：分类入口
    * ========================================================== */
-  /** 设置首页的分组顺序（决定 5 个分区从上到下的排列） */
-  var SET_GROUPS = [
-    { key: 'basic', name: '基础设置' },
-    { key: 'module', name: '模块与首页' },
-    { key: 'reward', name: '奖励与识别' },
-    { key: 'data', name: '数据与同步' },
-    { key: 'help', name: '帮助' }
-  ];
-
   var SUBS = [
     /* 基础设置 */
     { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5', group: 'basic' },
     { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
     { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899', group: 'basic' },
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6', group: 'basic' },
-    /* 模块与首页 */
+    /* 首页与模块 */
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed', group: 'module' },
     { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9', group: 'module' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6', group: 'module' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6', group: 'module' },
-    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9', group: 'module' },
-    { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'module' },
-    { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'module' },
-    /* 奖励与识别 */
-    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b', group: 'reward' },
-    { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a', group: 'reward' },
-    { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b', group: 'reward' },
-    { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981', group: 'reward' },
-    { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b', group: 'reward' },
-    /* 数据与同步 */
-    { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b', group: 'data' },
-    { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438', group: 'data' },
-    { key: 'ocr', name: '图片识别', desc: '拍照/截图导入课表，本地或云端识别', icon: V.icons.camera, color: '#7c3aed', group: 'data' },
-    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'data' },
+    /* 记录与统计 */
+    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9', group: 'record' },
+    { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'record' },
+    { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'record' },
+    { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981', group: 'record' },
+    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'record' },
+    /* 奖励与目标 */
+    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b', group: 'award' },
+    { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a', group: 'award' },
+    { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b', group: 'award' },
+    { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b', group: 'award' },
+    /* 识别与数据 */
+    { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438', group: 'sync' },
+    { key: 'ocr', name: '图片识别', desc: '拍照/截图导入课表，本地或云端识别', icon: V.icons.camera, color: '#7c3aed', group: 'sync' },
+    { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b', group: 'sync' },
     /* 帮助 */
     { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9', group: 'help' },
     { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8', group: 'help' }
@@ -1685,6 +1714,7 @@
     root.appendChild(card);
   };
 
+  /* ===================== 设置首页：一级分类 ===================== */
   view.home = function () {
     var root = this.root;
 
@@ -1704,35 +1734,70 @@
       V.statCard(st.ledger, '账目', 'var(--text-2)')
     ]));
 
-    /* ---- 分类列表（按分组分区） ---- */
-    SET_GROUPS.forEach(function (g) {
-      var items = SUBS.filter(function (it) { return it.group === g.key; });
-      if (!items.length) return;
-      root.appendChild(el('div', {
-        class: 'section-title',
-        style: { marginTop: '20px', marginBottom: '8px' }
-      }, [g.name]));
-      var list = el('div', { class: 'card', style: { padding: '4px 6px' } });
-      items.forEach(function (item) {
-        list.appendChild(el('button', {
-          class: 'set-item',
-          onclick: function () { SUB = item.key; view.render(); }
-        }, [
-          el('span', { class: 'set-icon', style: { background: item.color } }, [V.svg(item.icon, 18)]),
-          el('span', { class: 'set-text' }, [
-            el('b', { text: item.name }),
-            el('span', { text: item.desc })
+    /* ---- 分类卡片：点进去再看这一类有哪几项 ---- */
+    root.appendChild(el('div', {
+      class: 'section-title',
+      style: { marginTop: '20px', marginBottom: '8px' }
+    }, ['全部设置']));
+
+    var grid = el('div', { class: 'set-cats' });
+    CATS.forEach(function (c) {
+      var n = SUBS.filter(function (it) { return it.group === c.key; }).length;
+      grid.appendChild(el('button', {
+        class: 'set-cat',
+        onclick: function () { CAT = c.key; SUB = ''; view.render(); }
+      }, [
+        el('span', { class: 'set-cat-icon', style: { background: c.color } }, [V.svg(c.icon, 19)]),
+        el('span', { class: 'set-cat-body' }, [
+          el('span', { class: 'set-cat-top' }, [
+            el('b', { text: c.name }),
+            el('em', { text: n + ' 项' })
           ]),
-          V.svg(V.icons.right, 16)
-        ]));
-      });
-      root.appendChild(list);
+          el('span', { class: 'set-cat-desc', text: c.desc })
+        ]),
+        V.svg(V.icons.right, 15)
+      ]));
     });
+    root.appendChild(grid);
 
     root.appendChild(el('div', {
       style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '12px', lineHeight: '1.7' },
       text: '所有数据只保存在这台设备的浏览器里，不会上传。换设备前记得在「数据管理」里导出一份备份。'
     }));
+  };
+
+  /* ===================== 分类页：列出这一类下的条目 ===================== */
+  view.catPage = function () {
+    var root = this.root;
+    var c = catOf(CAT) || { name: '设置', desc: '' };
+    var items = SUBS.filter(function (it) { return it.group === CAT; });
+
+    root.appendChild(el('div', { class: 'set-head' }, [
+      el('button', {
+        class: 'btn btn-sm',
+        onclick: function () { CAT = ''; SUB = ''; view.render(); }
+      }, [V.svg(V.icons.left, 15), '设置']),
+      el('div', { class: 'set-head-title' }, [
+        el('b', { text: c.name }),
+        el('span', { text: c.desc })
+      ])
+    ]));
+
+    var list = el('div', { class: 'card', style: { padding: '4px 6px' } });
+    items.forEach(function (item) {
+      list.appendChild(el('button', {
+        class: 'set-item',
+        onclick: function () { SUB = item.key; view.render(); }
+      }, [
+        el('span', { class: 'set-icon', style: { background: item.color } }, [V.svg(item.icon, 18)]),
+        el('span', { class: 'set-text' }, [
+          el('b', { text: item.name }),
+          el('span', { text: item.desc })
+        ]),
+        V.svg(V.icons.right, 16)
+      ]));
+    });
+    root.appendChild(list);
   };
 
   function addMinutes(hhmm, mins) {
@@ -3090,14 +3155,14 @@
     root.appendChild(tipCard);
   }
 
-  /** 供其它页面直接跳到某个设置子页 */
+  /** 供其它页面直接跳到某个设置分类或具体页 */
   global.SettingsView = {
     go: function (key) {
-      // 不在设置页时不能只改 SUB：go() 会先走 onEnter 把 SUB 清掉，
+      // 不在设置页时不能只改 SUB：go() 会先走 onEnter 把状态清掉，
       // 所以交给深链接参数带过去
-      if (global.App && App.currentId === 'settings') { SUB = key; view.render(); }
+      if (global.App && App.currentId === 'settings') view.setTab(key);
       else if (global.App) App.go('settings', { tab: key });
-      else { SUB = key; view.render(); }
+      else view.setTab(key);
     }
   };
 

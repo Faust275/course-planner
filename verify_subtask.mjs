@@ -170,9 +170,14 @@ await p.evaluate(() => {
   window.Store.updateSettings({ subtask: Object.assign({}, window.Store.subtaskOpts(), { showProgress: true }) });
 });
 
-// 设置页：子任务分区（先切到设置页，再从卡片点进去）
+// 设置页：子任务分区（先切到设置页，再从分类卡片点进去）
 await p.evaluate(() => window.App.go('settings'));
 await p.waitForTimeout(400);
+await p.evaluate(() => {
+  const cat = [...document.querySelectorAll('.cp-set-cat')].find(x => /记录与统计/.test(x.textContent));
+  if (cat) cat.click();
+});
+await p.waitForTimeout(300);
 await p.evaluate(() => {
   const item = [...document.querySelectorAll('.cp-set-item')].find(x => /子任务/.test(x.textContent));
   if (item) item.click();
@@ -286,6 +291,7 @@ await p.screenshot({ path: '/tmp/subtask-list.png', fullPage: false });
 await p.evaluate(() => {
   const item = [...document.querySelectorAll('.cp-set-item')].find(x => /子任务/.test(x.textContent));
   if (item) item.click();
+  else window.SettingsView.go('subtask');
 });
 await p.waitForTimeout(500);
 await p.screenshot({ path: '/tmp/subtask-settings.png', fullPage: false });

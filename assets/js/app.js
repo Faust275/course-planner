@@ -156,25 +156,12 @@
       Router.set(id, routeTab(v, tab));
     }
 
-    closeDrawer();
     UI.$('#views').scrollTop = 0;
   }
 
   /** 地址栏里该带哪个分页：默认分页不写尾巴（#/tasks 比 #/tasks/tasks 干净） */
   function routeTab(v, tab) {
     return (tab && v && tab === v.defaultTab) ? null : (tab || null);
-  }
-
-  /* ---------- 抽屉 ---------- */
-  function openDrawer() {
-    UI.$('#sidebar').classList.add('cp-open');
-    UI.$('#scrim').classList.add('cp-show');
-    UI.$('#scrim').onclick = closeDrawer;
-  }
-  function closeDrawer() {
-    UI.$('#sidebar').classList.remove('cp-open');
-    UI.$('#scrim').classList.remove('cp-show');
-    UI.$('#scrim').onclick = function () { UI.topClose && UI.topClose(); };
   }
 
   /* ---------- 学期卡片 ---------- */
@@ -275,9 +262,6 @@
       if (App.current && App.current.render && !App.current.noAutoRender) App.current.render();
       App.views.forEach(function (v) { if (v.onDataChange) v.onDataChange(); });
     });
-
-    var drawerBtn = UI.$('#btnDrawer');
-    if (drawerBtn) drawerBtn.addEventListener('click', openDrawer);
 
     // 全局搜索：顶栏按钮 + Ctrl/⌘ + K
     var searchBtn = UI.$('#btnSearch');

@@ -328,6 +328,8 @@ check('导入同步码后目标回来了', I2.n1 === I2.n0 && I2.n1 > 0, I2);
 console.log('J. 设置分区');
 await p.evaluate(() => { window.App.go('settings'); });
 await wait(500);
+await p.locator('.cp-set-cat').filter({ hasText: '奖励与目标' }).first().click();
+await wait(350);
 await p.locator('.cp-set-item').filter({ has: p.locator('.cp-set-text b', { hasText: /^目标$/ }) }).first().click();
 await wait(500);
 const J = await p.evaluate(() => ({

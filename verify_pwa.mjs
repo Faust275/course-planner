@@ -236,10 +236,16 @@ console.log('E. 设置页分区');
 await pg.evaluate(() => { window.App.go('settings'); });
 await pg.waitForTimeout(500);
 const E0 = await pg.evaluate(() => {
-  const items = [...document.querySelectorAll('.cp-set-item')].map(n => n.textContent.replace(/\s+/g, ' ').trim());
-  return items;
+  const cats = [...document.querySelectorAll('.cp-set-cat')].map(n => n.textContent.replace(/\s+/g, ' ').trim());
+  return cats;
 });
-check('设置首页有「桌面与快捷」入口', E0.some(t => /桌面与快捷/.test(t)), E0.slice(0, 4));
+check('设置首页有「首页与模块」分类', E0.some(t => /首页与模块/.test(t)), E0);
+
+await pg.locator('.cp-set-cat', { hasText: '首页与模块' }).first().click();
+await pg.waitForTimeout(350);
+const E0b = await pg.evaluate(() =>
+  [...document.querySelectorAll('.cp-set-item')].map(n => n.textContent.replace(/\s+/g, ' ').trim()));
+check('分类页有「桌面与快捷」入口', E0b.some(t => /桌面与快捷/.test(t)), E0b);
 
 await pg.locator('.cp-set-item', { hasText: '桌面与快捷' }).first().click();
 await pg.waitForTimeout(450);

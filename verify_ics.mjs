@@ -201,6 +201,11 @@ await p.waitForTimeout(300);
 // ---------- 6) 设置 → 上课提醒 子页 ----------
 await p.evaluate(() => window.App.go('settings'));
 await p.waitForTimeout(500);
+await p.evaluate(() => {
+  const c = [...document.querySelectorAll('.cp-set-cat')].find(x => /记录与统计/.test(x.textContent));
+  if (c) c.click();
+});
+await p.waitForTimeout(350);
 out.remindEntry = await p.evaluate(() =>
   [...document.querySelectorAll('.cp-set-item')].some(x => {
     const b = x.querySelector('b');

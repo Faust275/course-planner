@@ -521,6 +521,11 @@ check('保留的是本机原文（没被同步码冲掉）', G2.body === '本机
 await p.evaluate(() => App.go('settings'));
 await p.waitForTimeout(350);
 await p.evaluate(() => {
+  const cat = [...document.querySelectorAll('.cp-view.cp-active .cp-set-cat')].find(x => /识别与数据/.test(x.textContent));
+  if (cat) cat.click();
+});
+await p.waitForTimeout(300);
+await p.evaluate(() => {
   const it = [...document.querySelectorAll('.cp-view.cp-active .cp-set-item')].find(x => /数据管理/.test(x.textContent));
   if (it) it.click();
 });
