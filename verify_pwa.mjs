@@ -160,15 +160,15 @@ check('点导航后地址跟着变', s.hash === '#/ledger', s);
 await pg.evaluate(() => { location.hash = '#/quadrant'; });
 await pg.waitForTimeout(500);
 s = await snapshot(pg);
-check('手改地址能切视图', s.nav === '象限', s);
+check('手改地址能切视图', s.nav === '待办' && /象限/.test(s.pane || ''), s);
 
 await pg.evaluate(() => { location.hash = '#/task nope'; });
 await pg.waitForTimeout(400);
 s = await snapshot(pg);
-check('手改错字不会白屏，地址被修回当前页', s.nav === '象限' && s.hash === '#/quadrant', s);
+check('手改错字不会白屏，地址被修回当前页', s.nav === '待办' && s.hash === '#/tasks/quadrant', s);
 
-await pg.locator('#nav-tasks').click();
-await pg.waitForTimeout(400);
+// 新开一页直接落 #/tasks，验证默认任务分页（同一会话内导航会「记住上次分页」）
+pg = await fresh('#/tasks');
 s = await snapshot(pg);
 check('进待办默认是任务分页', /待办/.test(s.pane || '') && !/灵感|日记/.test(s.pane || ''), s);
 check('默认分页不写进地址', s.hash === '#/tasks', s.hash);

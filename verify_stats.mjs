@@ -148,7 +148,7 @@ await p.evaluate(() => {
 });
 
 // 入口在象限页
-await p.evaluate(() => App.go('quadrant'));
+await p.evaluate(() => App.go('tasks', { tab: 'quadrant' }));
 await p.waitForTimeout(400);
 const entry = await p.evaluate(() => {
   const btn = document.querySelector('.cp-stats-more');
@@ -159,8 +159,8 @@ check('入口文案包含「统计」', entry.text.indexOf('统计') >= 0, entry
 
 await p.evaluate(() => { const b = document.querySelector('.cp-stats-more'); if (b) b.click(); });
 await p.waitForTimeout(400);
-const cur = await p.evaluate(() => App.currentId);
-check('点击后进入 stats 视图', cur === 'stats', cur);
+const cur = await p.evaluate(() => ({ id: App.currentId, stats: !!document.querySelector('#view-tasks .cp-week-bar') }));
+check('点击后进入统计分页', cur.id === 'tasks' && cur.stats, cur);
 
 const navHasStats = await p.evaluate(() => {
   return [...document.querySelectorAll('.cp-nav-item')].some(x => /统计/.test(x.textContent));
@@ -168,17 +168,17 @@ const navHasStats = await p.evaluate(() => {
 check('统计视图不进底部/侧边导航', navHasStats === false);
 
 const tabs = await p.evaluate(() =>
-  [...document.querySelectorAll('#view-stats .cp-week-bar .cp-dim-tab')].map(x => x.textContent.trim()));
+  [...document.querySelectorAll('#view-tasks .cp-week-bar .cp-dim-tab')].map(x => x.textContent.trim()));
 check('六档周期齐全（含今年）', JSON.stringify(tabs) === JSON.stringify(['今天', '本周', '本月', '本学期', '今年']), tabs);
 
 const cards = await p.evaluate(() =>
-  [...document.querySelectorAll('#view-stats .cp-stat-cell .cp-stat-label')].map(x => x.textContent.trim()));
+  [...document.querySelectorAll('#view-tasks .cp-stat-cell .cp-stat-label')].map(x => x.textContent.trim()));
 check('顶部四格', JSON.stringify(cards) === JSON.stringify(['已记录', '日均记录', '睡眠日均', '上课日均']), cards);
 
-const hasChart = await p.evaluate(() => !!document.querySelector('#view-stats .cp-chart-bars, #view-stats .cp-chart-pie'));
+const hasChart = await p.evaluate(() => !!document.querySelector('#view-tasks .cp-chart-bars, #view-tasks .cp-chart-pie'));
 check('时间去向图已渲染', hasChart);
 
-const legendRows = await p.evaluate(() => document.querySelectorAll('#view-stats .cp-legend-row').length);
+const legendRows = await p.evaluate(() => document.querySelectorAll('#view-tasks .cp-legend-row').length);
 check('图例有行（至少睡眠 + 活动）', legendRows >= 2, legendRows);
 
 /* ==========================================================
@@ -187,7 +187,7 @@ check('图例有行（至少睡眠 + 活动）', legendRows >= 2, legendRows);
 console.log('D. 周期切换与对比');
 async function pickRange(label) {
   await p.evaluate((lbl) => {
-    for (const x of document.querySelectorAll('#view-stats .cp-week-bar .cp-dim-tab')) {
+    for (const x of document.querySelectorAll('#view-tasks .cp-week-bar .cp-dim-tab')) {
       if (x.textContent.trim() === lbl) { x.click(); return; }
     }
   }, label);
@@ -195,15 +195,15 @@ async function pickRange(label) {
 }
 
 await pickRange('本月');
-const monthTitle = await p.evaluate(() => document.querySelector('#view-stats .cp-week-label span').textContent.trim());
+const monthTitle = await p.evaluate(() => document.querySelector('#view-tasks .cp-week-label span').textContent.trim());
 check('切到本月后标题更新', monthTitle === '本月统计', monthTitle);
-const monthRec = await p.evaluate(() => document.querySelector('#view-stats .cp-stat-cell .cp-stat-value').textContent.trim());
+const monthRec = await p.evaluate(() => document.querySelector('#view-tasks .cp-stat-cell .cp-stat-value').textContent.trim());
 check('本月已记录非零', monthRec !== '0 分', monthRec);
 
 // 对比开关
 const cmpBefore = await p.evaluate(() => ({
   on: document.querySelector('.cp-cmp-toggle').className.includes('cp-is-on'),
-  chips: document.querySelectorAll('#view-stats .cp-cmp-chip').length
+  chips: document.querySelectorAll('#view-tasks .cp-cmp-chip').length
 }));
 check('对比默认关闭', cmpBefore.on === false);
 check('关闭时无对比小标签', cmpBefore.chips === 0, cmpBefore.chips);
@@ -212,8 +212,8 @@ await p.evaluate(() => document.querySelector('.cp-cmp-toggle').click());
 await p.waitForTimeout(320);
 const cmpAfter = await p.evaluate(() => ({
   on: document.querySelector('.cp-cmp-toggle').className.includes('cp-is-on'),
-  chips: document.querySelectorAll('#view-stats .cp-cmp-chip').length,
-  tableRows: document.querySelectorAll('#view-stats .cp-cmp-tr').length,
+  chips: document.querySelectorAll('#view-tasks .cp-cmp-chip').length,
+  tableRows: document.querySelectorAll('#view-tasks .cp-cmp-tr').length,
   hint: document.querySelector('.cp-cmp-hint') ? document.querySelector('.cp-cmp-hint').textContent : ''
 }));
 check('开启后按钮为 on', cmpAfter.on === true);
@@ -223,7 +223,7 @@ check('提示里说明只比日均', /日均/.test(cmpAfter.hint), cmpAfter.hint
 
 // 总量那张卡不做百分比对比（区间天数不同，比总量没意义）
 const totalChip = await p.evaluate(() => {
-  const cell = document.querySelector('#view-stats .cp-stat-cell');
+  const cell = document.querySelector('#view-tasks .cp-stat-cell');
   const chip = cell ? cell.querySelector('.cp-cmp-chip') : null;
   return chip ? chip.textContent : '';
 });
@@ -243,12 +243,12 @@ check('禁用原因写在按钮上', /没有可比/.test(termCmp.text), termCmp.
  * ========================================================== */
 console.log('E. 热力条');
 const heatTerm = await p.evaluate(() => {
-  const cells = [...document.querySelectorAll('#view-stats .cp-heat .cp-heat-week')];
+  const cells = [...document.querySelectorAll('#view-tasks .cp-heat .cp-heat-week')];
   return {
     count: cells.length,
     levels: cells.map(c => (c.className.match(/cp-lv-(\d)/) || [])[1]),
     partial: cells.filter(c => c.className.includes('cp-is-partial')).length,
-    title: document.querySelector('#view-stats .cp-chart-card .cp-section-title').textContent
+    title: document.querySelector('#view-tasks .cp-chart-card .cp-section-title').textContent
   };
 });
 check('本学期按周分组（多于一格）', heatTerm.count >= 3, heatTerm.count);
@@ -257,7 +257,7 @@ check('首尾不满周被标出', heatTerm.partial >= 1, heatTerm.partial);
 
 await pickRange('今天');
 const heatDay = await p.evaluate(() => {
-  const strip = document.querySelector('#view-stats .cp-heat');
+  const strip = document.querySelector('#view-tasks .cp-heat');
   return {
     daily: strip ? strip.className.includes('cp-is-daily') : false,
     count: strip ? strip.querySelectorAll('.cp-heat-week').length : 0
@@ -272,13 +272,13 @@ check('今天只有 1 格', heatDay.count === 1, heatDay.count);
 console.log('F. 图表切换');
 await pickRange('本月');
 await p.evaluate(() => {
-  const box = document.querySelector('#view-stats .cp-chart-card .cp-section-title .cp-dim-tabs');
+  const box = document.querySelector('#view-tasks .cp-chart-card .cp-section-title .cp-dim-tabs');
   for (const x of (box ? box.querySelectorAll('.cp-dim-tab') : [])) if (x.textContent.trim() === '饼状图') x.click();
 });
 await p.waitForTimeout(320);
 // 只看「时间去向」这张卡：下面的逐日柱图也用 .cp-chart-bars，会误判
 const pie = await p.evaluate(() => {
-  const card = document.querySelector('#view-stats .cp-chart-card');
+  const card = document.querySelector('#view-tasks .cp-chart-card');
   return {
     hasPie: !!card.querySelector('.cp-chart-pie'),
     hasBars: !!card.querySelector('.cp-chart-bars'),
@@ -289,12 +289,12 @@ check('切到饼状图', pie.hasPie === true && pie.hasBars === false, pie);
 check('饼图也有图例（不只靠悬停）', pie.legend >= 2, pie.legend);
 
 await p.evaluate(() => {
-  const box = document.querySelector('#view-stats .cp-chart-card .cp-section-title .cp-dim-tabs');
+  const box = document.querySelector('#view-tasks .cp-chart-card .cp-section-title .cp-dim-tabs');
   for (const x of (box ? box.querySelectorAll('.cp-dim-tab') : [])) if (x.textContent.trim() === '方形图') x.click();
 });
 await p.waitForTimeout(320);
 const bar = await p.evaluate(() => {
-  const card = document.querySelector('#view-stats .cp-chart-card');
+  const card = document.querySelector('#view-tasks .cp-chart-card');
   const el = card.querySelector('.cp-chart-bars');
   return {
     hasBars: !!el,

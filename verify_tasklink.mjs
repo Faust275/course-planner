@@ -106,8 +106,12 @@ check('列出最近的记录', B3.rows.length === 1 && /09:00–10:30/.test(B3.r
 // 点一条记录 → 跳到象限页那一天
 await p.locator('.cp-task-invest-row').first().click();
 await wait(600);
-const B4 = await p.evaluate(() => ({ view: window.App.currentId, date: window.App.views.find(v => v.id === 'quadrant').date }));
-check('点记录跳到象限页', B4.view === 'quadrant', B4);
+const B4 = await p.evaluate(() => ({
+  view: window.App.currentId,
+  pane: (document.querySelector('#view-tasks .cp-pane-tab.cp-active') || {}).textContent,
+  label: (document.querySelector('#view-tasks .cp-week-label span') || {}).textContent
+}));
+check('点记录跳到象限页', B4.view === 'tasks' && /象限/.test(B4.pane || '') && B4.label === '10 月 20 日', B4);
 await clearModals();
 
 // 手动关联：象限里记一段活动，挂到这条待办上
@@ -211,13 +215,13 @@ await p.evaluate(() => {
   for (let i = 1; i <= 3; i++) {
     Store.addActivity({ date: '2026-0' + i + '-15', start: '09:00', end: '11:00', name: '学习', type: 'study' });
   }
-  window.App.go('stats');
+  window.App.go('tasks', { tab: 'stats' });
 });
 await wait(700);
 await p.locator('.cp-dim-tab', { hasText: '今年' }).click();
 await wait(900);
 const D = await p.evaluate(() => ({
-  active: (document.querySelector('#view-stats .cp-dim-tab.cp-active') || {}).textContent,
+  active: (document.querySelector('#view-tasks .cp-dim-tab.cp-active') || {}).textContent,
   title: [...document.querySelectorAll('.cp-section-title')].map(n => n.textContent).find(t => /每月|每周|每天/.test(t)) || '',
   cells: document.querySelectorAll('.cp-heat-week').length,
   note: [...document.querySelectorAll('.cp-stats-note-inline')].map(n => n.textContent).join(' ')

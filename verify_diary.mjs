@@ -113,7 +113,7 @@ const B = await p.evaluate(() => {
   const tabs = [...document.querySelectorAll('.cp-view.cp-active .cp-pane-tab')].map(x => x.textContent.trim());
   return { tabs: tabs, count: tabs.length };
 });
-check('分页有三项', B.count === 3, B.tabs);
+check('待办页分页含待办/灵感/日记（并合并了象限/统计）', B.count >= 3, B.tabs);
 check('第一项是待办', /待办/.test(B.tabs[0]), B.tabs[0]);
 check('第二项是灵感', /灵感/.test(B.tabs[1]), B.tabs[1]);
 check('第三项是日记', /日记/.test(B.tabs[2]), B.tabs[2]);

@@ -328,7 +328,7 @@ check('导入同步码后目标回来了', I2.n1 === I2.n0 && I2.n1 > 0, I2);
 console.log('J. 设置分区');
 await p.evaluate(() => { window.App.go('settings'); });
 await wait(500);
-await p.locator('.cp-set-item', { hasText: '目标' }).first().click();
+await p.locator('.cp-set-item').filter({ has: p.locator('.cp-set-text b', { hasText: /^目标$/ }) }).first().click();
 await wait(500);
 const J = await p.evaluate(() => ({
   head: (document.querySelector('.cp-set-head-title b') || {}).textContent,
@@ -397,7 +397,7 @@ check('建第一个目标解锁「不再只是待办」', K.afterCreate.first ==
 check('这条成就给 20 积分', K.afterCreate.pts === 20, K.afterCreate.pts);
 check('达成归档发 60 积分并记 rewardedAt', K.afterArchive.rewarded === true, K.afterArchive);
 check('顺带解锁「说到做到」', K.afterArchive.achieved === true);
-check('一次归档共 +230（20 建目标 + 60 目标 + 150 成就）', K.afterArchive.pts === 230, K.afterArchive.pts);
+check('一次归档共 +245（20 建目标 + 60 目标 + 150 成就 + 15 KR 达成）', K.afterArchive.pts === 245, K.afterArchive.pts);
 check('恢复再归档不重复发', K.again === 0, K.again);
 check('周期不满 7 天：100% 也不发分', K.shortDelta === 0 && K.shortRewarded === false, K);
 

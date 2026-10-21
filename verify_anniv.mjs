@@ -67,7 +67,7 @@ const todayCard = await p.evaluate(() => {
 });
 
 // 7) 日程页「纪念日」按钮 → 弹窗
-await p.evaluate(() => window.App.go('agenda'));
+await p.evaluate(() => window.App.go('calendar', { tab: 'agenda' }));
 await p.waitForTimeout(500);
 await p.evaluate(() => {
   const btn = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '纪念日');

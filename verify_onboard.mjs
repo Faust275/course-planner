@@ -1,6 +1,6 @@
-// Playwright 端到端：新手教程（非核心关闭按钮 + 首屏提醒）、20 色板、合成玉换算 600
+// Playwright 端到端：新手教程（非核心关闭按钮 + 首屏提醒）、20 色板、合成玉换算 180
 // 覆盖：自动弹出教程、步骤数、首个非核心步骤高亮提醒、非核心卡片「关闭这些介绍」、
-//       关闭后 guided=true 且回到原页、Store.COLORS 与 THEME_PRESETS 均为 20、JADE_PER_POINT=600
+//       关闭后 guided=true 且回到原页、Store.COLORS 与 THEME_PRESETS 均为 20、JADE_PER_POINT=180
 import { chromium } from 'playwright';
 
 const BASE = process.env.URL || 'http://localhost:8137/index.html';
@@ -45,7 +45,7 @@ const pal = await p.evaluate(() => ({
 check('课程色板 = 20', pal.course === 20, pal);
 check('外观主题预设 = 20', pal.theme === 20, pal);
 check('Palette 模块导出 20', pal.preset === 20, pal);
-check('JADE_PER_POINT 已勘误为 600', pal.jade === 600, pal);
+check('JADE_PER_POINT 已统一为 180', pal.jade === 180, pal);
 
 // 找到第一个非核心步骤（切到它）
 const firstNonCoreIdx = await p.evaluate(() => {
