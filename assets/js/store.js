@@ -713,6 +713,7 @@
     TASK_DONE: 10,         // 完成一个待办
     PLAN_CHECKIN: 2,       // 完成一次打卡
     PLAN_DONE: 30,         // 完成一个计划
+    GOAL_DONE: 60,         // 目标推进到 100% 并归档留档（每目标一次，周期需满 7 天）
     PLANT_COST: 100,       // 第一棵树
     PLANT_STEP: 30,        // 每多一棵，价格递增
     WATER_COST: 20,        // 浇一次水
@@ -983,6 +984,16 @@
     { id: 'tree9', group: '种树', name: '森之守护', desc: '种下 9 棵树', icon: 'tree', tier: 'gold', points: 120,
       metric: 'tree', threshold: 9 },
 
+    /* —— 目标 —— */
+    { id: 'goal_first', group: '目标', name: '不再只是待办', desc: '创建第一个目标', icon: 'target', tier: 'bronze', points: 20,
+      metric: 'goalTotal', threshold: 1 },
+    { id: 'goal_active5', group: '目标', name: '五线并进', desc: '同时在办 5 个目标（达到上限）', icon: 'flag', tier: 'silver', points: 60,
+      metric: 'goalActive', threshold: 5 },
+    { id: 'goal_achieved', group: '目标', name: '说到做到', desc: '有目标推进到 100% 并归档留档', icon: 'check', tier: 'gold', points: 150,
+      metric: 'goalAchieved', threshold: 1 },
+    { id: 'goal_review', group: '目标', name: '月末回头看', desc: '用月末复盘把进度写进日记一次', icon: 'book', tier: 'silver', points: 50,
+      metric: 'goalReview', threshold: 1 },
+
     /* —— 历练：各功能使用次数成就，分三档逐级解锁（1 / 10 / 100）——
      * 初出茅庐(1) → 小有心得(10, 需初出茅庐) → 炉火纯青(100, 需小有心得)
      * metric 用 'usage:<key>'，由 state.usage[<key>] 计次 */
@@ -1016,7 +1027,7 @@
   ];
 
   /** 成就分类顺序：抽卡 / 集卡 / 种树 */
-  var ACH_GROUPS = ['抽卡', '集卡', '种树', '历练'];
+  var ACH_GROUPS = ['抽卡', '集卡', '种树', '目标', '历练'];
 
   /** 当前各成就指标的实际数值 */
   function achValue(metric) {
@@ -1025,6 +1036,19 @@
       var uk = metric.slice(6);
       return (s.usage && s.usage[uk]) || 0;
     }
+    if (metric === 'goalTotal') return (s.goals || []).length;
+    if (metric === 'goalActive') {
+      var tg = DateUtil.toStr(DateUtil.today());
+      return (s.goals || []).filter(function (g) { return goalActive(g, tg); }).length;
+    }
+    if (metric === 'goalAchieved') {
+      // 只看已经离开「在办」的：还在推进中的 100% 不算「说到做到」
+      var ta = DateUtil.toStr(DateUtil.today());
+      return (s.goals || []).filter(function (g) {
+        return !goalActive(g, ta) && goalPct(g, ta) >= 100;
+      }).length;
+    }
+    if (metric === 'goalReview') return (s.usage && s.usage.goalReview) || 0;
     if (metric === 'tree') return (s.pomodoro.trees || []).length;
     if (metric === 'streakNo6') return (s.pomodoro.gacha.streakNo6) || 0;
     if (metric === 'streakNo5') return (s.pomodoro.gacha.streakNo5) || 0;
@@ -1440,6 +1464,26 @@
     return [head].concat(body).join('\n');
   }
 
+  /** 给目标发积分的最短周期：太短的目标容易变成刷分工具 */
+  var GOAL_MIN_DAYS = 7;
+
+  /** 目标周期天数（含首尾两天） */
+  function goalDays(goal) {
+    if (!goal || !goal.startDate || !goal.endDate) return 0;
+    var a = DateUtil.parse(goal.startDate), b = DateUtil.parse(goal.endDate);
+    if (!a || !b) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+
+  /** 目标此刻的进度（成就与结算共用；页面层不用再算一遍） */
+  function goalPct(goal, todayStr) {
+    if (!goal) return 0;
+    return goalProgress(goal, {
+      from: goal.startDate, to: goal.endDate, today: todayStr,
+      plans: state.plans || [], tasks: state.tasks || []
+    }).pct;
+  }
+
   /** 目标对象的字段收口：缺的补、脏的丢，避免旧数据把页面搞崩 */
   function normGoal(raw) {
     var g = raw || {};
@@ -1468,6 +1512,7 @@
       endDate: g.endDate || today,
       krs: krs,
       archivedAt: g.archivedAt || '',
+      rewardedAt: g.rewardedAt || '',   // 达成奖励只发一次
       createdAt: g.createdAt || new Date().toISOString()
     };
   }
@@ -1593,6 +1638,7 @@
 
       // 兼容补齐字段（日程 / 象限 / 记账 / 设置…）
       this.ensure();
+      this.settleGoals();      // 上次关闭期间到期的目标，这里补结算
       this.save();
       return state;
     },
@@ -3714,6 +3760,9 @@
     goalActive: goalActive,
     goalReviewDue: goalReviewDue,
     goalReviewText: goalReviewText,
+    goalDays: goalDays,
+    goalPct: goalPct,
+    GOAL_MIN_DAYS: GOAL_MIN_DAYS,
 
     getGoal: function (id) {
       var list = state.goals || [];
@@ -3765,8 +3814,32 @@
       var g = this.getGoal(id);
       if (!g) return null;
       g.archivedAt = on === false ? '' : new Date().toISOString();
+      this.settleGoals();      // 归档时结算：达成 100% 且周期够长的发一次积分
       this.emit();
       return g;
+    },
+
+    /**
+     * 目标结算：离开「在办」且进度 100%、周期满 GOAL_MIN_DAYS 的，发一次积分。
+     * 用 rewardedAt 挡住重复发放——恢复再归档、反复新建都不会重复给。
+     * 到期是惰性的（没有写入动作），所以启动与进目标页时各跑一次。
+     */
+    settleGoals: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      var gained = [];
+      (state.goals || []).forEach(function (g) {
+        if (g.rewardedAt || goalActive(g, today)) return;
+        if (goalDays(g) < GOAL_MIN_DAYS) return;
+        if (goalPct(g, today) < 100) return;
+        g.rewardedAt = new Date().toISOString();
+        gained.push(g);
+      });
+      if (gained.length) {
+        this.addPoints(POMO.GOAL_DONE * gained.length);
+        this.checkAchievements(true);
+        this.save();
+      }
+      return gained;
     },
 
     /** 算进度要用的上下文（纯函数的入参，单测里可以自己造） */

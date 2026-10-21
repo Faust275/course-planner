@@ -156,9 +156,14 @@
   }
 
   function archive(g) {
+    var pg = Store.goalProgressOf(g);
+    var willReward = !g.rewardedAt && pg.pct >= 100 && Store.goalDays(g) >= Store.GOAL_MIN_DAYS;
+    var tail = willReward
+      ? '\n\n这个目标已经推进到 100%，归档会发 ' + POMO.GOAL_DONE + ' 积分（只发一次）。'
+      : '';
     V.confirm({
       title: '归档这个目标？',
-      message: '归档不会删除任何数据，进度会按目标周期停住，之后还能在「已归档」里找到并恢复。没达成就没达成，不算失败。',
+      message: '归档不会删除任何数据，进度会按目标周期停住，之后还能在「已归档」里找到并恢复。没达成就没达成，不算失败。' + tail,
       okText: '归档'
     }).then(function (ok) {
       if (!ok) return;
@@ -214,6 +219,8 @@
       onclick: function () {
         if (!global.DiaryPane) return;
         DiaryPane.appendPlain(text, today, function () {
+          // 真的存进日记了才算一次复盘（点开又取消不算）
+          Store.bumpUsage('goalReview');
           // 写完跳到日记分页，正好接着往下写
           if (global.App) App.go('tasks', { tab: 'diary' });
         });
@@ -244,6 +251,8 @@
   var GoalsPane = {
     render: function (host) {
       HOST = host;
+      // 目标到期是惰性的（没有写入动作），进页面时补一次结算
+      Store.settleGoals();
       host.innerHTML = '';
 
       var active = Store.goalsActive();
@@ -258,6 +267,19 @@
         V.statCard(avg + '%', '平均进度', 'var(--green)'),
         V.statCard(krTotal, '关键结果', 'var(--amber)'),
         V.statCard(archived.length, '已归档', 'var(--text-2)')
+      ]));
+
+      host.appendChild(el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '7px',
+          fontSize: '11.5px', color: 'var(--text-3)', margin: '-6px 0 12px'
+        }
+      }, [
+        V.svg(V.icons.tree, 14),
+        el('span', {
+          text: '达成 100% 并归档 +' + POMO.GOAL_DONE + ' 积分（每目标一次，周期满 ' +
+                Store.GOAL_MIN_DAYS + ' 天）· 可用积分 ' + Store.pomodoro.points
+        })
       ]));
 
       var rc = reviewCard();

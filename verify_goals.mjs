@@ -347,6 +347,112 @@ check('关掉开关写进设置', J2 === false, J2);
 await p.evaluate(() => { Store.state.settings.goals.monthlyReview = true; Store.save(); });
 
 /* ==========================================================
+ * K. 成就与积分
+ * ========================================================== */
+console.log('K. 成就与积分');
+const K = await p.evaluate(() => {
+  // 从干净状态开始：这一节专门验证「第一次」的行为
+  Store.state.goals = [];
+  Store.state.achievements.done = {};
+  Store.state.usage = {};
+  Store.pomodoro.points = 0;
+  Store.pomodoro.earned = 0;
+  Store.pomodoro.mode = 'forest';
+  Store.emit();
+
+  const p0 = Store.pomodoro.points;
+  const g = Store.addGoal({
+    title: '长周期目标', startDate: '2026-09-01', endDate: '2026-12-31',
+    krs: [{ title: 'K', kind: 'manual', target: 100, current: 100 }]
+  });
+  const afterCreate = { first: Store.achievementDone('goal_first'), pts: Store.pomodoro.points - p0 };
+
+  Store.archiveGoal(g.id, true);
+  const afterArchive = {
+    pts: Store.pomodoro.points - p0,
+    achieved: Store.achievementDone('goal_achieved'),
+    rewarded: !!Store.getGoal(g.id).rewardedAt
+  };
+
+  // 恢复再归档：不该重复发
+  Store.archiveGoal(g.id, false);
+  const before = Store.pomodoro.points;
+  Store.archiveGoal(g.id, true);
+  const again = Store.pomodoro.points - before;
+
+  // 周期不满 7 天：100% 也不发分
+  const g2 = Store.addGoal({
+    title: '三天目标', startDate: '2026-10-01', endDate: '2026-10-03',
+    krs: [{ title: 'K', kind: 'manual', target: 100, current: 100 }]
+  });
+  const b2 = Store.pomodoro.points;
+  Store.archiveGoal(g2.id, true);
+  return {
+    afterCreate, afterArchive, again,
+    shortDelta: Store.pomodoro.points - b2,
+    shortRewarded: !!Store.getGoal(g2.id).rewardedAt
+  };
+});
+check('建第一个目标解锁「不再只是待办」', K.afterCreate.first === true, K.afterCreate);
+check('这条成就给 20 积分', K.afterCreate.pts === 20, K.afterCreate.pts);
+check('达成归档发 60 积分并记 rewardedAt', K.afterArchive.rewarded === true, K.afterArchive);
+check('顺带解锁「说到做到」', K.afterArchive.achieved === true);
+check('一次归档共 +230（20 建目标 + 60 目标 + 150 成就）', K.afterArchive.pts === 230, K.afterArchive.pts);
+check('恢复再归档不重复发', K.again === 0, K.again);
+check('周期不满 7 天：100% 也不发分', K.shortDelta === 0 && K.shortRewarded === false, K);
+
+const K2 = await p.evaluate(() => {
+  for (let i = 0; i < 5; i++) {
+    Store.addGoal({
+      title: '并进' + i, startDate: '2026-10-01', endDate: '2026-12-31',
+      krs: [{ title: 'K', kind: 'manual', target: 10, current: 1 }]
+    });
+  }
+  return { active: Store.goalsActive().length, done: Store.achievementDone('goal_active5') };
+});
+check('同时 5 个在办解锁「五线并进」', K2.active === 5 && K2.done === true, K2);
+await clearModals();
+
+/* ==========================================================
+ * L. 收集页成就分组与新手教程
+ * ========================================================== */
+console.log('L. 收集与教程');
+await p.evaluate(() => { window.App.go('collection'); });
+await wait(500);
+await p.locator('.cp-gacha-tab', { hasText: '成就' }).first().click();
+await wait(600);
+const L = await p.evaluate(() => document.querySelector('#view-collection').innerText);
+check('成就页有「目标」分组', /不再只是待办/.test(L), L.slice(0, 120));
+check('成就页能看到「说到做到」', /说到做到/.test(L));
+check('成就页能看到「月末回头看」', /月末回头看/.test(L));
+
+const L2 = await p.evaluate(() => window.Onboard.steps);
+check('教程步数从 15 增到 16', L2 === 16, L2);
+
+await p.evaluate(() => { window.Onboard.start(); });
+await wait(600);
+let guard = 0, hit = null;
+while (guard++ < 20) {
+  const title = await p.evaluate(() => (document.querySelector('.cp-ob-title b') || {}).textContent || '');
+  if (title === '目标') {
+    await wait(450);
+    hit = await p.evaluate(() => ({
+      pane: (document.querySelector('#view-plans .cp-pane-tab.cp-active') || {}).textContent,
+      hash: location.hash
+    }));
+    break;
+  }
+  const next = p.locator('.cp-ob-foot button', { hasText: /下一步|开始使用/ }).first();
+  if (!(await next.count())) break;
+  await next.click();
+  await wait(300);
+}
+check('教程里有「目标」这一步', !!hit, hit);
+check('这一步会切到目标分页', !!hit && /^目标/.test(hit.pane || '') && hit.hash === '#/plans/goals', hit);
+await p.evaluate(() => { const b = document.querySelector('.cp-ob-skip'); if (b) b.click(); });
+await wait(450);
+
+/* ==========================================================
  * 收尾
  * ========================================================== */
 const realErrors = errors.filter(e => !/favicon/.test(e));

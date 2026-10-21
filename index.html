@@ -4951,6 +4951,7 @@ window.AK_OPS = [
     TASK_DONE: 10,         // 完成一个待办
     PLAN_CHECKIN: 2,       // 完成一次打卡
     PLAN_DONE: 30,         // 完成一个计划
+    GOAL_DONE: 60,         // 目标推进到 100% 并归档留档（每目标一次，周期需满 7 天）
     PLANT_COST: 100,       // 第一棵树
     PLANT_STEP: 30,        // 每多一棵，价格递增
     WATER_COST: 20,        // 浇一次水
@@ -5221,6 +5222,16 @@ window.AK_OPS = [
     { id: 'tree9', group: '种树', name: '森之守护', desc: '种下 9 棵树', icon: 'tree', tier: 'gold', points: 120,
       metric: 'tree', threshold: 9 },
 
+    /* —— 目标 —— */
+    { id: 'goal_first', group: '目标', name: '不再只是待办', desc: '创建第一个目标', icon: 'target', tier: 'bronze', points: 20,
+      metric: 'goalTotal', threshold: 1 },
+    { id: 'goal_active5', group: '目标', name: '五线并进', desc: '同时在办 5 个目标（达到上限）', icon: 'flag', tier: 'silver', points: 60,
+      metric: 'goalActive', threshold: 5 },
+    { id: 'goal_achieved', group: '目标', name: '说到做到', desc: '有目标推进到 100% 并归档留档', icon: 'check', tier: 'gold', points: 150,
+      metric: 'goalAchieved', threshold: 1 },
+    { id: 'goal_review', group: '目标', name: '月末回头看', desc: '用月末复盘把进度写进日记一次', icon: 'book', tier: 'silver', points: 50,
+      metric: 'goalReview', threshold: 1 },
+
     /* —— 历练：各功能使用次数成就，分三档逐级解锁（1 / 10 / 100）——
      * 初出茅庐(1) → 小有心得(10, 需初出茅庐) → 炉火纯青(100, 需小有心得)
      * metric 用 'usage:<key>'，由 state.usage[<key>] 计次 */
@@ -5254,7 +5265,7 @@ window.AK_OPS = [
   ];
 
   /** 成就分类顺序：抽卡 / 集卡 / 种树 */
-  var ACH_GROUPS = ['抽卡', '集卡', '种树', '历练'];
+  var ACH_GROUPS = ['抽卡', '集卡', '种树', '目标', '历练'];
 
   /** 当前各成就指标的实际数值 */
   function achValue(metric) {
@@ -5263,6 +5274,19 @@ window.AK_OPS = [
       var uk = metric.slice(6);
       return (s.usage && s.usage[uk]) || 0;
     }
+    if (metric === 'goalTotal') return (s.goals || []).length;
+    if (metric === 'goalActive') {
+      var tg = DateUtil.toStr(DateUtil.today());
+      return (s.goals || []).filter(function (g) { return goalActive(g, tg); }).length;
+    }
+    if (metric === 'goalAchieved') {
+      // 只看已经离开「在办」的：还在推进中的 100% 不算「说到做到」
+      var ta = DateUtil.toStr(DateUtil.today());
+      return (s.goals || []).filter(function (g) {
+        return !goalActive(g, ta) && goalPct(g, ta) >= 100;
+      }).length;
+    }
+    if (metric === 'goalReview') return (s.usage && s.usage.goalReview) || 0;
     if (metric === 'tree') return (s.pomodoro.trees || []).length;
     if (metric === 'streakNo6') return (s.pomodoro.gacha.streakNo6) || 0;
     if (metric === 'streakNo5') return (s.pomodoro.gacha.streakNo5) || 0;
@@ -5678,6 +5702,26 @@ window.AK_OPS = [
     return [head].concat(body).join('\n');
   }
 
+  /** 给目标发积分的最短周期：太短的目标容易变成刷分工具 */
+  var GOAL_MIN_DAYS = 7;
+
+  /** 目标周期天数（含首尾两天） */
+  function goalDays(goal) {
+    if (!goal || !goal.startDate || !goal.endDate) return 0;
+    var a = DateUtil.parse(goal.startDate), b = DateUtil.parse(goal.endDate);
+    if (!a || !b) return 0;
+    return Math.round((b - a) / 86400000) + 1;
+  }
+
+  /** 目标此刻的进度（成就与结算共用；页面层不用再算一遍） */
+  function goalPct(goal, todayStr) {
+    if (!goal) return 0;
+    return goalProgress(goal, {
+      from: goal.startDate, to: goal.endDate, today: todayStr,
+      plans: state.plans || [], tasks: state.tasks || []
+    }).pct;
+  }
+
   /** 目标对象的字段收口：缺的补、脏的丢，避免旧数据把页面搞崩 */
   function normGoal(raw) {
     var g = raw || {};
@@ -5706,6 +5750,7 @@ window.AK_OPS = [
       endDate: g.endDate || today,
       krs: krs,
       archivedAt: g.archivedAt || '',
+      rewardedAt: g.rewardedAt || '',   // 达成奖励只发一次
       createdAt: g.createdAt || new Date().toISOString()
     };
   }
@@ -5831,6 +5876,7 @@ window.AK_OPS = [
 
       // 兼容补齐字段（日程 / 象限 / 记账 / 设置…）
       this.ensure();
+      this.settleGoals();      // 上次关闭期间到期的目标，这里补结算
       this.save();
       return state;
     },
@@ -7952,6 +7998,9 @@ window.AK_OPS = [
     goalActive: goalActive,
     goalReviewDue: goalReviewDue,
     goalReviewText: goalReviewText,
+    goalDays: goalDays,
+    goalPct: goalPct,
+    GOAL_MIN_DAYS: GOAL_MIN_DAYS,
 
     getGoal: function (id) {
       var list = state.goals || [];
@@ -8003,8 +8052,32 @@ window.AK_OPS = [
       var g = this.getGoal(id);
       if (!g) return null;
       g.archivedAt = on === false ? '' : new Date().toISOString();
+      this.settleGoals();      // 归档时结算：达成 100% 且周期够长的发一次积分
       this.emit();
       return g;
+    },
+
+    /**
+     * 目标结算：离开「在办」且进度 100%、周期满 GOAL_MIN_DAYS 的，发一次积分。
+     * 用 rewardedAt 挡住重复发放——恢复再归档、反复新建都不会重复给。
+     * 到期是惰性的（没有写入动作），所以启动与进目标页时各跑一次。
+     */
+    settleGoals: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      var gained = [];
+      (state.goals || []).forEach(function (g) {
+        if (g.rewardedAt || goalActive(g, today)) return;
+        if (goalDays(g) < GOAL_MIN_DAYS) return;
+        if (goalPct(g, today) < 100) return;
+        g.rewardedAt = new Date().toISOString();
+        gained.push(g);
+      });
+      if (gained.length) {
+        this.addPoints(POMO.GOAL_DONE * gained.length);
+        this.checkAchievements(true);
+        this.save();
+      }
+      return gained;
     },
 
     /** 算进度要用的上下文（纯函数的入参，单测里可以自己造） */
@@ -16980,9 +17053,14 @@ window.AK_OPS = [
   }
 
   function archive(g) {
+    var pg = Store.goalProgressOf(g);
+    var willReward = !g.rewardedAt && pg.pct >= 100 && Store.goalDays(g) >= Store.GOAL_MIN_DAYS;
+    var tail = willReward
+      ? '\n\n这个目标已经推进到 100%，归档会发 ' + POMO.GOAL_DONE + ' 积分（只发一次）。'
+      : '';
     V.confirm({
       title: '归档这个目标？',
-      message: '归档不会删除任何数据，进度会按目标周期停住，之后还能在「已归档」里找到并恢复。没达成就没达成，不算失败。',
+      message: '归档不会删除任何数据，进度会按目标周期停住，之后还能在「已归档」里找到并恢复。没达成就没达成，不算失败。' + tail,
       okText: '归档'
     }).then(function (ok) {
       if (!ok) return;
@@ -17038,6 +17116,8 @@ window.AK_OPS = [
       onclick: function () {
         if (!global.DiaryPane) return;
         DiaryPane.appendPlain(text, today, function () {
+          // 真的存进日记了才算一次复盘（点开又取消不算）
+          Store.bumpUsage('goalReview');
           // 写完跳到日记分页，正好接着往下写
           if (global.App) App.go('tasks', { tab: 'diary' });
         });
@@ -17068,6 +17148,8 @@ window.AK_OPS = [
   var GoalsPane = {
     render: function (host) {
       HOST = host;
+      // 目标到期是惰性的（没有写入动作），进页面时补一次结算
+      Store.settleGoals();
       host.innerHTML = '';
 
       var active = Store.goalsActive();
@@ -17082,6 +17164,19 @@ window.AK_OPS = [
         V.statCard(avg + '%', '平均进度', 'var(--green)'),
         V.statCard(krTotal, '关键结果', 'var(--amber)'),
         V.statCard(archived.length, '已归档', 'var(--text-2)')
+      ]));
+
+      host.appendChild(el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '7px',
+          fontSize: '11.5px', color: 'var(--text-3)', margin: '-6px 0 12px'
+        }
+      }, [
+        V.svg(V.icons.tree, 14),
+        el('span', {
+          text: '达成 100% 并归档 +' + POMO.GOAL_DONE + ' 积分（每目标一次，周期满 ' +
+                Store.GOAL_MIN_DAYS + ' 天）· 可用积分 ' + Store.pomodoro.points
+        })
       ]));
 
       var rc = reviewCard();
@@ -22741,6 +22836,12 @@ window.AK_OPS = [
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
             text: '没有可统计数据的（绑定的计划被删了、周期内还没有待办、期中还没考）先不计入平均，' +
                   '免得刚建好就显示 0%，看着像什么都没做。'
+          }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '积分：目标推进到 100% 并归档，发 ' + POMO.GOAL_DONE + ' 积分，每个目标只发一次，' +
+                  '周期不满 ' + Store.GOAL_MIN_DAYS + ' 天的不发（免得「建一个 100% 的目标立刻归档」刷分）。' +
+                  '成就在「收集 → 成就 → 目标」里：第一个目标、同时 5 个目标、达成留档、写过一次月末复盘。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
             el('button', {
@@ -32776,7 +32877,8 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       desc: '课程、日程、待办、专注、记账都放在这一个 App 里。数据只保存在这台设备的浏览器里，不会上传到任何服务器。',
       tips: [
         '第一次打开会带你走一遍，大概 1 分钟',
-        '不想看可以点「跳过」，之后在「设置 → 新手教程」里随时再看'
+        '不想看可以点「跳过」，之后在「设置 → 新手教程」里随时再看',
+        '手机上可以「添加到主屏幕」当 App 用；装好后长按图标，能直接进「今日课表」「写日记」，不用每次都从首页找'
       ]
     },
     {
@@ -32846,7 +32948,18 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       desc: '想长期坚持的事放这里，支持「打卡」和「进度条」两种方式。',
       tips: [
         '比如「每周跑步 3 次」「读完 12 本书」',
-        '达标会自动标记完成，并奖励积分'
+        '达标会自动标记完成，并奖励积分',
+        '页面顶部还能切到「目标」——计划是「每天都做」，目标是「这段时间要做到什么程度」'
+      ]
+    },
+    {
+      view: 'plans', tab: 'goals', icon: I.target, title: '目标',
+      desc: '目标是给这个学期定个方向：一句「想变成什么样」，下面挂 2–4 条关键结果，每条都对应一个能算出来的数。',
+      tips: [
+        '关键结果有三种量法：挂一条计划（按打卡算）、挂一组待办（按完成率算）、自己填（出分后填一个数）',
+        '总进度是几条关键结果的等权平均，没有权重——权重靠拍脑袋，拍出来的数比不填更误导',
+        '同时在办最多 5 个；到期不会删除也不扣分，只是进「已归档」；达成 100% 并归档会奖励积分',
+        '每月最后三天会出现复盘卡，点一下就能把进度写进当天日记'
       ]
     },
     {
@@ -32888,7 +33001,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       tips: [
         '外观：9 套配色或自选颜色，也能传一张图做背景',
         '模块显示：关掉不用的模块，还能拖动排序；超过 5 个会自动收进「更多」',
-        '数据管理：用同步码把数据搬到手机或电脑；手机上可以「添加到主屏幕」'
+        '数据管理：用同步码把数据搬到手机或电脑；手机上可以「添加到主屏幕」，装好后长按图标有「今日课表 / 写日记 / 待办」快捷入口'
       ]
     },
     {
@@ -32896,7 +33009,8 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       desc: '先去课程表把课排上，其他功能用着用着就熟了。',
       tips: [
         '随时可以在「设置 → 新手教程」里再看一遍',
-        '遇到问题也可以翻「设置 → 使用提示」，里面有各模块的细节'
+        '遇到问题也可以翻「设置 → 使用提示」，里面有各模块的细节',
+        '每个模块都有自己的地址（#/today、#/goals 这种），在「设置 → 桌面与快捷」里可以复制出来存书签'
       ]
     }
   ];
@@ -32939,7 +33053,8 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     if (i >= STEPS.length) { finish(false); return; }
     idx = Math.max(0, i);
     var s = STEPS[idx];
-    if (s.view && global.App && App.go) App.go(s.view);
+    // 有些步骤要落到某个分页（比如目标在计划页的第二个分页）
+    if (s.view && global.App && App.go) App.go(s.view, s.tab ? { tab: s.tab } : null);
     draw(s);
   }
 

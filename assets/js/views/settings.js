@@ -960,6 +960,12 @@
             text: '没有可统计数据的（绑定的计划被删了、周期内还没有待办、期中还没考）先不计入平均，' +
                   '免得刚建好就显示 0%，看着像什么都没做。'
           }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '积分：目标推进到 100% 并归档，发 ' + POMO.GOAL_DONE + ' 积分，每个目标只发一次，' +
+                  '周期不满 ' + Store.GOAL_MIN_DAYS + ' 天的不发（免得「建一个 100% 的目标立刻归档」刷分）。' +
+                  '成就在「收集 → 成就 → 目标」里：第一个目标、同时 5 个目标、达成留档、写过一次月末复盘。'
+          }),
           el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
             el('button', {
               class: 'btn btn-primary',

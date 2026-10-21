@@ -202,6 +202,7 @@ const goalExpiredSrc = extractFn('goalExpired');
 const goalActiveSrc = extractFn('goalActive');
 const goalReviewDueSrc = extractFn('goalReviewDue');
 const goalReviewTextSrc = extractFn('goalReviewText');
+const goalDaysSrc = extractFn('goalDays');
 const isChildSrc = extractFnFrom('isChild', SUBTASK_ANCHOR);
 const childrenOfSrc = extractFnFrom('childrenOf', SUBTASK_ANCHOR);
 const subtaskProgressSrc = extractFnFrom('subtaskProgress', SUBTASK_ANCHOR);
@@ -298,6 +299,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${goalActiveSrc}
   ${goalReviewDueSrc}
   ${goalReviewTextSrc}
+  ${goalDaysSrc}
   var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
@@ -307,7 +309,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      nextDueDate, repeatExpired, sanitizeRepeat,
                      annivNext, wrapText, measure, hexToRgb, tint,
                      subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
-                     krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText,
+                     krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText, goalDays,
                      RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
                      weekBounds, monthBounds, sleepByNight, heatLevel,
                      MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
@@ -326,7 +328,8 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         weekBounds, monthBounds, sleepByNight, heatLevel,
         MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
         diaryDatePrompt, moodStats, diaryOn, diariesSorted,
-        krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText } = globalThis.__T;
+        krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText,
+        goalDays } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -1542,6 +1545,18 @@ console.log('目标：关键结果与总进度');
   const txt = goalReviewText([{ title: '把高数补上来', pct: 62 }], '2026-10-21');
   eq('复盘文案：标题带月份', txt.split('\n')[0], '【10 月目标复盘】');
   eq('复盘文案：每条一行百分比', txt.split('\n')[1], '· 把高数补上来：62%');
+}
+
+
+console.log('目标：周期天数（决定发不发积分）');
+{
+  eq('同一天算 1 天', goalDays({ startDate: '2026-10-01', endDate: '2026-10-01' }), 1);
+  eq('一周正好 7 天', goalDays({ startDate: '2026-10-01', endDate: '2026-10-07' }), 7);
+  eq('6 天不够发分门槛', goalDays({ startDate: '2026-10-01', endDate: '2026-10-06' }), 6);
+  eq('跨月也对', goalDays({ startDate: '2026-09-28', endDate: '2026-10-04' }), 7);
+  eq('跨年也对', goalDays({ startDate: '2026-12-30', endDate: '2027-01-02' }), 4);
+  eq('缺字段返回 0', goalDays({ startDate: '2026-10-01' }), 0);
+  eq('空对象返回 0', goalDays({}), 0);
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
