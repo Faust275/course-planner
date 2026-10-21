@@ -141,14 +141,15 @@ const mendEq = await p.evaluate(() => {
   sh.card = { startDate: DateUtil.toStr(start), endDate: DateUtil.toStr(DateUtil.today()),
     days: {}, weekAwardEnd: '', fullAwarded: false, paid: 300, gained: 0, mode: 'forest' };
   sh.validDays = {};
-  for (let i = 0; i < 29; i++) {
+  const last = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -1));   // 补昨天
+  for (let i = 0; i < 30; i++) {
     const k = DateUtil.toStr(DateUtil.addDays(start, i));
+    if (k === last) continue;                 // 昨天漏掉，其余 29 天都在
     sh.card.days[k] = 1;
     sh.validDays[k] = POMO.VALID_DAY_MIN;
   }
   sh.tickets = { selection: 0, fish: 5 }; sh.fishLog = [];
   sh.streak = { weekEnd: '', monthEnd: '' };
-  const last = DateUtil.toStr(DateUtil.today());
   const bp = pm.points, bj = pm.jade;
   const r = Store.useFishCard('mend', last);
   return {
@@ -167,7 +168,7 @@ const mendLimit = await p.evaluate(() => {
   sh.validDays = {};
   sh.tickets = { selection: 0, fish: 12 }; sh.fishLog = [];
   const out = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 1; i <= 6; i++) {          // 只补过去的日子
     const d = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -i));
     out.push(Store.useFishCard('mend', d).ok);
   }

@@ -82,14 +82,27 @@ const mend = await p.evaluate(() => {
   sh.validDays = {}; sh.streak = { weekEnd: '', monthEnd: '' };
   sh.tickets = { selection: 0, fish: 3 }; sh.fishLog = [];
   const today = DateUtil.today();
-  for (let i = 1; i < 7; i++) sh.validDays[DateUtil.toStr(DateUtil.addDays(today, -i))] = POMO.VALID_DAY_MIN;
-  const miss = DateUtil.toStr(today);                       // 今天漏了
+  // 近 6 天里只有「3 天前」漏了（今天不补：今天的漏签不该花券）
+  for (let i = 1; i < 7; i++) {
+    if (i === 3) continue;
+    sh.validDays[DateUtil.toStr(DateUtil.addDays(today, -i))] = POMO.VALID_DAY_MIN;
+  }
+  const miss = DateUtil.toStr(DateUtil.addDays(today, -3));
   const before = Store.validStreak();
   const r = Store.useFishCard('mend', miss);
   return { before, ok: r.ok, after: Store.validStreak(), used: sh.fishLog.length, left: Store.fishQuota().left };
 });
-check('补签把漏掉的日子补成有效日', mend.ok && mend.after === 7, mend);
+check('补签把漏掉的日子补成有效日（连续天数 2 → 6）', mend.ok && mend.before === 2 && mend.after === 6, mend);
 check('补签消耗 1 张券', mend.used === 1, mend);
+
+/* ---------- 4b. 今天不能补签（还没过完，别浪费券）---------- */
+const noToday = await p.evaluate(() => {
+  const sh = Store.state.shop;
+  sh.validDays = {}; sh.tickets = { selection: 0, fish: 2 }; sh.fishLog = [];
+  const r = Store.useFishCard('mend', DateUtil.toStr(DateUtil.today()));
+  return { ok: r.ok, msg: r.msg, hold: sh.tickets.fish };
+});
+check('今天不能补签，券不被扣', noToday.ok === false && noToday.hold === 2, noToday);
 
 /* ---------- 5. 用法二/三/四：护树 / 休整 / 复活 ---------- */
 const uses = await p.evaluate(() => {
@@ -149,7 +162,7 @@ const quota = await p.evaluate(() => {
   sh.tickets = { selection: 0, fish: 12 }; sh.fishLog = [];
   const today = DateUtil.today();
   const results = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 1; i <= 6; i++) {          // 只补过去的日子（今天不花券）
     const d = DateUtil.toStr(DateUtil.addDays(today, -i));
     results.push(Store.useFishCard('mend', d).ok);
   }

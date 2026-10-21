@@ -3897,6 +3897,8 @@
     validStreak: function () {
       var n = 0;
       var d = DateUtil.today();
+      // 今天还没完成有效动作时不算断签：从昨天往回数（避免早上打开就看到 0 天）
+      if (!this.isValidDay(DateUtil.toStr(d))) d = DateUtil.addDays(d, -1);
       for (var i = 0; i < 400; i++) {
         if (this.isValidDay(DateUtil.toStr(d))) n++;
         else break;
@@ -4018,6 +4020,7 @@
     fishMendDay: function (dateStr) {
       var sh = state.shop;
       if (!dateStr || dateStr > DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '只能补已经过去的日子' };
+      if (dateStr === DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '今天还没过完，做 2 件小事就行，不用花券' };
       if (this.isValidDay(dateStr)) return { ok: false, msg: '这一天已经是有效日了' };
       if (!sh.validDays) sh.validDays = {};
       sh.validDays[dateStr] = POMO.VALID_DAY_MIN;

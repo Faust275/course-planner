@@ -247,7 +247,7 @@
         var todayTxt = cardGacha ? (POMO.CARD_DAILY * POMO.JADE_PER_POINT + ' 合成玉') : (POMO.CARD_DAILY + ' 积分');
         cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
           el('span', {
-            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没完成有效动作（新建/完成 2 次即可返 ' + dailyTxt + '）'
+            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没完成有效动作（再做 2 件小事返 ' + dailyTxt + '）'
           }),
           el('b', { text: '累计返 ' + gainedTxt })
         ]));
@@ -750,8 +750,8 @@
       class: 'tree-growth',
       text: grown ? '已长成，可收获'
         : tree.withered ? ('已枯萎 · 复活后本阶段重攒')
-        : tree.dormant ? ('休眠中 · 进度保留 ' + (tree.prog || 0) + ' / ' + need + ' 记，下次专注接着长')
-        : ('成长 ' + (tree.prog || 0) + ' / ' + need + ' 记')
+        : tree.dormant ? ('休眠中 · 进度保留 ' + Math.min(tree.prog || 0, need) + ' / ' + need + ' 记，下次专注接着长')
+        : ('成长 ' + Math.min(tree.prog || 0, need) + ' / ' + need + ' 记')
     }));
 
     if (tree.withered) {

@@ -9177,6 +9177,8 @@ window.AK_OPS = [
     validStreak: function () {
       var n = 0;
       var d = DateUtil.today();
+      // 今天还没完成有效动作时不算断签：从昨天往回数（避免早上打开就看到 0 天）
+      if (!this.isValidDay(DateUtil.toStr(d))) d = DateUtil.addDays(d, -1);
       for (var i = 0; i < 400; i++) {
         if (this.isValidDay(DateUtil.toStr(d))) n++;
         else break;
@@ -9298,6 +9300,7 @@ window.AK_OPS = [
     fishMendDay: function (dateStr) {
       var sh = state.shop;
       if (!dateStr || dateStr > DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '只能补已经过去的日子' };
+      if (dateStr === DateUtil.toStr(DateUtil.today())) return { ok: false, msg: '今天还没过完，做 2 件小事就行，不用花券' };
       if (this.isValidDay(dateStr)) return { ok: false, msg: '这一天已经是有效日了' };
       if (!sh.validDays) sh.validDays = {};
       sh.validDays[dateStr] = POMO.VALID_DAY_MIN;
@@ -24703,7 +24706,7 @@ window.AK_OPS = [
         var todayTxt = cardGacha ? (POMO.CARD_DAILY * POMO.JADE_PER_POINT + ' 合成玉') : (POMO.CARD_DAILY + ' 积分');
         cardBox.appendChild(el('div', { class: 'shop-row shop-row-sub' }, [
           el('span', {
-            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没完成有效动作（新建/完成 2 次即可返 ' + dailyTxt + '）'
+            text: info.todaySigned ? '今天已返 ' + todayTxt : '今天还没完成有效动作（再做 2 件小事返 ' + dailyTxt + '）'
           }),
           el('b', { text: '累计返 ' + gainedTxt })
         ]));
@@ -25206,8 +25209,8 @@ window.AK_OPS = [
       class: 'tree-growth',
       text: grown ? '已长成，可收获'
         : tree.withered ? ('已枯萎 · 复活后本阶段重攒')
-        : tree.dormant ? ('休眠中 · 进度保留 ' + (tree.prog || 0) + ' / ' + need + ' 记，下次专注接着长')
-        : ('成长 ' + (tree.prog || 0) + ' / ' + need + ' 记')
+        : tree.dormant ? ('休眠中 · 进度保留 ' + Math.min(tree.prog || 0, need) + ' / ' + need + ' 记，下次专注接着长')
+        : ('成长 ' + Math.min(tree.prog || 0, need) + ' / ' + need + ' 记')
     }));
 
     if (tree.withered) {
