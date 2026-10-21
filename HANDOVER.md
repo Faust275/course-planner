@@ -12,12 +12,12 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | `79a4f29` feat: 待办↔时间投入双向关联 + 月历时间块补录 + 统计「今年」档 |
+| 最后提交 | `cdc8ed0` feat: 课表/月历横滑切换 + PWA 更新机制（SW network-first、更新 Toast） |
 | 单元测试 | `node tests/run.mjs` **545 条全过** |
-| UI 回归 | 19 个 `verify_*.mjs` 全部通过（需 Playwright + 本地静态服务） |
+| UI 回归 | 20 个 `verify_*.mjs` 全部通过（需 Playwright；`verify_gesture_sw.mjs` 自带静态服务，直接跑即可） |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
-| ⚠️ 未推送 | 本地有 **15 个提交未 push**。打包环境没有 GitHub 凭据，请接手人自行 `git push origin main` |
+| 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |
 
 ## 三、第一小时上手路径
 
