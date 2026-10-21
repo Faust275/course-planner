@@ -9,7 +9,22 @@
   var V = UI;
   var el = V.el;
 
-  var state = { status: 'running', tag: '' };
+  var state = { status: 'running', tag: '', tab: 'plans' };
+  var TABS = ['plans', 'goals'];
+
+  /** 分页切换后把地址栏对齐（#/plans/goals）；默认分页不写尾巴 */
+  function syncRoute() {
+    if (!global.Router || !global.App || App.currentId !== 'plans') return;
+    Router.set('plans', state.tab === 'plans' ? null : state.tab);
+  }
+
+  /** 右上角按钮跟着分页变，所以切页时要手动重建一次 */
+  function refreshActions() {
+    var host = document.getElementById('viewActions');
+    if (!host || !global.App || App.currentId !== 'plans') return;
+    host.innerHTML = '';
+    view.actions(host);
+  }
   var justDoneId = '';
 
   var COLORS = ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
@@ -29,10 +44,24 @@
     root: null,
 
     actions: function (host) {
+      var onGoals = state.tab === 'goals';
       host.appendChild(el('button', {
         class: 'btn btn-primary',
-        onclick: function () { openPlanDialog(); }
-      }, [V.svg(V.icons.plus, 16), '新建计划']));
+        onclick: function () {
+          if (onGoals) { if (global.openGoalDialog) openGoalDialog(); }
+          else openPlanDialog();
+        }
+      }, [V.svg(V.icons.plus, 16), onGoals ? '新建目标' : '新建计划']));
+    },
+
+    /** 分页：计划 / 目标 */
+    defaultTab: 'plans',
+    getTab: function () { return state.tab; },
+    setTab: function (tab) {
+      state.tab = TABS.indexOf(tab) >= 0 ? tab : 'plans';
+      if (this.root) this.render();
+      refreshActions();
+      syncRoute();
     },
 
     mount: function (host) {
@@ -47,6 +76,34 @@
     render: function () {
       var root = this.root;
       root.innerHTML = '';
+
+      /* ---- 计划 / 目标 分页 ---- */
+      var nGoal = Store.goalsActive().length;
+      var paneBar = el('div', { class: 'pane-tabs' });
+      [
+        { v: 'plans', l: '计划' },
+        { v: 'goals', l: nGoal ? '目标 ' + nGoal : '目标' }
+      ].forEach(function (x) {
+        paneBar.appendChild(el('button', {
+          class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
+          text: x.l,
+          onclick: function () {
+            if (state.tab === x.v) return;
+            state.tab = x.v;
+            view.render();
+            refreshActions();
+            syncRoute();
+          }
+        }));
+      });
+      root.appendChild(paneBar);
+
+      if (state.tab === 'goals') {
+        var goalHost = el('div', {});
+        root.appendChild(goalHost);
+        if (global.GoalsPane) GoalsPane.render(goalHost);
+        return;
+      }
 
       var st = Store.planStats();
 
@@ -493,7 +550,18 @@
 
   // 计划列表有「进行中 / 已完成」筛选，跳转过来时先把筛选放宽
   view.focusRecord = function (type, id) {
+    if (type === 'goal') {
+      // 目标页可能根本没挂载过，先切过去再定位
+      if (state.tab !== 'goals') {
+        state.tab = 'goals';
+        view.render();
+        refreshActions();
+        syncRoute();
+      }
+      return !!(global.GoalsPane && GoalsPane.focusRecord('goal', id));
+    }
     if (type !== 'plan' || !global.Search) return false;
+    if (state.tab !== 'plans') { state.tab = 'plans'; view.render(); refreshActions(); }
     var p = Store.getPlan(id);
     var dirty = false;
     if (p && state.status !== 'all' && ((state.status === 'running') === !!p.done)) {

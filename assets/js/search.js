@@ -26,9 +26,10 @@
     task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
     event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
-    note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 5 },
-    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 6 },
-    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 7 }
+    goal:   { key: 'goals',   view: 'plans',    name: '目标', order: 5 },
+    note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 6 },
+    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 7 },
+    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 8 }
   };
 
   var TYPES = Object.keys(TYPE_META);
@@ -89,6 +90,16 @@
         title: r.title || '',
         sub: tags,
         body: joinNonEmpty([r.note, tags], ' ')
+      };
+    }
+    if (type === 'goal') {
+      // 关键结果的文字也进 body：搜「自习」应该能搜到挂着它的那个目标
+      var gk = (r.krs || []).map(function (k) { return k.title || ''; });
+      return {
+        title: r.title || '',
+        sub: [r.endDate ? '到 ' + r.endDate : '', gk.length ? gk.length + ' 条关键结果' : '']
+          .filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note, gk.join(' ')], ' ')
       };
     }
     if (type === 'note') {
@@ -322,7 +333,7 @@
     var input = el('input', {
       class: 'input s-input',
       type: 'search',
-      placeholder: '搜课程 / 待办 / 日程 / 计划 / 笔记 / 账目'
+      placeholder: '搜课程 / 待办 / 日程 / 计划 / 目标 / 日记 / 账目'
     });
 
     var m = V.modal({
@@ -429,6 +440,7 @@
       tasks: tasks,
       events: s.events || [],
       plans: s.plans || [],
+      goals: s.goals || [],
       notes: s.notes || [],
       diaries: s.diaries || [],
       ledger: s.ledger || []

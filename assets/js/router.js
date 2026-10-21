@@ -21,7 +21,8 @@
   var ALIAS = {
     diary: { id: 'tasks', tab: 'diary' },
     notes: { id: 'tasks', tab: 'notes' },
-    inspiration: { id: 'tasks', tab: 'notes' }
+    inspiration: { id: 'tasks', tab: 'notes' },
+    goals: { id: 'plans', tab: 'goals' }
   };
 
   /** 取一段地址并做最宽松的规整：去掉 #、/ 与首尾空白 */

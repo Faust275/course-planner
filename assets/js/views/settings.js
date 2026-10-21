@@ -22,6 +22,7 @@
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
     desktop: { name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块的链接' },
+    goals: { name: '目标', desc: '月末复盘提示与在办数量' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
     subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
@@ -914,6 +915,60 @@
 
             }
 
+      if (SUB === 'goals') {
+  /* ===================== 目标 ===================== */
+        var gcfg = Store.state.settings.goals;
+        var gOn = gcfg.monthlyReview !== false;
+        var gSw = el('button', {
+          class: 'switch' + (gOn ? ' on' : ''),
+          onclick: function () {
+            gOn = !gOn;
+            gSw.classList.toggle('cp-on', gOn);
+            gcfg.monthlyReview = gOn;
+            Store.save();
+            if (UI.toast) UI.toast(gOn ? '已打开月末复盘提醒' : '已关闭月末复盘提醒');
+          }
+        }, [el('i')]);
+
+        var goalCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['月末复盘']),
+          el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: '每月最后三天提醒' }),
+              el('span', { text: '目标页顶部出现一张复盘卡，点一下把各目标的进度写进当天日记，后面自己接着写。只提示，不会自动写。' })
+            ]),
+            gSw
+          ]),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.8' },
+            text: '同时在办最多 ' + Store.GOAL_MAX_ACTIVE + ' 个目标，上限写死、不提供设置：目标页最大的失败形态不是功能少，' +
+                  '是变成一张谁也不看的表。到期的目标不会删除，只是挪到「已归档」，进度按目标周期冻结。'
+          })
+        ]);
+        root.appendChild(goalCard);
+
+        root.appendChild(el('div', { class: 'card', style: { padding: '16px 18px' } }, [
+          el('div', { class: 'section-title' }, ['目标怎么算进度']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', lineHeight: '1.9' },
+            text: '每条关键结果按自己的方式算：挂计划的看周期内打卡进度，挂待办的看周期内相关待办的完成率，' +
+                  '自己填的就是「当前值 ÷ 目标值」。总进度是这些的等权平均，不做权重——个人场景里权重基本靠拍脑袋，' +
+                  '拍出来的数比不填更误导。'
+          }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '没有可统计数据的（绑定的计划被删了、周期内还没有待办、期中还没考）先不计入平均，' +
+                  '免得刚建好就显示 0%，看着像什么都没做。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { App.go('plans', { tab: 'goals' }); }
+            }, [V.svg(V.icons.target, 16), '去目标页'])
+          ])
+        ]));
+      }
+
       if (SUB === 'desktop') {
   /* ===================== 桌面与快捷 ===================== */
         var online = /^https?:$/.test(location.protocol || '');
@@ -1240,7 +1295,9 @@
           el('li', { text: '· 「模块显示」里可以开关模块，也能用上下箭头调整它们在导航里的顺序。' }),
           el('li', { text: '· 手机竖屏用底部导航，横屏自动收到左侧，网页宽屏变成两栏。' }),
             el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App；装好后长按图标能直接进「今日课表」「写日记」。' }),
-            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' })
+            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' }),
+            el('li', { text: '· 「计划」页顶部可以切到「目标」：目标是「想变成什么样」，往下挂 2–4 条关键结果，分别挂计划、挂待办或自己填数字。' }),
+            el('li', { text: '· 目标最多同时 5 个，到期不会删除、也不扣分，只是挪进「已归档」；每月最后三天会提示做一次复盘，可以一键写进当天日记。' })
           ])
         ]);
         root.appendChild(about);
@@ -1261,6 +1318,7 @@
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9' },
+    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },

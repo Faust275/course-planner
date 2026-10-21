@@ -478,6 +478,14 @@
     });
   }
 
+  /** 追加一段不带引用的正文（目标复盘用：那是要接着写的话，不是引用） */
+  function appendPlain(text, dateStr, done) {
+    var d = Store.diaryOf(dateStr);
+    var body = String(text || '').trim();
+    var base = d && d.content ? d.content.replace(/\s+$/, '') + '\n\n' : '';
+    openEditor(dateStr, d ? d.id : null, done, { content: base + body });
+  }
+
   /** 从日记反向摘一段回灵感 */
   function copyToNote(text, done) {
     var t = (text || '').trim();
@@ -499,6 +507,7 @@
     render: renderDiaryInto,
     open: openEditor,
     appendToDiary: appendToDiary,
+    appendPlain: appendPlain,
     copyToNote: copyToNote,
     autoDate: autoDate
   };

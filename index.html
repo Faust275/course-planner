@@ -3490,6 +3490,34 @@ mark.cp-hit {
   .cp-mood-avg b { font-size: 21px; }
 }
 
+/* ---- 目标（计划页的第二分页） ---- */
+.cp-goal-card { cursor: default; }
+.cp-goal-card.cp-is-archived { opacity: .72; }
+.cp-goal-card.cp-is-archived .cp-plan-title { text-decoration: none; color: var(--text-2); }
+.cp-goal-note { font-size: 12px; color: var(--text-3); margin-top: 5px; line-height: 1.6; }
+.cp-goal-krs { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cp-goal-kr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; background: var(--surface-2); border-radius: 8px;
+  font-size: 12.5px; color: var(--text-2);
+}
+.cp-goal-kr.cp-is-manual { cursor: pointer; transition: background .14s; }
+.cp-goal-kr.cp-is-manual:hover { background: var(--primary-weak); }
+.cp-goal-kr-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.cp-goal-kr-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.cp-goal-kr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-goal-kr-val { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.cp-goal-kr-count { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.cp-goal-kr-warn { font-size: 11.5px; color: var(--amber); }
+.cp-goal-empty-kr { font-size: 12px; color: var(--text-3); }
+.cp-goal-archive { margin-top: 14px; }
+.cp-goal-archive .cp-goal-card { margin-top: 10px; }
+.cp-goal-kr-edit-row {
+  padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; margin-bottom: 10px; background: var(--surface-2);
+}
+.cp-goal-flash { outline: 2px solid var(--primary); outline-offset: 3px; }
+
 </style>
 <script>
 
@@ -4419,6 +4447,11 @@ window.AK_OPS = [
           showProgress: true       // 父任务显示 2/4 进度徽章
         },
         subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
+        // 目标（详见「设置 → 目标」）
+        goals: {
+          monthlyReview: true,     // 每月最后三天提示做一次复盘
+          reviewDismissed: ''      // 已选择「这个月不再提醒」的月份（YYYY-MM）
+        },
         // 日记（详见「设置 → 日记」）
         diary: {
           askDateAtNight: true,    // 0–4 点保存时询问归属「昨天 / 今天」
@@ -4451,6 +4484,7 @@ window.AK_OPS = [
         timer: { running: false, endAt: 0, left: 0, duration: 25, taskId: '' }
       },
       plans: [],       // 计划（打卡 / 进度）
+      goals: [],       // 目标（目标 → 关键结果 → 计划/待办）
       ledger: [],      // 记账流水
       notes: [],       // 灵感速记
       diaries: [],     // 日记（一天一篇，key 为 YYYY-MM-DD）
@@ -5506,6 +5540,176 @@ window.AK_OPS = [
     return out;
   }
 
+  /* ==========================================================
+   * 目标（目标 → 关键结果 → 计划 / 待办 / 手填数字）
+   * ----------------------------------------------------------
+   * 只做一层拆解：目标下面挂 2–4 条关键结果，不做「目标套目标」。
+   * 进度一律等权平均，不做权重——个人场景里权重基本靠拍脑袋，
+   * 拍出来的数比不填更误导。
+   * ========================================================== */
+
+  /** 同时在办的目标上限（产品边界，不提供设置项） */
+  var GOAL_MAX_ACTIVE = 5;
+
+  /** 关键结果的三种计量方式 */
+  var KR_KINDS = [
+    { key: 'plan', name: '挂计划', desc: '按这条计划在周期内的打卡进度算' },
+    { key: 'task', name: '挂待办', desc: '按周期内相关待办的完成率算' },
+    { key: 'manual', name: '自己填', desc: '出分、有结果后自己填一个数' }
+  ];
+
+  /** 目标到期了没（到期当天仍算在办，第二天才算过期） */
+  function goalExpired(goal, todayStr) {
+    if (!goal || !goal.endDate) return false;
+    return String(todayStr) > String(goal.endDate);
+  }
+
+  /** 目标是否在办：没手动归档、也没到期 */
+  function goalActive(goal, todayStr) {
+    if (!goal) return false;
+    if (goal.archivedAt) return false;
+    return !goalExpired(goal, todayStr);
+  }
+
+  /**
+   * 单条关键结果的完成度
+   * @param {Object} kr  { kind, planId, tags, courseId, target, current, unit }
+   * @param {Object} ctx { from, to, today, plans, tasks }
+   * @returns {{ pct: number|null, value: number, target: number, unit: string, empty: boolean, missing: boolean }}
+   *          pct 为 null = 没有可统计的数据（刚建好、绑的计划被删了），不参与平均
+   */
+  function krProgress(kr, ctx) {
+    var out = { pct: null, value: 0, target: 0, unit: '', empty: false, missing: false };
+    if (!kr || !ctx) return out;
+
+    /* 自己填：当前值 / 目标值，超过目标按 100% 算 */
+    if (kr.kind === 'manual') {
+      var t = Math.max(1, Number(kr.target) || 1);
+      var v = Math.max(0, Number(kr.current) || 0);
+      out.value = v;
+      out.target = t;
+      out.unit = kr.unit || '';
+      out.pct = Math.max(0, Math.min(1, v / t));
+      return out;
+    }
+
+    /* 挂计划：只统计目标周期内的打卡，到期后自然不再涨（等于冻结快照） */
+    if (kr.kind === 'plan') {
+      var plan = (ctx.plans || []).filter(function (p) { return p.id === kr.planId; })[0];
+      if (!plan) { out.missing = true; return out; }
+      var limit = ctx.today < ctx.to ? ctx.today : ctx.to;
+      var sum = 0;
+      (plan.records || []).forEach(function (r) {
+        if (!r || !r.date) return;
+        if (r.date < ctx.from || r.date > limit) return;
+        sum += Number(r.value) || 0;
+      });
+      out.value = sum;
+      out.target = Math.max(1, Number(plan.target) || 1);
+      out.unit = plan.unit || '';
+      out.pct = Math.max(0, Math.min(1, sum / out.target));
+      return out;
+    }
+
+    /* 挂待办：周期内、符合标签/课程的顶层任务的完成率。
+       子任务算在父任务身上（不重复计）；没有截止日期的历史任务不计入，
+       否则越用越久，分母会一直变大，完成率永远上不去 */
+    var tags = kr.tags || [];
+    var list = (ctx.tasks || []).filter(function (task) {
+      if (task.parentId) return false;
+      var due = task.dueDate || '';
+      if (!due || due < ctx.from || due > ctx.to) return false;
+      if (kr.courseId && task.courseId !== kr.courseId) return false;
+      if (tags.length) {
+        var hit = (task.tags || []).some(function (x) { return tags.indexOf(x) >= 0; });
+        if (!hit) return false;
+      }
+      return true;
+    });
+    if (!list.length) { out.empty = true; return out; }
+    var done = list.filter(function (task) { return task.status === 'done'; }).length;
+    out.value = done;
+    out.target = list.length;
+    out.pct = done / list.length;
+    return out;
+  }
+
+  /**
+   * 目标整体进度：各关键结果等权平均
+   * 没有可统计数据的 KR 不进分母——「刚开学、期中还没考」不该显示 0%
+   */
+  function goalProgress(goal, ctx) {
+    var krs = (goal && goal.krs) || [];
+    var rows = [];
+    var sum = 0, n = 0;
+    krs.forEach(function (kr) {
+      var r = krProgress(kr, ctx);
+      rows.push({ id: kr.id, title: kr.title, kind: kr.kind, pct: r.pct,
+                  value: r.value, target: r.target, unit: r.unit,
+                  empty: r.empty, missing: r.missing });
+      if (r.pct != null) { sum += r.pct; n++; }
+    });
+    return {
+      pct: n ? Math.round(sum / n * 100) : 0,
+      counted: n,
+      total: krs.length,
+      rows: rows
+    };
+  }
+
+  /** 月末复盘要提示了吗：每月最后三天、本月没点过「不再提醒」、开关是开的 */
+  function goalReviewDue(settings, todayStr) {
+    var opt = (settings && settings.goals) || {};
+    if (opt.monthlyReview === false) return false;
+    var parts = String(todayStr || '').split('-');
+    if (parts.length !== 3) return false;
+    var y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+    if (!y || !m || !d) return false;
+    if (opt.reviewDismissed === parts[0] + '-' + parts[1]) return false;
+    var lastDay = new Date(y, m, 0).getDate();
+    return d >= lastDay - 2;
+  }
+
+  /** 复盘开头的文字：只列数字，不写评价（评价交给用户自己写） */
+  function goalReviewText(lines, monthStr) {
+    var mon = String(monthStr || '').slice(5, 7);
+    var head = '【' + (Number(mon) || '') + ' 月目标复盘】';
+    var body = (lines || []).map(function (x) { return '· ' + x.title + '：' + x.pct + '%'; });
+    return [head].concat(body).join('\n');
+  }
+
+  /** 目标对象的字段收口：缺的补、脏的丢，避免旧数据把页面搞崩 */
+  function normGoal(raw) {
+    var g = raw || {};
+    var krs = (Array.isArray(g.krs) ? g.krs : []).map(function (k, i) {
+      k = k || {};
+      var kind = (k.kind === 'plan' || k.kind === 'task' || k.kind === 'manual') ? k.kind : 'manual';
+      return {
+        id: k.id || uid('kr'),
+        title: String(k.title || '').slice(0, 60) || ('关键结果 ' + (i + 1)),
+        kind: kind,
+        planId: String(k.planId || ''),
+        tags: Array.isArray(k.tags) ? k.tags.slice(0, 6) : [],
+        courseId: String(k.courseId || ''),
+        target: Math.max(1, Number(k.target) || 1),
+        current: Math.max(0, Number(k.current) || 0),
+        unit: String(k.unit || '')
+      };
+    }).slice(0, 4);    // 最多 4 条：再多就没人看得完
+    var today = DateUtil.toStr(DateUtil.today());
+    return {
+      id: g.id || uid('gl'),
+      title: String(g.title || '').slice(0, 40) || '未命名目标',
+      note: String(g.note || ''),
+      period: g.period === 'term' ? 'term' : 'custom',
+      startDate: g.startDate || today,
+      endDate: g.endDate || today,
+      krs: krs,
+      archivedAt: g.archivedAt || '',
+      createdAt: g.createdAt || new Date().toISOString()
+    };
+  }
+
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
@@ -5596,6 +5800,7 @@ window.AK_OPS = [
     get currentSemesterId() { return state.currentSemesterId; },
     get pomodoro() { return state.pomodoro; },
     get plans() { return state.plans; },
+    get goals() { return state.goals || []; },
     get ledger() { return state.ledger; },
     get notes() { return state.notes; },
     get events() { return state.events; },
@@ -5681,6 +5886,13 @@ window.AK_OPS = [
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
       if (!state.pomodoro.sessions) state.pomodoro.sessions = [];
       if (!state.plans) state.plans = [];
+      if (!Array.isArray(state.goals)) state.goals = [];
+      // 目标设置逐项补默认值，别让旧 settings 整块覆盖
+      var gopt = state.settings.goals || {};
+      state.settings.goals = {
+        monthlyReview: typeof gopt.monthlyReview === 'boolean' ? gopt.monthlyReview : true,
+        reviewDismissed: typeof gopt.reviewDismissed === 'string' ? gopt.reviewDismissed : ''
+      };
       if (!state.ledger) state.ledger = [];
       if (!state.notes) state.notes = [];
       if (!Array.isArray(state.diaries)) state.diaries = [];
@@ -7732,6 +7944,85 @@ window.AK_OPS = [
       return null;
     },
 
+    /* ---------------- 目标 ---------------- */
+    GOAL_MAX_ACTIVE: GOAL_MAX_ACTIVE,
+    KR_KINDS: KR_KINDS,
+    // 纯函数也挂到 Store 上：页面直接用，避免再造一份同样的判断
+    goalExpired: goalExpired,
+    goalActive: goalActive,
+    goalReviewDue: goalReviewDue,
+    goalReviewText: goalReviewText,
+
+    getGoal: function (id) {
+      var list = state.goals || [];
+      for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+      return null;
+    },
+
+    /** 在办：没归档、没到期 */
+    goalsActive: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      return (state.goals || []).filter(function (g) { return goalActive(g, today); });
+    },
+
+    /** 留档：手动归档 + 到期没达成的，原样留着，不删不扣分 */
+    goalsArchived: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      return (state.goals || []).filter(function (g) { return !goalActive(g, today); });
+    },
+
+    canAddGoal: function () {
+      return this.goalsActive().length < GOAL_MAX_ACTIVE;
+    },
+
+    addGoal: function (data) {
+      if (!this.canAddGoal()) return null;     // 上限在数据层也拦一道，别只靠界面
+      var g = normGoal(data);
+      state.goals.unshift(g);
+      this.bumpUsage('goal');
+      this.emit();
+      return g;
+    },
+
+    updateGoal: function (id, data) {
+      var g = this.getGoal(id);
+      if (!g) return null;
+      var next = normGoal(Object.assign({}, g, data, { id: g.id, createdAt: g.createdAt }));
+      state.goals = state.goals.map(function (x) { return x.id === id ? next : x; });
+      this.emit();
+      return next;
+    },
+
+    removeGoal: function (id) {
+      state.goals = (state.goals || []).filter(function (x) { return x.id !== id; });
+      this.emit();
+    },
+
+    /** 归档 = 留档：不删、不清空数据，只是从「在办」挪到下面 */
+    archiveGoal: function (id, on) {
+      var g = this.getGoal(id);
+      if (!g) return null;
+      g.archivedAt = on === false ? '' : new Date().toISOString();
+      this.emit();
+      return g;
+    },
+
+    /** 算进度要用的上下文（纯函数的入参，单测里可以自己造） */
+    goalCtx: function (g) {
+      return {
+        from: g.startDate,
+        to: g.endDate,
+        today: DateUtil.toStr(DateUtil.today()),
+        plans: state.plans || [],
+        tasks: state.tasks || []
+      };
+    },
+
+    goalProgressOf: function (g) {
+      if (!g) return { pct: 0, counted: 0, total: 0, rows: [] };
+      return goalProgress(g, this.goalCtx(g));
+    },
+
     /** 打卡型的日期槽位 */
     planSlots: function (plan) {
       var slots = [];
@@ -8563,7 +8854,7 @@ window.AK_OPS = [
       // lite：只留课表骨架，其余清空（保留空结构，方便导入端直接覆盖）
       var empty = defaultState();
       out.tasks = [];      out.taskSeq = {};
-      out.plans = [];      out.ledger = [];      out.notes = [];
+      out.plans = [];      out.goals = [];     out.ledger = [];      out.notes = [];
       out.events = [];     out.activities = [];  out.meals = [];   out.sleeps = [];
       out.grades = {};
       out.achievements = { done: {} };
@@ -8603,6 +8894,7 @@ window.AK_OPS = [
         settings: Object.assign({}, ds.settings, obj.settings || {}),
         pomodoro: Object.assign({}, ds.pomodoro, obj.pomodoro || {}),
         plans: obj.plans || [],
+        goals: Array.isArray(obj.goals) ? obj.goals : [],
         achievements: obj.achievements || { done: {} },
         ledger: obj.ledger || [],
         notes: obj.notes || [],
@@ -9828,7 +10120,8 @@ window.AK_OPS = [
   var ALIAS = {
     diary: { id: 'tasks', tab: 'diary' },
     notes: { id: 'tasks', tab: 'notes' },
-    inspiration: { id: 'tasks', tab: 'notes' }
+    inspiration: { id: 'tasks', tab: 'notes' },
+    goals: { id: 'plans', tab: 'goals' }
   };
 
   /** 取一段地址并做最宽松的规整：去掉 #、/ 与首尾空白 */
@@ -10440,9 +10733,10 @@ window.AK_OPS = [
     task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
     event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
-    note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 5 },
-    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 6 },
-    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 7 }
+    goal:   { key: 'goals',   view: 'plans',    name: '目标', order: 5 },
+    note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 6 },
+    diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 7 },
+    ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 8 }
   };
 
   var TYPES = Object.keys(TYPE_META);
@@ -10503,6 +10797,16 @@ window.AK_OPS = [
         title: r.title || '',
         sub: tags,
         body: joinNonEmpty([r.note, tags], ' ')
+      };
+    }
+    if (type === 'goal') {
+      // 关键结果的文字也进 body：搜「自习」应该能搜到挂着它的那个目标
+      var gk = (r.krs || []).map(function (k) { return k.title || ''; });
+      return {
+        title: r.title || '',
+        sub: [r.endDate ? '到 ' + r.endDate : '', gk.length ? gk.length + ' 条关键结果' : '']
+          .filter(Boolean).join(' · '),
+        body: joinNonEmpty([r.note, gk.join(' ')], ' ')
       };
     }
     if (type === 'note') {
@@ -10736,7 +11040,7 @@ window.AK_OPS = [
     var input = el('input', {
       class: 'input s-input',
       type: 'search',
-      placeholder: '搜课程 / 待办 / 日程 / 计划 / 笔记 / 账目'
+      placeholder: '搜课程 / 待办 / 日程 / 计划 / 目标 / 日记 / 账目'
     });
 
     var m = V.modal({
@@ -10843,6 +11147,7 @@ window.AK_OPS = [
       tasks: tasks,
       events: s.events || [],
       plans: s.plans || [],
+      goals: s.goals || [],
       notes: s.notes || [],
       diaries: s.diaries || [],
       ledger: s.ledger || []
@@ -16517,6 +16822,566 @@ window.AK_OPS = [
 
 </script>
 <script>
+/* ==========================================================
+ * 目标（计划页的第二个分页）
+ * ----------------------------------------------------------
+ * 一个目标 = 一句「想变成什么样」+ 2–4 条关键结果（KR）。
+ * 每条 KR 只回答一个问题：到某个时间点，用什么数字证明它成了。
+ *
+ * 刻意的取舍（与路线图决策一致）：
+ * - 进度等权平均，不做权重：个人场景里权重基本靠拍脑袋。
+ * - 没有可统计数据的 KR 不进分母：刚建好就显示 0% 会让人不想再打开。
+ * - 到期不删除、不扣分，只是挪到「已归档」，进度按周期冻结。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+
+  var ICON = (V.icons && (V.icons.target || V.icons.flag)) || [];
+
+  function todayStr() { return DateUtil.toStr(DateUtil.today()); }
+
+  function daysBetween(a, b) {
+    var d1 = DateUtil.parse(a), d2 = DateUtil.parse(b);
+    if (!d1 || !d2) return 0;
+    return Math.round((d2 - d1) / 86400000);
+  }
+
+  function kindOf(key) {
+    var list = Store.KR_KINDS || [];
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
+    return list[list.length - 1];
+  }
+
+  function fmtNum(n) {
+    var v = Number(n) || 0;
+    return String(Math.round(v * 10) / 10);
+  }
+
+  /* ==========================================================
+   * 卡片
+   * ========================================================== */
+  function krRow(g, kr, row) {
+    var node = el('div', { class: 'goal-kr' });
+    var left = el('div', { class: 'goal-kr-main' }, [
+      el('span', { class: 'goal-kr-dot', style: { background: kr.kind === 'manual' ? 'var(--text-3)' : 'var(--primary)' } }),
+      el('span', { class: 'goal-kr-title', text: kr.title })
+    ]);
+    node.appendChild(left);
+
+    var right = el('div', { class: 'goal-kr-val' });
+    if (row.missing) {
+      right.appendChild(el('span', { class: 'goal-kr-warn', text: '绑定的计划已删除' }));
+    } else if (row.empty) {
+      right.appendChild(el('span', { class: 'goal-kr-warn', text: '周期内还没有待办' }));
+    } else if (row.pct == null) {
+      right.appendChild(el('span', { class: 'goal-kr-warn', text: '未填' }));
+    } else {
+      right.appendChild(el('span', {
+        class: 'goal-kr-count',
+        text: fmtNum(row.value) + '/' + fmtNum(row.target) + (row.unit ? ' ' + row.unit : '')
+      }));
+      right.appendChild(el('span', {
+        class: 'chip' + (row.pct >= 1 ? ' chip-green' : ''),
+        text: Math.round(row.pct * 100) + '%'
+      }));
+    }
+    node.appendChild(right);
+
+    // 自己填的 KR：点一下就能改数字，不用进编辑弹窗
+    if (kr.kind === 'manual') {
+      node.classList.add('cp-is-manual');
+      node.title = '点一下填当前值';
+      node.addEventListener('click', function () { quickFill(g, kr); });
+    }
+    return node;
+  }
+
+  function goalCard(g, archived) {
+    var pg = Store.goalProgressOf(g);
+    var today = todayStr();
+    var left = daysBetween(today, g.endDate);
+    var overdue = Store.goalsArchived().indexOf(g) >= 0 && !g.archivedAt;
+
+    var card = el('div', {
+      class: 'card plan-card goal-card' + (archived ? ' is-archived' : ''),
+      dataset: { id: g.id, rec: 'goal:' + g.id }
+    });
+
+    /* 标题行 */
+    var chip = g.archivedAt
+      ? el('span', { class: 'chip', text: '已归档' })
+      : (overdue ? el('span', { class: 'chip chip-amber', text: '已到期' }) : null);
+
+    card.appendChild(el('div', { class: 'plan-top' }, [
+      el('div', { style: { flex: '1', minWidth: '0' } }, [
+        el('div', { class: 'plan-title', text: g.title }),
+        g.note ? el('div', { class: 'goal-note', text: g.note }) : null
+      ]),
+      chip
+    ]));
+
+    /* 进度条 */
+    card.appendChild(el('div', { class: 'plan-bar' }, [
+      el('i', { style: { width: pg.pct + '%' } })
+    ]));
+
+    /* 关键结果 */
+    var krBox = el('div', { class: 'goal-krs' });
+    if (!pg.rows.length) {
+      krBox.appendChild(el('div', { class: 'goal-empty-kr', text: '还没有关键结果，编辑目标补一条。' }));
+    } else {
+      pg.rows.forEach(function (row) {
+        var kr = (g.krs || []).filter(function (k) { return k.id === row.id; })[0] || {};
+        krBox.appendChild(krRow(g, kr, row));
+      });
+    }
+    card.appendChild(krBox);
+
+    /* 底部：整体进度 + 周期 */
+    var foot = el('div', { class: 'plan-foot', style: { marginTop: '10px' } }, [
+      el('span', { class: 'plan-num', text: pg.pct + '%' }),
+      el('span', {
+        text: '总进度' + (pg.counted ? '（' + pg.counted + '/' + pg.total + ' 条可统计）' : '（暂无可统计的关键结果）')
+      }),
+      el('span', {
+        style: { marginLeft: 'auto', color: 'var(--text-3)' },
+        text: archived ? (g.endDate + ' 截止')
+          : (left >= 0 ? '还剩 ' + left + ' 天' : '已过期')
+      })
+    ]);
+    card.appendChild(foot);
+
+    /* 操作 */
+    var acts = el('div', { class: 'plan-foot', style: { marginTop: '8px', gap: '8px' } });
+    if (!archived) {
+      acts.appendChild(el('button', {
+        class: 'btn btn-sm',
+        onclick: function () { openGoalDialog(g.id); }
+      }, [V.svg(V.icons.pen, 14), '编辑']));
+      acts.appendChild(el('button', {
+        class: 'btn btn-sm',
+        onclick: function () { archive(g); }
+      }, ['归档']));
+    } else {
+      acts.appendChild(el('button', {
+        class: 'btn btn-sm',
+        onclick: function () { Store.archiveGoal(g.id, false); V.toast('已恢复到在办'); renderPane(); }
+      }, ['恢复']));
+      acts.appendChild(el('button', {
+        class: 'btn btn-sm btn-danger',
+        onclick: function () { remove(g); }
+      }, [V.svg(V.icons.trash, 14), '删除']));
+    }
+    card.appendChild(acts);
+    return card;
+  }
+
+  function archive(g) {
+    V.confirm({
+      title: '归档这个目标？',
+      message: '归档不会删除任何数据，进度会按目标周期停住，之后还能在「已归档」里找到并恢复。没达成就没达成，不算失败。',
+      okText: '归档'
+    }).then(function (ok) {
+      if (!ok) return;
+      Store.archiveGoal(g.id, true);
+      V.toast('已归档');
+      renderPane();
+    });
+  }
+
+  function remove(g) {
+    V.confirm({
+      title: '删除这个目标？',
+      message: '只删目标本身，它引用的计划、待办都不动。',
+      danger: true, okText: '删除'
+    }).then(function (ok) {
+      if (!ok) return;
+      Store.removeGoal(g.id);
+      V.toast('已删除');
+      renderPane();
+    });
+  }
+
+  /* ==========================================================
+   * 月末复盘
+   * ========================================================== */
+  function reviewCard() {
+    var today = todayStr();
+    if (!Store.goalReviewDue(Store.state.settings, today)) return null;
+    var active = Store.goalsActive();
+    if (!active.length) return null;
+
+    var lines = active.map(function (g) {
+      return { title: g.title, pct: Store.goalProgressOf(g).pct };
+    });
+    var text = Store.goalReviewText(lines, today);
+
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '12px' } }, [
+      el('div', { class: 'section-title' }, ['月末了，回顾一下']),
+      el('div', { class: 'goal-note', text: '这个月几个目标推进得怎么样？点「写进日记」会把下面的数字填进今天的日记，剩下的交给你自己写。' }),
+      el('pre', {
+        style: {
+          margin: '10px 0 12px', padding: '10px 12px', background: 'var(--surface-2)',
+          border: '1px solid var(--line)', borderRadius: '8px',
+          fontSize: '12.5px', color: 'var(--text-2)', whiteSpace: 'pre-wrap', lineHeight: '1.8'
+        },
+        text: text
+      })
+    ]);
+
+    var row = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } });
+    row.appendChild(el('button', {
+      class: 'btn btn-primary',
+      onclick: function () {
+        if (!global.DiaryPane) return;
+        DiaryPane.appendPlain(text, today, function () {
+          // 写完跳到日记分页，正好接着往下写
+          if (global.App) App.go('tasks', { tab: 'diary' });
+        });
+      }
+    }, [V.svg(V.icons.book, 16), '写进今天的日记']));
+    row.appendChild(el('button', {
+      class: 'btn',
+      onclick: function () {
+        Store.state.settings.goals.reviewDismissed = today.slice(0, 7);
+        Store.save();
+        V.toast('这个月不再提醒');
+        renderPane();
+      }
+    }, ['这个月不再提醒']));
+    card.appendChild(row);
+    return card;
+  }
+
+  /* ==========================================================
+   * 分页渲染
+   * ========================================================== */
+  var HOST = null;
+
+  function renderPane() {
+    if (HOST) GoalsPane.render(HOST);
+  }
+
+  var GoalsPane = {
+    render: function (host) {
+      HOST = host;
+      host.innerHTML = '';
+
+      var active = Store.goalsActive();
+      var archived = Store.goalsArchived();
+      var avg = active.length
+        ? Math.round(active.reduce(function (s, g) { return s + Store.goalProgressOf(g).pct; }, 0) / active.length)
+        : 0;
+      var krTotal = active.reduce(function (s, g) { return s + (g.krs || []).length; }, 0);
+
+      host.appendChild(el('div', { class: 'task-summary' }, [
+        V.statCard(active.length + '/' + Store.GOAL_MAX_ACTIVE, '在办目标', 'var(--primary)'),
+        V.statCard(avg + '%', '平均进度', 'var(--green)'),
+        V.statCard(krTotal, '关键结果', 'var(--amber)'),
+        V.statCard(archived.length, '已归档', 'var(--text-2)')
+      ]));
+
+      var rc = reviewCard();
+      if (rc) host.appendChild(rc);
+
+      if (!active.length) {
+        host.appendChild(V.empty(ICON, '还没有在办的目标',
+          '目标不是待办清单：先写一句「想变成什么样」，再补 2–4 条能算出结果的数字。',
+          el('button', {
+            class: 'btn btn-primary',
+            onclick: function () { openGoalDialog(); }
+          }, [V.svg(V.icons.plus, 16), '新建目标'])));
+      } else {
+        active.forEach(function (g) { host.appendChild(goalCard(g, false)); });
+      }
+
+      if (archived.length) {
+        var box = el('div', { class: 'card goal-archive', style: { padding: '12px 14px' } });
+        var open = false;
+        var body = el('div', {});
+        var head = el('button', {
+          class: 'btn btn-sm',
+          style: { width: '100%', justifyContent: 'space-between' },
+          onclick: function () {
+            open = !open;
+            body.style.display = open ? '' : 'none';
+            this.textContent = (open ? '收起已归档（' : '已归档（') + archived.length + (open ? '）' : '）');
+          }
+        }, ['已归档（' + archived.length + '）']);
+        body.style.display = 'none';
+        archived.forEach(function (g) { body.appendChild(goalCard(g, true)); });
+        box.appendChild(head);
+        box.appendChild(body);
+        host.appendChild(box);
+      }
+
+      if (active.length) {
+        host.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.8' },
+          text: '同时在办最多 ' + Store.GOAL_MAX_ACTIVE + ' 个目标——目标页最大的失败形态不是功能少，是变成一张谁也不看的表。'
+        }));
+      }
+    }
+  };
+
+  /* ==========================================================
+   * 快速填写（自己填的 KR）
+   * ========================================================== */
+  function quickFill(g, kr) {
+    var f = V.input({
+      type: 'number', step: '0.5', min: '0',
+      value: String(kr.current || 0)
+    });
+    var m;
+    m = V.modal({
+      title: '填一个数',
+      body: [
+        el('div', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+          text: kr.title + '（目标 ' + fmtNum(kr.target) + (kr.unit ? ' ' + kr.unit : '') + '）'
+        }),
+        V.field('当前值', f, '出了结果就填进来；没出结果就留 0')
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '保存',
+          onclick: function () {
+            var v = Math.max(0, parseFloat(f.value) || 0);
+            var krs = (g.krs || []).map(function (k) {
+              return k.id === kr.id ? Object.assign({}, k, { current: v }) : k;
+            });
+            Store.updateGoal(g.id, { krs: krs });
+            V.toast('已更新');
+            m.close();
+            renderPane();
+          }
+        })
+      ])
+    });
+  }
+
+  /* ==========================================================
+   * 新建 / 编辑弹窗
+   * ========================================================== */
+  function termRange() {
+    var sem = Store.semester;
+    var start = Store.weekStartDate(1) || DateUtil.today();
+    var end = DateUtil.addDays(Store.weekStartDate(sem.weeks || 18), 6);
+    return { start: DateUtil.toStr(start), end: DateUtil.toStr(end) };
+  }
+
+  function openGoalDialog(id) {
+    var origin = id ? Store.getGoal(id) : null;
+    if (!origin && !Store.canAddGoal()) {
+      V.toast('在办目标已经有 ' + Store.GOAL_MAX_ACTIVE + ' 个了，先归档一个', 'err');
+      return;
+    }
+
+    var tr = termRange();
+    var draft = {
+      title: origin ? origin.title : '',
+      note: origin ? origin.note : '',
+      period: origin ? origin.period : 'term',
+      startDate: origin ? origin.startDate : tr.start,
+      endDate: origin ? origin.endDate : tr.end,
+      krs: origin ? origin.krs.map(function (k) { return Object.assign({}, k); }) : []
+    };
+    if (!draft.krs.length) draft.krs.push({ title: '', kind: 'manual', target: 100, current: 0, unit: '' });
+
+    var fTitle = V.input({ placeholder: '例如：这学期把高数补上来', value: draft.title });
+    var fNote = V.input({ placeholder: '选填：为什么要做这件事', value: draft.note });
+    var fStart = V.input({ type: 'date', value: draft.startDate });
+    var fEnd = V.input({ type: 'date', value: draft.endDate });
+    var krBox = el('div', { class: 'goal-kr-edit' });
+    var periodSeg = el('div', {});
+
+    function drawPeriod() {
+      periodSeg.innerHTML = '';
+      periodSeg.appendChild(V.segment([
+        { value: 'term', label: '本学期' },
+        { value: 'custom', label: '自定义' }
+      ], draft.period, function (v) {
+        draft.period = v;
+        if (v === 'term') {
+          draft.startDate = tr.start;
+          draft.endDate = tr.end;
+          fStart.value = tr.start;
+          fEnd.value = tr.end;
+        }
+        drawPeriod();
+      }));
+    }
+    drawPeriod();
+
+    /* ---- KR 编辑行 ---- */
+    function drawKrs() {
+      krBox.innerHTML = '';
+      draft.krs.forEach(function (kr, i) {
+        var row = el('div', { class: 'goal-kr-edit-row' });
+
+        var fKrTitle = V.input({
+          placeholder: '关键结果，例如：每周自习 5 天', value: kr.title,
+          oninput: function () { kr.title = this.value; }
+        });
+        row.appendChild(V.field('第 ' + (i + 1) + ' 条', fKrTitle));
+
+        var fKind = V.select(Store.KR_KINDS.map(function (k) {
+          return { value: k.key, label: k.name };
+        }), kr.kind);
+        fKind.addEventListener('change', function () {
+          kr.kind = fKind.value;
+          if (kr.kind === 'manual' && !kr.target) kr.target = 100;
+          drawKrs();
+        });
+        row.appendChild(V.field('怎么衡量', fKind, kindOf(kr.kind).desc));
+
+        if (kr.kind === 'plan') {
+          var plans = Store.plans.slice().sort(function (a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
+          var opts = [{ value: '', label: plans.length ? '选择一条计划…' : '还没有计划，先去「计划」里建一条' }]
+            .concat(plans.map(function (p) { return { value: p.id, label: p.title }; }));
+          var fPlan = V.select(opts, kr.planId || '');
+          fPlan.addEventListener('change', function () { kr.planId = fPlan.value; });
+          row.appendChild(V.field('绑定计划', fPlan, '只统计目标周期内的打卡'));
+        } else if (kr.kind === 'task') {
+          var fTags = V.input({
+            placeholder: '标签，空格分隔（留空 = 全部）',
+            value: (kr.tags || []).join(' '),
+            oninput: function () {
+              kr.tags = this.value.split(/[\s,，、]+/).filter(function (x) { return x; }).slice(0, 6);
+            }
+          });
+          row.appendChild(V.field('按标签圈定', fTags, '任一标签命中就算；统计周期内有截止日期的顶层待办'));
+
+          var courses = Store.courses || [];
+          var cOpts = [{ value: '', label: '不限课程' }].concat(courses.map(function (c) {
+            return { value: c.id, label: c.name };
+          }));
+          var fCourse = V.select(cOpts, kr.courseId || '');
+          fCourse.addEventListener('change', function () { kr.courseId = fCourse.value; });
+          row.appendChild(V.field('限定课程（可选）', fCourse));
+        } else {
+          var fTarget = V.input({
+            type: 'number', step: '0.5', min: '1', value: String(kr.target || 1),
+            oninput: function () { kr.target = Math.max(1, parseFloat(this.value) || 1); }
+          });
+          var fUnit = V.input({
+            placeholder: '分 / 篇 / 次', value: kr.unit || '',
+            oninput: function () { kr.unit = this.value; }
+          });
+          var fCur = V.input({
+            type: 'number', step: '0.5', min: '0', value: String(kr.current || 0),
+            oninput: function () { kr.current = Math.max(0, parseFloat(this.value) || 0); }
+          });
+          row.appendChild(V.field('目标值 / 单位', el('div', { style: { display: 'flex', gap: '8px' } }, [fTarget, fUnit])));
+          row.appendChild(V.field('当前值', fCur, '之后也能在卡片上直接点开填'));
+        }
+
+        if (draft.krs.length > 1) {
+          row.appendChild(el('div', { style: { textAlign: 'right' } }, [
+            el('button', {
+              class: 'btn btn-sm',
+              onclick: function () {
+                draft.krs = draft.krs.filter(function (x) { return x !== kr; });
+                drawKrs();
+              }
+            }, ['删掉这条'])
+          ]));
+        }
+        krBox.appendChild(row);
+      });
+
+      if (draft.krs.length < 4) {
+        krBox.appendChild(el('button', {
+          class: 'btn btn-sm',
+          onclick: function () {
+            draft.krs.push({ title: '', kind: 'manual', target: 100, current: 0, unit: '' });
+            drawKrs();
+          }
+        }, [V.svg(V.icons.plus, 14), '添加关键结果']));
+      }
+    }
+    drawKrs();
+
+    var m;
+    m = V.modal({
+      title: origin ? '编辑目标' : '新建目标',
+      width: '620px',
+      body: [
+        V.field('目标', fTitle, '一句话说清「想变成什么样」，不用写具体做什么'),
+        V.field('周期', periodSeg, '只做「本学期」和「自定义」两种：日/周目标和计划、待办完全重叠'),
+        el('div', { style: { display: 'flex', gap: '10px' } }, [
+          el('div', { style: { flex: '1' } }, [V.field('开始', fStart)]),
+          el('div', { style: { flex: '1' } }, [V.field('结束', fEnd)])
+        ]),
+        V.field('关键结果', krBox, '每条只回答一个问题：到那时候，用什么数字证明它成了'),
+        V.field('备注', fNote),
+        el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.75' },
+          text: '总进度 = 各条关键结果的等权平均；没有数据的（比如期中还没考）先不计入。到期不会删除，只是归档留档。'
+        })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '保存',
+          onclick: function () {
+            var title = fTitle.value.trim();
+            if (!title) { V.toast('先写一句目标', 'err'); fTitle.focus(); return; }
+            var start = fStart.value || draft.startDate;
+            var end = fEnd.value || draft.endDate;
+            if (end < start) { V.toast('结束日期不能早于开始日期', 'err'); return; }
+            var krs = draft.krs.filter(function (k) { return String(k.title || '').trim(); });
+            if (!krs.length) { V.toast('至少写一条关键结果，否则没法算进度', 'err'); return; }
+            krs = krs.map(function (k, i) {
+              return Object.assign({}, k, { title: k.title.trim(), id: k.id || ('kr_' + Date.now() + '_' + i) });
+            });
+            var data = {
+              title: title, note: fNote.value.trim(),
+              period: draft.period, startDate: start, endDate: end, krs: krs
+            };
+            if (origin) { Store.updateGoal(origin.id, data); V.toast('已更新'); }
+            else { Store.addGoal(data); V.toast('目标已创建'); }
+            m.close();
+            renderPane();
+          }
+        })
+      ])
+    });
+  }
+
+  /* ==========================================================
+   * 导出
+   * ========================================================== */
+  GoalsPane.open = openGoalDialog;
+  GoalsPane.focusRecord = function (type, id) {
+    if (type !== 'goal') return false;
+    var g = Store.getGoal(id);
+    if (!g) return false;
+    var node = HOST ? HOST.querySelector('[data-rec="goal:' + id + '"]') : null;
+    // 归档里的目标默认折叠：先展开再定位
+    if (!node && HOST) {
+      var head = HOST.querySelector('.goal-archive .btn');
+      if (head) head.click();
+      node = HOST.querySelector('[data-rec="goal:' + id + '"]');
+    }
+    if (node && node.scrollIntoView) node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (node) {
+      node.classList.add('goal-flash');
+      setTimeout(function () { node.classList.remove('goal-flash'); }, 1200);
+    }
+    return !!node;
+  };
+
+  global.GoalsPane = GoalsPane;
+  global.openGoalDialog = openGoalDialog;
+})(window);
+
+</script>
+<script>
 
 
 /* ==========================================================
@@ -16528,7 +17393,22 @@ window.AK_OPS = [
   var V = UI;
   var el = V.el;
 
-  var state = { status: 'running', tag: '' };
+  var state = { status: 'running', tag: '', tab: 'plans' };
+  var TABS = ['plans', 'goals'];
+
+  /** 分页切换后把地址栏对齐（#/plans/goals）；默认分页不写尾巴 */
+  function syncRoute() {
+    if (!global.Router || !global.App || App.currentId !== 'plans') return;
+    Router.set('plans', state.tab === 'plans' ? null : state.tab);
+  }
+
+  /** 右上角按钮跟着分页变，所以切页时要手动重建一次 */
+  function refreshActions() {
+    var host = document.getElementById('viewActions');
+    if (!host || !global.App || App.currentId !== 'plans') return;
+    host.innerHTML = '';
+    view.actions(host);
+  }
   var justDoneId = '';
 
   var COLORS = ['#4f46e5', '#0ea5e9', '#14b8a6', '#12b76a', '#e8930c', '#f04438', '#ec4899', '#7c3aed'];
@@ -16548,10 +17428,24 @@ window.AK_OPS = [
     root: null,
 
     actions: function (host) {
+      var onGoals = state.tab === 'goals';
       host.appendChild(el('button', {
         class: 'btn btn-primary',
-        onclick: function () { openPlanDialog(); }
-      }, [V.svg(V.icons.plus, 16), '新建计划']));
+        onclick: function () {
+          if (onGoals) { if (global.openGoalDialog) openGoalDialog(); }
+          else openPlanDialog();
+        }
+      }, [V.svg(V.icons.plus, 16), onGoals ? '新建目标' : '新建计划']));
+    },
+
+    /** 分页：计划 / 目标 */
+    defaultTab: 'plans',
+    getTab: function () { return state.tab; },
+    setTab: function (tab) {
+      state.tab = TABS.indexOf(tab) >= 0 ? tab : 'plans';
+      if (this.root) this.render();
+      refreshActions();
+      syncRoute();
     },
 
     mount: function (host) {
@@ -16566,6 +17460,34 @@ window.AK_OPS = [
     render: function () {
       var root = this.root;
       root.innerHTML = '';
+
+      /* ---- 计划 / 目标 分页 ---- */
+      var nGoal = Store.goalsActive().length;
+      var paneBar = el('div', { class: 'pane-tabs' });
+      [
+        { v: 'plans', l: '计划' },
+        { v: 'goals', l: nGoal ? '目标 ' + nGoal : '目标' }
+      ].forEach(function (x) {
+        paneBar.appendChild(el('button', {
+          class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
+          text: x.l,
+          onclick: function () {
+            if (state.tab === x.v) return;
+            state.tab = x.v;
+            view.render();
+            refreshActions();
+            syncRoute();
+          }
+        }));
+      });
+      root.appendChild(paneBar);
+
+      if (state.tab === 'goals') {
+        var goalHost = el('div', {});
+        root.appendChild(goalHost);
+        if (global.GoalsPane) GoalsPane.render(goalHost);
+        return;
+      }
 
       var st = Store.planStats();
 
@@ -17012,7 +17934,18 @@ window.AK_OPS = [
 
   // 计划列表有「进行中 / 已完成」筛选，跳转过来时先把筛选放宽
   view.focusRecord = function (type, id) {
+    if (type === 'goal') {
+      // 目标页可能根本没挂载过，先切过去再定位
+      if (state.tab !== 'goals') {
+        state.tab = 'goals';
+        view.render();
+        refreshActions();
+        syncRoute();
+      }
+      return !!(global.GoalsPane && GoalsPane.focusRecord('goal', id));
+    }
     if (type !== 'plan' || !global.Search) return false;
+    if (state.tab !== 'plans') { state.tab = 'plans'; view.render(); refreshActions(); }
     var p = Store.getPlan(id);
     var dirty = false;
     if (p && state.status !== 'all' && ((state.status === 'running') === !!p.done)) {
@@ -18281,6 +19214,14 @@ window.AK_OPS = [
     });
   }
 
+  /** 追加一段不带引用的正文（目标复盘用：那是要接着写的话，不是引用） */
+  function appendPlain(text, dateStr, done) {
+    var d = Store.diaryOf(dateStr);
+    var body = String(text || '').trim();
+    var base = d && d.content ? d.content.replace(/\s+$/, '') + '\n\n' : '';
+    openEditor(dateStr, d ? d.id : null, done, { content: base + body });
+  }
+
   /** 从日记反向摘一段回灵感 */
   function copyToNote(text, done) {
     var t = (text || '').trim();
@@ -18302,6 +19243,7 @@ window.AK_OPS = [
     render: renderDiaryInto,
     open: openEditor,
     appendToDiary: appendToDiary,
+    appendPlain: appendPlain,
     copyToNote: copyToNote,
     autoDate: autoDate
   };
@@ -20862,6 +21804,7 @@ window.AK_OPS = [
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
     nav: { name: '模块显示', desc: '决定底部导航里出现哪些模块' },
     desktop: { name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块的链接' },
+    goals: { name: '目标', desc: '月末复盘提示与在办数量' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
     subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
@@ -21754,6 +22697,60 @@ window.AK_OPS = [
 
             }
 
+      if (SUB === 'goals') {
+  /* ===================== 目标 ===================== */
+        var gcfg = Store.state.settings.goals;
+        var gOn = gcfg.monthlyReview !== false;
+        var gSw = el('button', {
+          class: 'switch' + (gOn ? ' on' : ''),
+          onclick: function () {
+            gOn = !gOn;
+            gSw.classList.toggle('cp-on', gOn);
+            gcfg.monthlyReview = gOn;
+            Store.save();
+            if (UI.toast) UI.toast(gOn ? '已打开月末复盘提醒' : '已关闭月末复盘提醒');
+          }
+        }, [el('i')]);
+
+        var goalCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
+          el('div', { class: 'section-title' }, ['月末复盘']),
+          el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: '每月最后三天提醒' }),
+              el('span', { text: '目标页顶部出现一张复盘卡，点一下把各目标的进度写进当天日记，后面自己接着写。只提示，不会自动写。' })
+            ]),
+            gSw
+          ]),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.8' },
+            text: '同时在办最多 ' + Store.GOAL_MAX_ACTIVE + ' 个目标，上限写死、不提供设置：目标页最大的失败形态不是功能少，' +
+                  '是变成一张谁也不看的表。到期的目标不会删除，只是挪到「已归档」，进度按目标周期冻结。'
+          })
+        ]);
+        root.appendChild(goalCard);
+
+        root.appendChild(el('div', { class: 'card', style: { padding: '16px 18px' } }, [
+          el('div', { class: 'section-title' }, ['目标怎么算进度']),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', lineHeight: '1.9' },
+            text: '每条关键结果按自己的方式算：挂计划的看周期内打卡进度，挂待办的看周期内相关待办的完成率，' +
+                  '自己填的就是「当前值 ÷ 目标值」。总进度是这些的等权平均，不做权重——个人场景里权重基本靠拍脑袋，' +
+                  '拍出来的数比不填更误导。'
+          }),
+          el('p', {
+            style: { fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.9' },
+            text: '没有可统计数据的（绑定的计划被删了、周期内还没有待办、期中还没考）先不计入平均，' +
+                  '免得刚建好就显示 0%，看着像什么都没做。'
+          }),
+          el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { App.go('plans', { tab: 'goals' }); }
+            }, [V.svg(V.icons.target, 16), '去目标页'])
+          ])
+        ]));
+      }
+
       if (SUB === 'desktop') {
   /* ===================== 桌面与快捷 ===================== */
         var online = /^https?:$/.test(location.protocol || '');
@@ -22080,7 +23077,9 @@ window.AK_OPS = [
           el('li', { text: '· 「模块显示」里可以开关模块，也能用上下箭头调整它们在导航里的顺序。' }),
           el('li', { text: '· 手机竖屏用底部导航，横屏自动收到左侧，网页宽屏变成两栏。' }),
             el('li', { text: '· 手机上可把本页「添加到主屏幕」，用起来更接近原生 App；装好后长按图标能直接进「今日课表」「写日记」。' }),
-            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' })
+            el('li', { text: '· 每个模块都有自己的地址（#/today、#/tasks/diary 这种），在「设置 → 桌面与快捷」里可以一键复制。' }),
+            el('li', { text: '· 「计划」页顶部可以切到「目标」：目标是「想变成什么样」，往下挂 2–4 条关键结果，分别挂计划、挂待办或自己填数字。' }),
+            el('li', { text: '· 目标最多同时 5 个，到期不会删除、也不扣分，只是挪进「已归档」；每月最后三天会提示做一次复盘，可以一键写进当天日记。' })
           ])
         ]);
         root.appendChild(about);
@@ -22101,6 +23100,7 @@ window.AK_OPS = [
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
     { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
     { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9' },
+    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b' },
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },

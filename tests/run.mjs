@@ -196,6 +196,12 @@ const SUBTASK_DEFAULTSSrc = (() => {
   return 'var SUBTASK_DEFAULTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
 })();
 const subOptsSrc = extractFnFrom('subOpts', SUBTASK_ANCHOR);
+const krProgressSrc = extractFn('krProgress');
+const goalProgressSrc = extractFn('goalProgress');
+const goalExpiredSrc = extractFn('goalExpired');
+const goalActiveSrc = extractFn('goalActive');
+const goalReviewDueSrc = extractFn('goalReviewDue');
+const goalReviewTextSrc = extractFn('goalReviewText');
 const isChildSrc = extractFnFrom('isChild', SUBTASK_ANCHOR);
 const childrenOfSrc = extractFnFrom('childrenOf', SUBTASK_ANCHOR);
 const subtaskProgressSrc = extractFnFrom('subtaskProgress', SUBTASK_ANCHOR);
@@ -286,6 +292,12 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${childrenOfSrc}
   ${subtaskProgressSrc}
   ${childIdsSrc}
+  ${krProgressSrc}
+  ${goalProgressSrc}
+  ${goalExpiredSrc}
+  ${goalActiveSrc}
+  ${goalReviewDueSrc}
+  ${goalReviewTextSrc}
   var global = { Lunar: __LUNAR__ };
   globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
@@ -295,6 +307,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      nextDueDate, repeatExpired, sanitizeRepeat,
                      annivNext, wrapText, measure, hexToRgb, tint,
                      subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
+                     krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText,
                      RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
                      weekBounds, monthBounds, sleepByNight, heatLevel,
                      MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
@@ -312,7 +325,8 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncPart
         RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay,
         weekBounds, monthBounds, sleepByNight, heatLevel,
         MOODS, MOOD_MIN_DAYS, MOOD_CROSS_MIN_DAYS, moodOf, moodTone,
-        diaryDatePrompt, moodStats, diaryOn, diariesSorted } = globalThis.__T;
+        diaryDatePrompt, moodStats, diaryOn, diariesSorted,
+        krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText } = globalThis.__T;
 
 // 断言
 let pass = 0, fail = 0;
@@ -1421,6 +1435,113 @@ console.log('Router：地址解析与拼装');
   eq('resolve 视图不存在 → null', R.resolve('#/nope', ['today', 'tasks']), null);
   eq('resolve 非法地址 → null', R.resolve('#nope', ['today']), null);
   eq('resolve 空地址 → null', R.resolve('', ['today']), null);
+}
+
+
+/* ==========================================================
+ * 15) 目标与关键结果（store.js 的纯函数）
+ *    进度算法是这个功能唯一「算数」的地方，错一点整页都是假数据。
+ * ========================================================== */
+console.log('目标：关键结果与总进度');
+{
+  const ctx = {
+    from: '2026-09-01', to: '2027-01-15', today: '2026-10-21',
+    plans: [
+      { id: 'p1', target: 20, unit: '次', records: [
+        { date: '2026-08-20', value: 5 },   // 周期前，不该算
+        { date: '2026-09-10', value: 2 },
+        { date: '2026-10-10', value: 3 },
+        { date: '2026-12-10', value: 4 }    // 未来，不该算
+      ] },
+      { id: 'p2', target: 2, unit: '', records: [
+        { date: '2026-09-02', value: 1 }, { date: '2026-09-03', value: 1 }
+      ] }
+    ],
+    tasks: [
+      { id: 't1', title: 'a', status: 'done', dueDate: '2026-09-10', tags: ['学习/数学'] },
+      { id: 't2', title: 'b', status: 'todo', dueDate: '2026-09-20', tags: ['学习/数学'] },
+      { id: 't3', title: 'c', status: 'done', dueDate: '2026-09-25', tags: ['生活'] },
+      { id: 't4', title: 'd', status: 'todo', dueDate: '2026-09-26', tags: ['学习/数学'], parentId: 't1' },
+      { id: 't5', title: 'e', status: 'done', dueDate: '2026-02-01', tags: ['学习/数学'] },  // 周期外
+      { id: 't6', title: 'f', status: 'done', tags: ['学习/数学'] },                        // 没有截止日期
+      { id: 't7', title: 'g', status: 'done', dueDate: '2026-09-30', tags: ['学习/数学'], courseId: 'c9' }
+    ]
+  };
+
+  /* --- 自己填 --- */
+  eq('自填：8/20 = 40%', krProgress({ kind: 'manual', target: 20, current: 8 }, ctx).pct, 0.4);
+  eq('自填：超过目标按 100% 封顶', krProgress({ kind: 'manual', target: 10, current: 13 }, ctx).pct, 1);
+  eq('自填：负数按 0', krProgress({ kind: 'manual', target: 10, current: -5 }, ctx).pct, 0);
+  eq('自填：目标为 0 时按 1 兜底', krProgress({ kind: 'manual', target: 0, current: 0 }, ctx).pct, 0);
+  eq('自填：没填过就是 0%', krProgress({ kind: 'manual', target: 10 }, ctx).pct, 0);
+
+  /* --- 挂计划 --- */
+  const kp = krProgress({ kind: 'plan', planId: 'p1' }, ctx);
+  eq('挂计划：只算周期内的打卡', kp.value, 5);
+  eq('挂计划：目标是计划自己的目标', kp.target, 20);
+  eq('挂计划：5/20 = 25%', kp.pct, 0.25);
+  eq('挂计划：单位跟随计划', kp.unit, '次');
+  eq('挂计划：目标被删了标 missing', krProgress({ kind: 'plan', planId: 'gone' }, ctx).missing, true);
+  eq('挂计划：目标被删了 pct 为 null（不参与平均）', krProgress({ kind: 'plan', planId: 'gone' }, ctx).pct, null);
+  eq('挂计划：已完成时封顶 100%', krProgress({ kind: 'plan', planId: 'p2' }, ctx).pct, 1);
+
+  /* --- 挂待办 --- */
+  const kt = krProgress({ kind: 'task', tags: ['学习/数学'] }, ctx);
+  eq('挂待办：子任务不重复计', kt.target, 3);          // t1/t2/t7；t4 是子任务，t5 周期外，t6 无截止
+  eq('挂待办：完成数对', kt.value, 2);                 // t1/t7 完成
+  eq('挂待办：2/3', Math.round(kt.pct * 100), 67);
+  eq('挂待办：不限标签时含全部周期内顶层任务',
+    krProgress({ kind: 'task' }, ctx).target, 4);      // t1/t2/t3/t7
+  eq('挂待办：按课程过滤',
+    krProgress({ kind: 'task', tags: ['学习/数学'], courseId: 'c9' }, ctx).target, 1);
+  eq('挂待办：没有命中时标 empty', krProgress({ kind: 'task', tags: ['不存在'] }, ctx).empty, true);
+  eq('挂待办：没有命中时 pct 为 null', krProgress({ kind: 'task', tags: ['不存在'] }, ctx).pct, null);
+
+  /* --- 总进度：等权平均 --- */
+  const g1 = { krs: [
+    { id: 'k1', title: 'A', kind: 'manual', target: 20, current: 8 },   // 0.40
+    { id: 'k2', title: 'B', kind: 'manual', target: 100, current: 72 }  // 0.72
+  ] };
+  eq('总进度：(40+72)/2 = 56%', goalProgress(g1, ctx).pct, 56);
+  eq('总进度：counted 是参与平均的条数', goalProgress(g1, ctx).counted, 2);
+  eq('总进度：rows 保持顺序', goalProgress(g1, ctx).rows.map(r => r.id), ['k1', 'k2']);
+
+  const g2 = { krs: [
+    { id: 'k1', title: 'A', kind: 'manual', target: 10, current: 5 },
+    { id: 'k2', title: 'B', kind: 'plan', planId: 'gone' },             // null，不进分母
+    { id: 'k3', title: 'C', kind: 'task', tags: ['不存在'] }             // null，不进分母
+  ] };
+  eq('总进度：没有数据的 KR 不进分母', goalProgress(g2, ctx).pct, 50);
+  eq('总进度：总数仍显示 3 条', goalProgress(g2, ctx).total, 3);
+  eq('总进度：可统计只有 1 条', goalProgress(g2, ctx).counted, 1);
+  eq('总进度：全都没数据时是 0% 而不是崩', goalProgress({ krs: [{ kind: 'plan', planId: 'x' }] }, ctx).pct, 0);
+  eq('总进度：没有 KR 时是 0%', goalProgress({ krs: [] }, ctx).pct, 0);
+
+  /* --- 到期与归档 --- */
+  eq('到期：结束当天仍在办', goalExpired({ endDate: '2026-10-21' }, '2026-10-21'), false);
+  eq('到期：第二天算过期', goalExpired({ endDate: '2026-10-21' }, '2026-10-22'), true);
+  eq('到期：没有结束日不算过期', goalExpired({}, '2026-10-22'), false);
+  eq('在办：普通目标', goalActive({ endDate: '2027-01-01' }, '2026-10-21'), true);
+  eq('在办：归档后不算', goalActive({ endDate: '2027-01-01', archivedAt: '2026-10-01' }, '2026-10-21'), false);
+  eq('在办：过期后不算', goalActive({ endDate: '2026-09-01' }, '2026-10-21'), false);
+
+  /* --- 月末复盘 --- */
+  const cfg = { goals: { monthlyReview: true, reviewDismissed: '' } };
+  eq('复盘：10/31 是月底', goalReviewDue(cfg, '2026-10-31'), true);
+  eq('复盘：10/29 已进最后三天', goalReviewDue(cfg, '2026-10-29'), true);
+  eq('复盘：10/28 还差一天（31 天的月）', goalReviewDue(cfg, '2026-10-28'), false);
+  eq('复盘：2 月按实际天数算（28 天月）', goalReviewDue(cfg, '2026-02-26'), true);
+  eq('复盘：2 月 25 号还不提醒', goalReviewDue(cfg, '2026-02-25'), false);
+  eq('复盘：闰年 2/29 也认得', goalReviewDue(cfg, '2028-02-27'), true);
+  eq('复盘：当月点过不再提醒', goalReviewDue({ goals: { monthlyReview: true, reviewDismissed: '2026-10' } }, '2026-10-31'), false);
+  eq('复盘：上个月点过不影响这个月',
+    goalReviewDue({ goals: { monthlyReview: true, reviewDismissed: '2026-09' } }, '2026-10-31'), true);
+  eq('复盘：开关关掉就不提醒', goalReviewDue({ goals: { monthlyReview: false } }, '2026-10-31'), false);
+  eq('复盘：设置缺字段时默认开', goalReviewDue({}, '2026-10-31'), true);
+
+  const txt = goalReviewText([{ title: '把高数补上来', pct: 62 }], '2026-10-21');
+  eq('复盘文案：标题带月份', txt.split('\n')[0], '【10 月目标复盘】');
+  eq('复盘文案：每条一行百分比', txt.split('\n')[1], '· 把高数补上来：62%');
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

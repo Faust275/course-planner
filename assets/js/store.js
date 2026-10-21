@@ -209,6 +209,11 @@
           showProgress: true       // 父任务显示 2/4 进度徽章
         },
         subtaskHinted: false,      // 是否已弹过「子任务默认行为」一次性说明
+        // 目标（详见「设置 → 目标」）
+        goals: {
+          monthlyReview: true,     // 每月最后三天提示做一次复盘
+          reviewDismissed: ''      // 已选择「这个月不再提醒」的月份（YYYY-MM）
+        },
         // 日记（详见「设置 → 日记」）
         diary: {
           askDateAtNight: true,    // 0–4 点保存时询问归属「昨天 / 今天」
@@ -241,6 +246,7 @@
         timer: { running: false, endAt: 0, left: 0, duration: 25, taskId: '' }
       },
       plans: [],       // 计划（打卡 / 进度）
+      goals: [],       // 目标（目标 → 关键结果 → 计划/待办）
       ledger: [],      // 记账流水
       notes: [],       // 灵感速记
       diaries: [],     // 日记（一天一篇，key 为 YYYY-MM-DD）
@@ -1296,6 +1302,176 @@
     return out;
   }
 
+  /* ==========================================================
+   * 目标（目标 → 关键结果 → 计划 / 待办 / 手填数字）
+   * ----------------------------------------------------------
+   * 只做一层拆解：目标下面挂 2–4 条关键结果，不做「目标套目标」。
+   * 进度一律等权平均，不做权重——个人场景里权重基本靠拍脑袋，
+   * 拍出来的数比不填更误导。
+   * ========================================================== */
+
+  /** 同时在办的目标上限（产品边界，不提供设置项） */
+  var GOAL_MAX_ACTIVE = 5;
+
+  /** 关键结果的三种计量方式 */
+  var KR_KINDS = [
+    { key: 'plan', name: '挂计划', desc: '按这条计划在周期内的打卡进度算' },
+    { key: 'task', name: '挂待办', desc: '按周期内相关待办的完成率算' },
+    { key: 'manual', name: '自己填', desc: '出分、有结果后自己填一个数' }
+  ];
+
+  /** 目标到期了没（到期当天仍算在办，第二天才算过期） */
+  function goalExpired(goal, todayStr) {
+    if (!goal || !goal.endDate) return false;
+    return String(todayStr) > String(goal.endDate);
+  }
+
+  /** 目标是否在办：没手动归档、也没到期 */
+  function goalActive(goal, todayStr) {
+    if (!goal) return false;
+    if (goal.archivedAt) return false;
+    return !goalExpired(goal, todayStr);
+  }
+
+  /**
+   * 单条关键结果的完成度
+   * @param {Object} kr  { kind, planId, tags, courseId, target, current, unit }
+   * @param {Object} ctx { from, to, today, plans, tasks }
+   * @returns {{ pct: number|null, value: number, target: number, unit: string, empty: boolean, missing: boolean }}
+   *          pct 为 null = 没有可统计的数据（刚建好、绑的计划被删了），不参与平均
+   */
+  function krProgress(kr, ctx) {
+    var out = { pct: null, value: 0, target: 0, unit: '', empty: false, missing: false };
+    if (!kr || !ctx) return out;
+
+    /* 自己填：当前值 / 目标值，超过目标按 100% 算 */
+    if (kr.kind === 'manual') {
+      var t = Math.max(1, Number(kr.target) || 1);
+      var v = Math.max(0, Number(kr.current) || 0);
+      out.value = v;
+      out.target = t;
+      out.unit = kr.unit || '';
+      out.pct = Math.max(0, Math.min(1, v / t));
+      return out;
+    }
+
+    /* 挂计划：只统计目标周期内的打卡，到期后自然不再涨（等于冻结快照） */
+    if (kr.kind === 'plan') {
+      var plan = (ctx.plans || []).filter(function (p) { return p.id === kr.planId; })[0];
+      if (!plan) { out.missing = true; return out; }
+      var limit = ctx.today < ctx.to ? ctx.today : ctx.to;
+      var sum = 0;
+      (plan.records || []).forEach(function (r) {
+        if (!r || !r.date) return;
+        if (r.date < ctx.from || r.date > limit) return;
+        sum += Number(r.value) || 0;
+      });
+      out.value = sum;
+      out.target = Math.max(1, Number(plan.target) || 1);
+      out.unit = plan.unit || '';
+      out.pct = Math.max(0, Math.min(1, sum / out.target));
+      return out;
+    }
+
+    /* 挂待办：周期内、符合标签/课程的顶层任务的完成率。
+       子任务算在父任务身上（不重复计）；没有截止日期的历史任务不计入，
+       否则越用越久，分母会一直变大，完成率永远上不去 */
+    var tags = kr.tags || [];
+    var list = (ctx.tasks || []).filter(function (task) {
+      if (task.parentId) return false;
+      var due = task.dueDate || '';
+      if (!due || due < ctx.from || due > ctx.to) return false;
+      if (kr.courseId && task.courseId !== kr.courseId) return false;
+      if (tags.length) {
+        var hit = (task.tags || []).some(function (x) { return tags.indexOf(x) >= 0; });
+        if (!hit) return false;
+      }
+      return true;
+    });
+    if (!list.length) { out.empty = true; return out; }
+    var done = list.filter(function (task) { return task.status === 'done'; }).length;
+    out.value = done;
+    out.target = list.length;
+    out.pct = done / list.length;
+    return out;
+  }
+
+  /**
+   * 目标整体进度：各关键结果等权平均
+   * 没有可统计数据的 KR 不进分母——「刚开学、期中还没考」不该显示 0%
+   */
+  function goalProgress(goal, ctx) {
+    var krs = (goal && goal.krs) || [];
+    var rows = [];
+    var sum = 0, n = 0;
+    krs.forEach(function (kr) {
+      var r = krProgress(kr, ctx);
+      rows.push({ id: kr.id, title: kr.title, kind: kr.kind, pct: r.pct,
+                  value: r.value, target: r.target, unit: r.unit,
+                  empty: r.empty, missing: r.missing });
+      if (r.pct != null) { sum += r.pct; n++; }
+    });
+    return {
+      pct: n ? Math.round(sum / n * 100) : 0,
+      counted: n,
+      total: krs.length,
+      rows: rows
+    };
+  }
+
+  /** 月末复盘要提示了吗：每月最后三天、本月没点过「不再提醒」、开关是开的 */
+  function goalReviewDue(settings, todayStr) {
+    var opt = (settings && settings.goals) || {};
+    if (opt.monthlyReview === false) return false;
+    var parts = String(todayStr || '').split('-');
+    if (parts.length !== 3) return false;
+    var y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+    if (!y || !m || !d) return false;
+    if (opt.reviewDismissed === parts[0] + '-' + parts[1]) return false;
+    var lastDay = new Date(y, m, 0).getDate();
+    return d >= lastDay - 2;
+  }
+
+  /** 复盘开头的文字：只列数字，不写评价（评价交给用户自己写） */
+  function goalReviewText(lines, monthStr) {
+    var mon = String(monthStr || '').slice(5, 7);
+    var head = '【' + (Number(mon) || '') + ' 月目标复盘】';
+    var body = (lines || []).map(function (x) { return '· ' + x.title + '：' + x.pct + '%'; });
+    return [head].concat(body).join('\n');
+  }
+
+  /** 目标对象的字段收口：缺的补、脏的丢，避免旧数据把页面搞崩 */
+  function normGoal(raw) {
+    var g = raw || {};
+    var krs = (Array.isArray(g.krs) ? g.krs : []).map(function (k, i) {
+      k = k || {};
+      var kind = (k.kind === 'plan' || k.kind === 'task' || k.kind === 'manual') ? k.kind : 'manual';
+      return {
+        id: k.id || uid('kr'),
+        title: String(k.title || '').slice(0, 60) || ('关键结果 ' + (i + 1)),
+        kind: kind,
+        planId: String(k.planId || ''),
+        tags: Array.isArray(k.tags) ? k.tags.slice(0, 6) : [],
+        courseId: String(k.courseId || ''),
+        target: Math.max(1, Number(k.target) || 1),
+        current: Math.max(0, Number(k.current) || 0),
+        unit: String(k.unit || '')
+      };
+    }).slice(0, 4);    // 最多 4 条：再多就没人看得完
+    var today = DateUtil.toStr(DateUtil.today());
+    return {
+      id: g.id || uid('gl'),
+      title: String(g.title || '').slice(0, 40) || '未命名目标',
+      note: String(g.note || ''),
+      period: g.period === 'term' ? 'term' : 'custom',
+      startDate: g.startDate || today,
+      endDate: g.endDate || today,
+      krs: krs,
+      archivedAt: g.archivedAt || '',
+      createdAt: g.createdAt || new Date().toISOString()
+    };
+  }
+
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
@@ -1386,6 +1562,7 @@
     get currentSemesterId() { return state.currentSemesterId; },
     get pomodoro() { return state.pomodoro; },
     get plans() { return state.plans; },
+    get goals() { return state.goals || []; },
     get ledger() { return state.ledger; },
     get notes() { return state.notes; },
     get events() { return state.events; },
@@ -1471,6 +1648,13 @@
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
       if (!state.pomodoro.sessions) state.pomodoro.sessions = [];
       if (!state.plans) state.plans = [];
+      if (!Array.isArray(state.goals)) state.goals = [];
+      // 目标设置逐项补默认值，别让旧 settings 整块覆盖
+      var gopt = state.settings.goals || {};
+      state.settings.goals = {
+        monthlyReview: typeof gopt.monthlyReview === 'boolean' ? gopt.monthlyReview : true,
+        reviewDismissed: typeof gopt.reviewDismissed === 'string' ? gopt.reviewDismissed : ''
+      };
       if (!state.ledger) state.ledger = [];
       if (!state.notes) state.notes = [];
       if (!Array.isArray(state.diaries)) state.diaries = [];
@@ -3522,6 +3706,85 @@
       return null;
     },
 
+    /* ---------------- 目标 ---------------- */
+    GOAL_MAX_ACTIVE: GOAL_MAX_ACTIVE,
+    KR_KINDS: KR_KINDS,
+    // 纯函数也挂到 Store 上：页面直接用，避免再造一份同样的判断
+    goalExpired: goalExpired,
+    goalActive: goalActive,
+    goalReviewDue: goalReviewDue,
+    goalReviewText: goalReviewText,
+
+    getGoal: function (id) {
+      var list = state.goals || [];
+      for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+      return null;
+    },
+
+    /** 在办：没归档、没到期 */
+    goalsActive: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      return (state.goals || []).filter(function (g) { return goalActive(g, today); });
+    },
+
+    /** 留档：手动归档 + 到期没达成的，原样留着，不删不扣分 */
+    goalsArchived: function () {
+      var today = DateUtil.toStr(DateUtil.today());
+      return (state.goals || []).filter(function (g) { return !goalActive(g, today); });
+    },
+
+    canAddGoal: function () {
+      return this.goalsActive().length < GOAL_MAX_ACTIVE;
+    },
+
+    addGoal: function (data) {
+      if (!this.canAddGoal()) return null;     // 上限在数据层也拦一道，别只靠界面
+      var g = normGoal(data);
+      state.goals.unshift(g);
+      this.bumpUsage('goal');
+      this.emit();
+      return g;
+    },
+
+    updateGoal: function (id, data) {
+      var g = this.getGoal(id);
+      if (!g) return null;
+      var next = normGoal(Object.assign({}, g, data, { id: g.id, createdAt: g.createdAt }));
+      state.goals = state.goals.map(function (x) { return x.id === id ? next : x; });
+      this.emit();
+      return next;
+    },
+
+    removeGoal: function (id) {
+      state.goals = (state.goals || []).filter(function (x) { return x.id !== id; });
+      this.emit();
+    },
+
+    /** 归档 = 留档：不删、不清空数据，只是从「在办」挪到下面 */
+    archiveGoal: function (id, on) {
+      var g = this.getGoal(id);
+      if (!g) return null;
+      g.archivedAt = on === false ? '' : new Date().toISOString();
+      this.emit();
+      return g;
+    },
+
+    /** 算进度要用的上下文（纯函数的入参，单测里可以自己造） */
+    goalCtx: function (g) {
+      return {
+        from: g.startDate,
+        to: g.endDate,
+        today: DateUtil.toStr(DateUtil.today()),
+        plans: state.plans || [],
+        tasks: state.tasks || []
+      };
+    },
+
+    goalProgressOf: function (g) {
+      if (!g) return { pct: 0, counted: 0, total: 0, rows: [] };
+      return goalProgress(g, this.goalCtx(g));
+    },
+
     /** 打卡型的日期槽位 */
     planSlots: function (plan) {
       var slots = [];
@@ -4353,7 +4616,7 @@
       // lite：只留课表骨架，其余清空（保留空结构，方便导入端直接覆盖）
       var empty = defaultState();
       out.tasks = [];      out.taskSeq = {};
-      out.plans = [];      out.ledger = [];      out.notes = [];
+      out.plans = [];      out.goals = [];     out.ledger = [];      out.notes = [];
       out.events = [];     out.activities = [];  out.meals = [];   out.sleeps = [];
       out.grades = {};
       out.achievements = { done: {} };
@@ -4393,6 +4656,7 @@
         settings: Object.assign({}, ds.settings, obj.settings || {}),
         pomodoro: Object.assign({}, ds.pomodoro, obj.pomodoro || {}),
         plans: obj.plans || [],
+        goals: Array.isArray(obj.goals) ? obj.goals : [],
         achievements: obj.achievements || { done: {} },
         ledger: obj.ledger || [],
         notes: obj.notes || [],
