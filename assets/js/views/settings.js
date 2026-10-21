@@ -24,6 +24,7 @@
     desktop: { name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块的链接' },
     goals: { name: '目标', desc: '月末复盘提示与在办数量' },
     rec: { name: '记录偏好', desc: '饮食与睡眠记录的开关' },
+    stats: { name: '时间统计', desc: '本周时间投入的卡片与分页开关' },
     subtask: { name: '子任务', desc: '父子任务在完成、删除时怎么联动' },
     reward: { name: '奖励机制', desc: '森林与抽卡两种奖励的积分与切换' },
     speech: { name: '语音识别', desc: '待办的语音输入方式与讯飞配置' },
@@ -431,6 +432,115 @@
         recCard.appendChild(switchRow('睡眠记录', '记录入睡与醒来时间，并统计睡眠时长', 'trackSleep'));
         root.appendChild(recCard);
 
+        /* ---- 健康提示（阈值用户自定，可关） ---- */
+        var hcfg = Object.assign({ on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, Store.settings.health || {});
+        function saveHealth() { Store.updateSettings({ health: hcfg }); }
+        var hCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        hCard.appendChild(el('div', { class: 'section-title' }, ['健康提示']));
+        hCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '8px', lineHeight: '1.7' },
+          text: '在今日页给出轻提示（睡眠不足 / 热量超标 / 活动不足）。标准自己定，关掉即不显示。'
+        }));
+        var hOn = hcfg.on;
+        var hSw = el('button', {
+          class: 'switch' + (hOn ? ' on' : ''),
+          onclick: function () { hOn = !hOn; hSw.classList.toggle('cp-on', hOn); hcfg.on = hOn; saveHealth(); }
+        }, [el('i')]);
+        hCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [el('b', { text: '开启健康提示' }), el('span', { text: '今日页显示健康小提示' })]),
+          hSw
+        ]));
+        hCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [el('b', { text: '睡眠下限' }), el('span', { text: '少于这个小时数时提示' })]),
+          el('input', {
+            class: 'input', type: 'number', min: '0', step: '0.5', value: String(hcfg.sleepMinH),
+            style: { width: '84px' },
+            onchange: function (e) { hcfg.sleepMinH = Math.max(0, Number(e.target.value) || 0); saveHealth(); }
+          })
+        ]));
+        var kOn = hcfg.kcalOver;
+        var kSw = el('button', {
+          class: 'switch' + (kOn ? ' on' : ''),
+          onclick: function () { kOn = !kOn; kSw.classList.toggle('cp-on', kOn); hcfg.kcalOver = kOn; saveHealth(); }
+        }, [el('i')]);
+        hCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [el('b', { text: '热量超标提示' }), el('span', { text: '超过每日热量目标时提示（需先设目标）' })]),
+          kSw
+        ]));
+        hCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [el('b', { text: '活动下限' }), el('span', { text: '少于这个小时数时提示（0=不提示）' })]),
+          el('input', {
+            class: 'input', type: 'number', min: '0', step: '0.5', value: String(hcfg.activityMinH),
+            style: { width: '84px' },
+            onchange: function (e) { hcfg.activityMinH = Math.max(0, Number(e.target.value) || 0); saveHealth(); }
+          })
+        ]));
+        root.appendChild(hCard);
+
+            }
+
+      if (SUB === 'stats') {
+  /* ===================== 时间统计 ===================== */
+        var sOn = !!Store.settings.statsOn;
+        var statsCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        statsCard.appendChild(el('div', { class: 'section-title' }, ['时间统计']));
+        statsCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '8px', lineHeight: '1.7' },
+          text: '开启后，两处会同时出现「时间统计」：待办页里的「统计」分页，以及今日板块的「本周已记录」卡片。' +
+                '关闭则两处一起消失（双隐藏）——既不占底部导航，也不占今日板块。'
+        }));
+        var sSw = el('button', {
+          class: 'switch' + (sOn ? ' on' : ''),
+          onclick: function () {
+            sOn = !sOn;
+            sSw.classList.toggle('cp-on', sOn);
+            Store.updateSettings({ statsOn: sOn });
+            UI.toast(sOn ? '已开启时间统计' : '已关闭时间统计');
+          }
+        }, [el('i')]);
+        statsCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [
+            el('b', { text: '开启时间统计' }),
+            el('span', { text: '统计分页 + 今日记录卡片（双隐藏）' })
+          ]),
+          sSw
+        ]));
+        root.appendChild(statsCard);
+
+        /* 统计分页显示哪些卡片 */
+        var wCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        wCard.appendChild(el('div', { class: 'section-title' }, ['统计分页显示哪些']));
+        wCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '8px', lineHeight: '1.7' },
+          text: '只影响待办页「统计」分页里显示哪些卡片，不影响数据本身。'
+        }));
+        function widgetRow(title, desc, key) {
+          var cur = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+          var on = cur[key] !== false;
+          var sw = el('button', {
+            class: 'switch' + (on ? ' on' : ''),
+            onclick: function () {
+              on = !on;
+              sw.classList.toggle('cp-on', on);
+              var next = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+              next[key] = on;
+              Store.updateSettings({ statsWidgets: next });
+            }
+          }, [el('i')]);
+          return el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: title }),
+              el('span', { text: desc })
+            ]),
+            sw
+          ]);
+        }
+        wCard.appendChild(widgetRow('时间统计', '睡眠 / 上课 / 日程 / 活动 / 用餐的时长分布', 'time'));
+        wCard.appendChild(widgetRow('积分曲线', '每日获得 / 累计，可在分页内切换', 'curve'));
+        wCard.appendChild(widgetRow('积分来源', '各渠道累计获得积分的构成', 'sources'));
+        wCard.appendChild(widgetRow('消费构成', '每日支出与分类占比', 'spend'));
+        wCard.appendChild(widgetRow('课程投入', '按课程汇总的实际投入时长', 'course'));
+        root.appendChild(wCard);
             }
 
       if (SUB === 'diary') {
@@ -1281,7 +1391,7 @@
             el('li', { text: '· 绩点换算规则在「成绩与 GPA」里自己填（4.0 / 5.0 制或线性均可），成绩单可导出 CSV 或打印成 PDF。' }),
             el('li', { text: '· 「计划」支持打卡与进度条两种方式，达标后自动完成并奖励积分。' }),
             el('li', { text: '· 奖励机制有「森林」和「抽卡」两种，积分各自独立不通用；切换时不清零、不兑换，已攒的都保留。' }),
-            el('li', { text: '· 抽卡按明日方舟标准寻访：600 合成玉单抽、6000 十连，1 积分 = 600 合成玉；六星 2%，50 抽后概率递增；每自然天第一个十连保底至少一位五星，其余十连不保底；重复干员提升潜能（0~5），满潜能后多余复制转化为积分。' }),
+            el('li', { text: '· 抽卡按明日方舟标准寻访：600 合成玉单抽、6000 十连，1 积分 = 180 合成玉（单抽约需 3.33 积分）；六星 2%，50 抽后概率递增；每自然天第一个十连保底至少一位五星，其余十连不保底；重复干员提升潜能（0~5），满潜能后多余复制转化为积分。' }),
             el('li', { text: '· 「象限」用 24 小时环形图统计时间去向，可记录睡眠、饮食与活动。' }),
             el('li', { text: '· 记饮食时可以搜食物名（米饭、鸡胸、奶茶…），热量和蛋白质/脂肪/碳水会自动估算，也能手动改。' }),
             el('li', { text: '· 在「设置 → 饮食与热量」里设每日热量目标、三餐配比和营养素目标，记录时会提示这餐还剩多少额度。' }),
@@ -1319,28 +1429,43 @@
   /* ==========================================================
    * 设置首页：分类入口
    * ========================================================== */
+  /** 设置首页的分组顺序（决定 5 个分区从上到下的排列） */
+  var SET_GROUPS = [
+    { key: 'basic', name: '基础设置' },
+    { key: 'module', name: '模块与首页' },
+    { key: 'reward', name: '奖励与识别' },
+    { key: 'data', name: '数据与同步' },
+    { key: 'help', name: '帮助' }
+  ];
+
   var SUBS = [
-    { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5' },
-    { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9' },
-    { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899' },
-    { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6' },
-    { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed' },
-    { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9' },
-    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b' },
-    { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6' },
-    { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6' },
-    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9' },
-    { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a' },
-    { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316' },
-    { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438' },
-    { key: 'ocr', name: '图片识别', desc: '拍照/截图导入课表，本地或云端识别', icon: V.icons.camera, color: '#7c3aed' },
-    { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981' },
-    { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b' },
-    { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b' },
-    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b' },
-    { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9' },
-    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8' },
-    { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b' }
+    /* 基础设置 */
+    { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5', group: 'basic' },
+    { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
+    { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899', group: 'basic' },
+    { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6', group: 'basic' },
+    /* 模块与首页 */
+    { key: 'nav', name: '模块显示', desc: '选择底部导航里显示哪些模块', icon: V.icons.settings, color: '#7c3aed', group: 'module' },
+    { key: 'desktop', name: '桌面与快捷', desc: '安装到主屏幕、直达某个模块', icon: V.icons.home, color: '#0ea5e9', group: 'module' },
+    { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6', group: 'module' },
+    { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6', group: 'module' },
+    { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9', group: 'module' },
+    { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'module' },
+    { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'module' },
+    /* 奖励与识别 */
+    { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b', group: 'reward' },
+    { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a', group: 'reward' },
+    { key: 'fav', name: '收藏的词句', desc: '回看收藏的诗词与单词', icon: V.icons.star, color: '#f59e0b', group: 'reward' },
+    { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981', group: 'reward' },
+    { key: 'pet', name: '桌宠（开发）', desc: '龙泡泡桌宠 · 开发者自用开关', icon: V.icons.paw, color: '#f59e0b', group: 'reward' },
+    /* 数据与同步 */
+    { key: 'data', name: '数据管理', desc: '同步到别的设备、备份与恢复', icon: V.icons.download, color: '#f59e0b', group: 'data' },
+    { key: 'speech', name: '语音识别', desc: '语音输入待办：浏览器原生 / 讯飞', icon: V.icons.mic, color: '#f04438', group: 'data' },
+    { key: 'ocr', name: '图片识别', desc: '拍照/截图导入课表，本地或云端识别', icon: V.icons.camera, color: '#7c3aed', group: 'data' },
+    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'data' },
+    /* 帮助 */
+    { key: 'guide', name: '新手教程', desc: '重新看一遍每个模块怎么用', icon: V.icons.bookOpen, color: '#0ea5e9', group: 'help' },
+    { key: 'about', name: '使用提示', desc: '各模块的细节说明', icon: V.icons.idea, color: '#94a3b8', group: 'help' }
   ];
 
   /* ===================== 上课提醒 ===================== */
@@ -1579,22 +1704,30 @@
       V.statCard(st.ledger, '账目', 'var(--text-2)')
     ]));
 
-    /* ---- 分类列表 ---- */
-    var list = el('div', { class: 'card', style: { padding: '4px 6px' } });
-    SUBS.forEach(function (item) {
-      list.appendChild(el('button', {
-        class: 'set-item',
-        onclick: function () { SUB = item.key; view.render(); }
-      }, [
-        el('span', { class: 'set-icon', style: { background: item.color } }, [V.svg(item.icon, 18)]),
-        el('span', { class: 'set-text' }, [
-          el('b', { text: item.name }),
-          el('span', { text: item.desc })
-        ]),
-        V.svg(V.icons.right, 16)
-      ]));
+    /* ---- 分类列表（按分组分区） ---- */
+    SET_GROUPS.forEach(function (g) {
+      var items = SUBS.filter(function (it) { return it.group === g.key; });
+      if (!items.length) return;
+      root.appendChild(el('div', {
+        class: 'section-title',
+        style: { marginTop: '20px', marginBottom: '8px' }
+      }, [g.name]));
+      var list = el('div', { class: 'card', style: { padding: '4px 6px' } });
+      items.forEach(function (item) {
+        list.appendChild(el('button', {
+          class: 'set-item',
+          onclick: function () { SUB = item.key; view.render(); }
+        }, [
+          el('span', { class: 'set-icon', style: { background: item.color } }, [V.svg(item.icon, 18)]),
+          el('span', { class: 'set-text' }, [
+            el('b', { text: item.name }),
+            el('span', { text: item.desc })
+          ]),
+          V.svg(V.icons.right, 16)
+        ]));
+      });
+      root.appendChild(list);
     });
-    root.appendChild(list);
 
     root.appendChild(el('div', {
       style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '12px', lineHeight: '1.7' },
@@ -3055,7 +3188,7 @@
       ]));
 
       var rows = [
-        ['单抽', POMO.PULL_COST + ' 合成玉（= 1 积分）'],
+        ['单抽', POMO.PULL_COST + ' 合成玉（≈ ' + (Math.round(POMO.PULL_COST / POMO.JADE_PER_POINT * 100) / 100) + ' 积分）'],
         ['十连', POMO.TEN_COST + ' 合成玉（= 10 积分）'],
         ['六星概率', POMO.RATE_6 + '%'],
         ['五星 / 四星 / 三星', POMO.RATE_5 + '% / ' + POMO.RATE_4 + '% / 40%'],

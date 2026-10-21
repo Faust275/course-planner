@@ -22,17 +22,11 @@
     idle: '#e9ebf2'
   };
 
-  var view = {
-    id: 'quadrant',
-    name: '象限',
-    icon: V.icons.quadrant,
-    title: '时间去向',
-    order: 17,
-    nav: true,
+  /* 象限已不再是独立底部模块，改挂到「待办」页的时间去向分页 */
+  var qHost = null;   // 当前宿主（任务页里的象限分页）
+  var qDate = null;   // 选中的日期 'YYYY-MM-DD'
 
-    root: null,
-    date: null,   // 'YYYY-MM-DD'
-
+  var QuadrantPane = {
     actions: function (host) {
       host.appendChild(el('button', {
         class: 'icon-btn', title: '记录设置',
@@ -59,22 +53,23 @@
     },
 
     shiftDay: function (n) {
-      var d = DateUtil.parse(this.date) || DateUtil.today();
+      var d = DateUtil.parse(qDate) || DateUtil.today();
       var next = DateUtil.addDays(d, n);
       if (DateUtil.diffDays(next, DateUtil.today()) > 0) {
         UI.toast('不能记录未来的时间去向');
         return;
       }
-      this.date = DateUtil.toStr(next);
-      this.render();
+      qDate = DateUtil.toStr(next);
+      this.render(qHost);
     },
 
-    render: function () {
+    render: function (host) {
       var self = this;
-      var root = this.root;
+      var root = host;
+      qHost = host;
       root.innerHTML = '';
 
-      var dateStr = this.date;
+      var dateStr = qDate || DateUtil.toStr(DateUtil.today());
       var date = DateUtil.parse(dateStr) || DateUtil.today();
       var stat = Store.dayStat(dateStr);
       var isToday = dateStr === DateUtil.toStr(DateUtil.today());
@@ -95,7 +90,7 @@
         ]),
         el('div', { class: 'week-meta' }, [
           !isToday ? el('button', {
-            class: 'btn btn-sm', onclick: function () { self.date = DateUtil.toStr(DateUtil.today()); self.render(); }
+            class: 'btn btn-sm', onclick: function () { qDate = DateUtil.toStr(DateUtil.today()); self.render(); }
           }, ['回到今天']) : null
         ])
       ]);
@@ -355,10 +350,13 @@
     var head = el('div', { class: 'section-title' }, ['时间统计']);
     head.appendChild(V.rangeTabs(qRange, function (k) { qRange = k; rerender(); }));
     card.appendChild(head);
-    card.appendChild(el('button', {
-      class: 'cp-stats-more',
-      onclick: function () { App.go('stats'); }
-    }, ['看统计与复盘 →']));
+      card.appendChild(el('button', {
+        class: 'cp-stats-more',
+        onclick: function () {
+          if (Store.settings.statsOn) App.go('tasks', { tab: 'stats' });
+          else UI.toast('统计功能已关闭', 'err');
+        }
+      }, ['看统计与复盘 →']));
 
     card.appendChild(el('div', {
       style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '10px' },
@@ -419,8 +417,7 @@
   }
 
   function rerender() {
-    var v = App.views.filter(function (x) { return x.id === 'quadrant'; })[0];
-    if (v && App.currentId === 'quadrant') v.render();
+    if (qHost) QuadrantPane.render(qHost);
   }
 
   /* ==========================================================
@@ -583,7 +580,7 @@
    * 快捷添加
    * ========================================================== */
   function openQuickAdd() {
-    var dateStr = view.date;
+    var dateStr = qDate || DateUtil.toStr(DateUtil.today());
     var m;
     var body = el('div', { style: { display: 'grid', gap: '9px' } }, [
       quickBtn('活动记录', '自习、运动、娱乐等时间段', function () { m.close(); setTimeout(function () { ActivityDialog.open(dateStr); }, 180); }),
@@ -920,6 +917,16 @@
       );
       var fTask = V.select(taskOpts, a0 ? (a0.taskId || '') : '');
 
+      // 关联课程（可选）：用于「课程投入」统计；按课程名去重，name→id 便于同时存 id
+      var courseOpts = [{ value: '', label: '不关联课程' }];
+      var nameToId = {};
+      (Store.courses || []).forEach(function (c) {
+        if (!c.name || nameToId[c.name]) return;
+        nameToId[c.name] = c.id;
+        courseOpts.push({ value: c.name, label: c.name });
+      });
+      var fCourse = V.select(courseOpts, a0 ? (a0.courseName || '') : '');
+
       var m = V.modal({
         title: isEdit ? '编辑活动' : '记录活动',
         body: [
@@ -931,6 +938,7 @@
           ]),
           V.field('标签', fTags),
           V.field('关联待办', fTask, '挂上后，这段时间会算进那条待办的「已投入」'),
+          V.field('关联课程', fCourse, '选一门课，这段时间会算进「课程投入」'),
           V.field('备注', fNote)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -947,10 +955,12 @@
           el('button', {
             class: 'btn btn-primary', text: '保存',
             onclick: function () {
+              var cname = fCourse.value;
               var d = {
                 date: dateStr, name: fName.value, type: type,
                 start: fStart.value, end: fEnd.value,
-                note: fNote.value, tags: fTags.getValue(), taskId: fTask.value
+                note: fNote.value, tags: fTags.getValue(), taskId: fTask.value,
+                courseName: cname, courseId: cname ? (nameToId[cname] || '') : ''
               };
               if (!d.name.trim()) { UI.toast('请填写在做什么', 'err'); fName.focus(); return; }
               if (d.end <= d.start) { UI.toast('结束时间要晚于开始时间', 'err'); return; }
@@ -966,7 +976,11 @@
 
   global.ActivityDialog = ActivityDialog;
 
-  (window.VIEWS = window.VIEWS || []).push(view);
+  global.QuadrantPane = QuadrantPane;
+  global.openQuadrantAt = function (ds) {
+    qDate = ds || null;
+    App.go('tasks', { tab: 'quadrant' });
+  };
 })(window);
 
 

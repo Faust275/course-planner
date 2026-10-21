@@ -24,7 +24,7 @@
   var TYPE_META = {
     course: { key: 'courses', view: 'schedule', name: '课程', order: 1 },
     task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
-    event:  { key: 'events',  view: 'agenda',   name: '日程', order: 3 },
+    event:  { key: 'events',  view: 'calendar', tab: 'agenda', name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
     goal:   { key: 'goals',   view: 'plans',    name: '目标', order: 5 },
     note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 6 },
@@ -299,10 +299,11 @@
   function goTo(r) {
     if (!r || !r.view) return;
     pendingFocus = { type: r.type, id: r.id };
+    var opts = r.tab ? { tab: r.tab } : null;
     if (App.currentId === r.view) {
       afterView(r.view);
     } else {
-      App.go(r.view);
+      App.go(r.view, opts);
       // 视图 render 是同步的，但数据变化可能触发异步重渲染，
       // 所以稍等一拍再定位，失败就再试一次
       setTimeout(function () { afterView(r.view); }, 60);

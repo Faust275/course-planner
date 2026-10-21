@@ -286,7 +286,7 @@
           el('button', { class: 'btn', text: '关闭', onclick: function () { imm.close(); } }),
           el('button', {
             class: 'btn btn-primary', text: '去象限',
-            onclick: function () { imm.close(); App.go('quadrant'); }
+            onclick: function () { imm.close(); App.go('tasks', { tab: 'quadrant' }); }
           })
         ])
       });

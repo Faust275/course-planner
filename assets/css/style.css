@@ -1752,6 +1752,7 @@ input[type="range"]::-moz-range-thumb {
 .cp-cal-dots .cp-dot { width: 5px; height: 5px; border-radius: 50%; }
 .cp-cal-dots .cp-dot.cp-course { background: #f59e0b; }
 .cp-cal-dots .cp-dot.cp-event { background: #ec4899; }
+.cp-cal-dots .cp-dot.cp-exam { background: #ef4444; }
 .cp-cal-rec {
   width: 68%; height: 3px; border-radius: 2px;
   background: var(--line); overflow: hidden; margin-top: auto;

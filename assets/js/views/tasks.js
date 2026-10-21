@@ -371,9 +371,8 @@
               class: 'task-invest-row',
               onclick: function () {
                 m.close();
-                var q = App.views.filter(function (x) { return x.id === 'quadrant'; })[0];
-                if (q) q.date = a.date;
-                App.go('quadrant');
+                if (global.openQuadrantAt) global.openQuadrantAt(a.date);
+                else App.go('tasks', { tab: 'quadrant' });
               }
             }, [
               el('span', { class: 'task-invest-date', text: a.date.slice(5) }),
@@ -511,9 +510,18 @@
     Router.set('tasks', state.tab === 'tasks' ? null : state.tab);
   }
 
+  /** 重绘顶栏操作区：在视图内切换分页（不走 App.go）时，
+   *  顶栏按钮不会自动重建，这里手动让 actions 跟上当前分页。 */
+  function refreshActions() {
+    var bar = UI.$('#viewActions');
+    if (bar) { bar.innerHTML = ''; view.actions(bar); }
+  }
+
   var state = { status: 'all', course: 'all', tag: '', q: '', tab: 'tasks' };
-  /** 三个分页的可选值；深链接 / 搜索跳转都要按这个列表收口 */
-  var TABS = ['tasks', 'notes', 'diary'];
+  /** 五个分页的可选值；深链接 / 搜索跳转都要按这个列表收口
+   *  quadrant（时间去向）与 stats（统计与复盘）已不再是独立底部模块，
+   *  而是挂在「待办」页里的分页；stats 还额外受 settings.statsOn 开关控制。 */
+  var TABS = ['tasks', 'notes', 'diary', 'quadrant', 'stats'];
   var searchTimer = null;
 
   var view = {
@@ -527,6 +535,11 @@
     root: null,
 
     actions: function (host) {
+      // 时间去向分页有自己的一套操作（记录设置 / 记一笔）
+      if (state.tab === 'quadrant') {
+        if (global.QuadrantPane) global.QuadrantPane.actions(host);
+        return;
+      }
       host.appendChild(el('button', {
         class: 'btn btn-primary',
         onclick: function () { TaskDialog.open(); }
@@ -587,21 +600,26 @@
       var root = this.root;
       root.innerHTML = '';
 
-      /* ---- 待办 / 灵感 / 日记 分页 ---- */
+      /* ---- 待办 / 灵感 / 日记 / 象限 / 统计 分页 ---- */
       var nt = Store.notes.length;
       var nd = Store.state.diaries.length;
-      var paneBar = el('div', { class: 'pane-tabs' });
-      [
+      var paneTabs = [
         { v: 'tasks', l: '待办' },
         { v: 'notes', l: nt ? '灵感 ' + nt : '灵感' },
-        { v: 'diary', l: nd ? '日记 ' + nd : '日记' }
-      ].forEach(function (x) {
+        { v: 'diary', l: nd ? '日记 ' + nd : '日记' },
+        { v: 'quadrant', l: '象限' }
+      ];
+      // 统计分页：受 settings.statsOn 控制，关掉后连分页入口都不出现
+      if (Store.settings.statsOn) paneTabs.push({ v: 'stats', l: '统计' });
+      var paneBar = el('div', { class: 'pane-tabs' });
+      paneTabs.forEach(function (x) {
         paneBar.appendChild(el('button', {
           class: 'pane-tab' + (state.tab === x.v ? ' active' : ''),
           text: x.l,
           onclick: function () {
             state.tab = x.v;
             view.render();
+            refreshActions();
             syncRoute();
           }
         }));
@@ -619,6 +637,26 @@
         var diaryHost = el('div', {});
         root.appendChild(diaryHost);
         if (global.DiaryPane) DiaryPane.render(diaryHost);
+        return;
+      }
+
+      if (state.tab === 'quadrant') {
+        if (global.QuadrantPane) {
+          var qHost = el('div', {});
+          root.appendChild(qHost);
+          global.QuadrantPane.render(qHost);
+        }
+        return;
+      }
+
+      if (state.tab === 'stats') {
+        // 兜底：万一通过旧地址进来但功能已关，回退到待办列表
+        if (!Store.settings.statsOn) { state.tab = 'tasks'; view.render(); refreshActions(); return; }
+        if (global.StatsPane) {
+          var sHost = el('div', {});
+          root.appendChild(sHost);
+          global.StatsPane.render(sHost);
+        }
         return;
       }
 

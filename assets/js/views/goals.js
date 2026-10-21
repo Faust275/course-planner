@@ -50,6 +50,8 @@
     var right = el('div', { class: 'goal-kr-val' });
     if (row.missing) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '绑定的计划已删除' }));
+    } else if (kr.kind === 'grade' && (row.empty || row.pct == null)) {
+      right.appendChild(el('span', { class: 'goal-kr-warn', text: '待出分' }));
     } else if (row.empty) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '周期内还没有待办' }));
     } else if (row.pct == null) {
@@ -433,6 +435,7 @@
         fKind.addEventListener('change', function () {
           kr.kind = fKind.value;
           if (kr.kind === 'manual' && !kr.target) kr.target = 100;
+          if (kr.kind === 'grade') { kr.metric = 'semesterGpa'; if (!kr.target || kr.target > 5) kr.target = 3; }
           drawKrs();
         });
         row.appendChild(V.field('怎么衡量', fKind, kindOf(kr.kind).desc));
@@ -461,6 +464,19 @@
           var fCourse = V.select(cOpts, kr.courseId || '');
           fCourse.addEventListener('change', function () { kr.courseId = fCourse.value; });
           row.appendChild(V.field('限定课程（可选）', fCourse));
+        } else if (kr.kind === 'grade') {
+          var sems = (Store.state.semesters || []);
+          var sOpts = sems.map(function (s) { return { value: s.id, label: s.name }; });
+          if (!sOpts.length) sOpts = [{ value: '', label: '当前学期' }];
+          var fSem = V.select(sOpts, kr.semesterId || '');
+          fSem.addEventListener('change', function () { kr.semesterId = fSem.value; });
+          row.appendChild(V.field('学期', fSem, '按该学期已出分课程的加权 GPA 算'));
+
+          var fGpa = V.input({
+            type: 'number', step: '0.1', min: '0', max: '5', value: String(kr.target || 3),
+            oninput: function () { kr.target = Math.max(0, parseFloat(this.value) || 0); }
+          });
+          row.appendChild(V.field('目标 GPA', fGpa, '例如 3.6；未出分时显示「待出分」'));
         } else {
           var fTarget = V.input({
             type: 'number', step: '0.5', min: '1', value: String(kr.target || 1),

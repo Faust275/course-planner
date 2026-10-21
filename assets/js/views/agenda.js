@@ -12,48 +12,12 @@
 
   var viewState = { showCourses: true };
 
-  var view = {
-    id: 'agenda',
-    name: '日程',
-    icon: V.icons.agenda,
-    title: '未来 7 天',
-    order: 15,
-    nav: true,
+  var agendaHost = null;
 
-    root: null,
-
-    actions: function (host) {
-      host.appendChild(el('button', {
-        class: 'btn', title: viewState.showCourses ? '隐藏课程' : '显示课程',
-        onclick: function () {
-          viewState.showCourses = !viewState.showCourses;
-          view.render();
-        }
-      }, [V.svg(V.icons.calendar, 16), viewState.showCourses ? '隐藏课程' : '显示课程']));
-
-      host.appendChild(el('button', {
-        class: 'btn',
-        onclick: function () { AnnivDialog.open(); }
-      }, [V.svg(V.icons.clock, 16), '纪念日']));
-
-      host.appendChild(el('button', {
-        class: 'btn btn-primary',
-        onclick: function () { EventDialog.open(); }
-      }, [V.svg(V.icons.plus, 16), '新建日程']));
-    },
-
-    mount: function (host) {
-      this.root = el('section', { class: 'view', id: 'view-agenda' });
-      host.appendChild(this.root);
-      this.render();
-      return this.root;
-    },
-
-    onEnter: function () { this.render(); },
-
-    render: function () {
-      var root = this.root;
-      root.innerHTML = '';
+  function renderAgenda(host) {
+    agendaHost = host;
+    host.innerHTML = '';
+    var root = host;
 
       var today = DateUtil.today();
       var upcoming = Store.upcomingEvents(DAYS);
@@ -172,6 +136,28 @@
         });
         root.appendChild(box);
       });
+    }
+
+  var AgendaPane = {
+    render: renderAgenda,
+    actions: function (host) {
+      host.appendChild(el('button', {
+        class: 'btn', title: viewState.showCourses ? '隐藏课程' : '显示课程',
+        onclick: function () {
+          viewState.showCourses = !viewState.showCourses;
+          if (agendaHost) renderAgenda(agendaHost);
+        }
+      }, [V.svg(V.icons.calendar, 16), viewState.showCourses ? '隐藏课程' : '显示课程']));
+
+      host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { AnnivDialog.open(); }
+      }, [V.svg(V.icons.clock, 16), '纪念日']));
+
+      host.appendChild(el('button', {
+        class: 'btn btn-primary',
+        onclick: function () { EventDialog.open(); }
+      }, [V.svg(V.icons.plus, 16), '新建日程']));
     }
   };
 
@@ -490,7 +476,7 @@
   global.openAnnivDialog = function (id) { AnnivDialog.open(id); };
   global.AnnivDialog = AnnivDialog;
 
-  (window.VIEWS = window.VIEWS || []).push(view);
+  global.AgendaPane = AgendaPane;
 })(window);
 
 

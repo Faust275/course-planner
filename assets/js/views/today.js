@@ -101,7 +101,7 @@
             el('span', { class: 'anniv-title', text: '倒数纪念日' }),
             el('button', {
               class: 'link-btn', text: '全部 ›',
-              onclick: function () { App.go('agenda'); }
+              onclick: function () { App.go('calendar', { tab: 'agenda' }); }
             })
           ]),
           el('div', { class: 'anniv-list' }, near.map(function (a) {
@@ -170,7 +170,7 @@
           style: { display: 'flex', alignItems: 'center', gap: '14px', padding: '13px 16px', marginBottom: '16px', cursor: 'pointer', borderLeft: '4px solid var(--primary)' },
           onclick: function () {
             if (near.kind === 'task') App.go('tasks');
-            else if (near.kind === 'event') App.go('agenda');
+            else if (near.kind === 'event') App.go('calendar', { tab: 'agenda' });
             else App.go('plans');
           }
         }, [
@@ -259,13 +259,78 @@
       }
       rightCol.appendChild(taskSection);
 
+      /* ---------- 在办目标 ---------- */
+      var activeGoals = (Store.state.goals || []).filter(function (g) { return !g.archivedAt; })
+        .sort(function (a, b) { return String(a.endDate) < String(b.endDate) ? -1 : 1; });
+      if (activeGoals.length) {
+        var goalSec = el('div', { style: { marginTop: '18px' } });
+        goalSec.appendChild(el('div', { class: 'section-title' }, [
+          '在办目标',
+          el('a', {
+            class: 'more', href: 'javascript:void 0',
+            onclick: function () { App.go('goals'); }
+          }, ['全部目标 →'])
+        ]));
+        var gbox = el('div', { class: 'card', style: { padding: '10px 14px' } });
+        activeGoals.slice(0, 3).forEach(function (g, idx) {
+          var gpct = Store.goalProgressOf(g).pct;
+          var left = DateUtil.diffDays(DateUtil.parse(g.endDate), today);
+          var leftText = left < 0 ? ('已过期 ' + (-left) + ' 天')
+            : (left === 0 ? '今天到期' : ('剩 ' + left + ' 天'));
+          gbox.appendChild(el('div', {
+            style: { padding: '8px 0', borderTop: idx === 0 ? 'none' : '1px solid var(--line)', cursor: 'pointer' },
+            onclick: function () { App.go('goals'); }
+          }, [
+            el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' } }, [
+              el('b', { style: { fontSize: '13px' }, text: g.title }),
+              el('span', { style: { fontSize: '11.5px', color: left < 0 ? '#ef4444' : 'var(--text-3)' }, text: leftText })
+            ]),
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' } }, [
+              el('div', { style: { flex: '1', height: '7px', background: 'var(--bg-2)', borderRadius: '4px', overflow: 'hidden' } }, [
+                el('div', { style: { width: Math.max(0, Math.min(100, gpct)) + '%', height: '100%', background: 'var(--primary)' } })
+              ]),
+              el('span', { style: { fontSize: '11.5px', color: 'var(--text-2)', width: '34px', textAlign: 'right' }, text: gpct + '%' })
+            ])
+          ]));
+        });
+        goalSec.appendChild(gbox);
+        rightCol.appendChild(goalSec);
+      }
+
+      /* ---------- 本周考试 ---------- */
+      var wsExam = DateUtil.weekStart(today), weExam = DateUtil.addDays(wsExam, 6);
+      var wsS = DateUtil.toStr(wsExam), weS = DateUtil.toStr(weExam);
+      var weekExams = (Store.courses || []).filter(function (c) {
+        return c.exam && c.exam.date && c.exam.date >= wsS && c.exam.date <= weS;
+      }).sort(function (a, b) { return a.exam.date < b.exam.date ? -1 : 1; });
+      if (weekExams.length) {
+        var examSec = el('div', { style: { marginTop: '18px' } });
+        examSec.appendChild(el('div', { class: 'section-title' }, ['本周考试']));
+        var ebox = el('div', { class: 'card', style: { padding: '6px 8px' } });
+        weekExams.forEach(function (c) {
+          var ed = DateUtil.parse(c.exam.date);
+          var tt = c.exam.start ? (c.exam.start + (c.exam.end ? '–' + c.exam.end : '')) : '';
+          var loc = c.exam.location || c.location || '';
+          ebox.appendChild(el('div', { class: 'rec-row', style: { borderTop: 'none' } }, [
+            el('i', { class: 'rec-dot', style: { background: '#ef4444' } }),
+            el('span', { class: 'rec-main' }, [
+              el('b', { text: c.name }),
+              el('span', { text: (ed.getMonth() + 1) + '/' + ed.getDate() + (tt ? ' · ' + tt : '') + (loc ? ' · ' + loc : '') })
+            ]),
+            el('span', { class: 'rec-val', text: '考试' })
+          ]));
+        });
+        examSec.appendChild(ebox);
+        rightCol.appendChild(examSec);
+      }
+
       /* ---------- 今日记录 ---------- */
       var recSection = el('div', { style: { marginTop: '18px' } });
       recSection.appendChild(el('div', { class: 'section-title' }, [
         '今日记录',
         el('a', {
           class: 'more', href: 'javascript:void 0',
-          onclick: function () { App.go('quadrant'); }
+          onclick: function () { App.go('tasks', { tab: 'quadrant' }); }
         }, ['打开象限 →'])
       ]));
 
@@ -279,7 +344,7 @@
         rowCount++;
         recBox.appendChild(el('div', {
           class: 'rec-row', style: { borderTop: rowCount === 1 ? 'none' : '1px solid var(--line)' },
-          onclick: function () { App.go('quadrant'); }
+          onclick: function () { App.go('tasks', { tab: 'quadrant' }); }
         }, [
           el('i', { class: 'rec-dot', style: { background: tone } }),
           el('span', { class: 'rec-main' }, [el('b', { text: label })]),
@@ -302,6 +367,88 @@
 
       recSection.appendChild(recBox);
       rightCol.appendChild(recSection);
+
+      /* ---------- 健康提示（阈值用户自定，可关） ---------- */
+      var hc = Store.settings.health;
+      if (hc && hc.on) {
+        var hints = [];
+        var smH = Store.sleepMinutes(todayStr0);
+        if (hc.sleepMinH > 0 && smH > 0 && smH < hc.sleepMinH * 60) {
+          hints.push('昨晚只睡了 ' + TimeUtil.humanMin(smH) + '，注意补觉');
+        }
+        var dietGoal = (Store.settings.diet && Store.settings.diet.goal) || 0;
+        if (hc.kcalOver && dietGoal > 0) {
+          var kcalToday = Store.mealSummary(todayStr0).kcal;
+          if (kcalToday > dietGoal) hints.push('今天热量已超目标 ' + (kcalToday - dietGoal) + ' kcal');
+        }
+        if (hc.activityMinH > 0) {
+          var amAct = 0;
+          Store.activitiesOf(todayStr0).forEach(function (a) { amAct += TimeUtil.diffMin(a.start, a.end); });
+          if (amAct < hc.activityMinH * 60) {
+            hints.push('今天活动还差 ' + TimeUtil.humanMin(hc.activityMinH * 60 - amAct));
+          }
+        }
+        if (hints.length) {
+          var hintSec = el('div', { style: { marginTop: '18px' } });
+          hintSec.appendChild(el('div', { class: 'section-title' }, ['健康提示']));
+          var hBox = el('div', { class: 'card', style: { padding: '10px 14px' } });
+          hints.forEach(function (t) {
+            hBox.appendChild(el('div', { class: 'rec-row', style: { borderTop: 'none' } }, [
+              el('i', { class: 'rec-dot', style: { background: '#14b8a6' } }),
+              el('span', { class: 'rec-main' }, [el('span', { text: t })])
+            ]));
+          });
+          hintSec.appendChild(hBox);
+          rightCol.appendChild(hintSec);
+        }
+      }
+
+      /* ---------- 统计入口（受 settings.statsOn 控制，关掉则首页卡片一起消失） ---------- */
+      if (Store.settings.statsOn) {
+        var ws = DateUtil.weekStart(DateUtil.today());
+        var we = DateUtil.addDays(ws, 6);
+        var wkRec = Store.rangeStat(DateUtil.toStr(ws), DateUtil.toStr(we)).recorded;
+        var wkGain = Store.pointSeries('week').reduce(function (s, d) { return s + d.n; }, 0);
+        var totalPts = Store.totalPoints();
+        var statSec = el('div', { style: { marginTop: '18px' } });
+        statSec.appendChild(el('div', { class: 'section-title' }, [
+          '时间统计',
+          el('a', {
+            class: 'more', href: 'javascript:void 0',
+            onclick: function () { App.go('tasks', { tab: 'stats' }); }
+          }, ['查看 →'])
+        ]));
+        statSec.appendChild(el('div', {
+          class: 'card', style: { padding: '8px 14px', cursor: 'pointer' },
+          onclick: function () { App.go('tasks', { tab: 'stats' }); }
+        }, [
+          el('div', { class: 'rec-row', style: { borderTop: 'none' } }, [
+            el('i', { class: 'rec-dot', style: { background: 'var(--primary)' } }),
+            el('span', { class: 'rec-main' }, [
+              el('b', { text: '本周已记录' }),
+              el('span', { text: '睡眠 + 上课 + 日程 + 活动 + 用餐' })
+            ]),
+            el('span', { class: 'rec-val', text: TimeUtil.humanMin(wkRec) })
+          ]),
+          el('div', { class: 'rec-row' }, [
+            el('i', { class: 'rec-dot', style: { background: 'var(--green)' } }),
+            el('span', { class: 'rec-main' }, [
+              el('b', { text: '本周获得积分' }),
+              el('span', { text: '专注 + 待办 + 计划 + 目标 + 记录' })
+            ]),
+            el('span', { class: 'rec-val', text: Math.round(wkGain) + ' 分' })
+          ]),
+          el('div', { class: 'rec-row' }, [
+            el('i', { class: 'rec-dot', style: { background: 'var(--amber)' } }),
+            el('span', { class: 'rec-main' }, [
+              el('b', { text: '累计总量' }),
+              el('span', { text: '所有途径合计（含合成玉折算）' })
+            ]),
+            el('span', { class: 'rec-val', text: Math.round(totalPts) + ' 分' })
+          ])
+        ]));
+        rightCol.appendChild(statSec);
+      }
 
       /* ---------- 今日计划 ---------- */
       var planSec = planSection();

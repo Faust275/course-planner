@@ -8,6 +8,9 @@
   var V = UI;
   var el = V.el;
 
+  /* 统计已不再是独立底部模块，改挂到「待办」页的「统计」分页 */
+  var sHost = null;   // 当前宿主（任务页里的统计分页）
+
   /** 周期：今天 / 本周 / 本月 / 本学期（自然日历口径，见 store.js 的 RANGES） */
   var RANGE_KEYS = ['day', 'week', 'month', 'term', 'year'];
   var curRange = 'week';
@@ -15,6 +18,8 @@
   var chartType = 'bar';
   /** 是否展开对比 */
   var showCompare = false;
+  /** 积分曲线模式：daily 每日获得 / cumulative 累计 */
+  var curveMode = 'daily';
 
   function hmText(min) {
     min = Math.round(min);
@@ -31,28 +36,16 @@
 
   function md(s) { return s ? s.slice(5).replace('-', '/') : ''; }
 
-  var view = {
-    id: 'stats',
-    name: '统计',
-    icon: V.icons.chart,
-    title: '统计与复盘',
-    order: 60,
-    nav: false,
+  /* 统计已不再是独立底部模块，改挂到「待办」页的「统计」分页 */
+  var StatsPane = {
+    render: function (host) { renderStats(host); }
+  };
 
-    root: null,
-
-    mount: function (host) {
-      this.root = el('section', { class: 'view', id: 'view-stats' });
-      host.appendChild(this.root);
-      this.render();
-      return this.root;
-    },
-
-    onEnter: function () { this.render(); },
-
-    render: function () {
-      var root = this.root;
-      root.innerHTML = '';
+  function renderStats(host) {
+    sHost = host;
+    host.innerHTML = '';
+    var root = host;
+    var W = Store.settings.statsWidgets || { time: true, curve: true, sources: true };
 
       var r = rangeDates(curRange);
       // 学期还没开学：「本学期」区间会退化成今天，需要单独说清楚
@@ -66,7 +59,7 @@
           el('span', { text: RANGES[curRange].name + '统计' }),
           el('small', { text: md(r.from) + ' – ' + md(r.to) + ' · ' + r.days + ' 天' })
         ]),
-        V.rangeTabs(curRange, function (k) { curRange = k; view.render(); }, RANGE_KEYS)
+        V.rangeTabs(curRange, function (k) { curRange = k; StatsPane.render(sHost); }, RANGE_KEYS)
       ]);
       root.appendChild(bar);
 
@@ -78,6 +71,7 @@
         return;
       }
 
+      if (W.time) {
       var st = Store.compareStat(curRange, r);
 
       /* ---------- 顶部四个数 ---------- */
@@ -113,7 +107,7 @@
         onclick: function () {
           if (!canCompare) return;
           showCompare = !showCompare;
-          view.render();
+          StatsPane.render(sHost);
         }
       }, [
         el('i'),
@@ -158,16 +152,206 @@
           el('p', { text: '「今天」只算到此刻之前的整天数据，不会把还没过的时间算成未记录。' })
         ])
       ]));
-    },
+      } // end if statsWidgets.time
 
-    focusRecord: function (type, id) {
-      return global.Search ? Search.flash(Search.findRec(type, id)) : false;
-    }
-  };
+      /* ---------- 积分曲线 ---------- */
+      if (W.curve) root.appendChild(pointCurveCard(curRange));
+
+      /* ---------- 积分来源构成 ---------- */
+      if (W.sources) root.appendChild(pointSourceCard());
+
+      /* ---------- 消费构成 ---------- */
+      if (W.spend) root.appendChild(spendCard(curRange));
+
+      /* ---------- 课程投入 ---------- */
+      if (W.course) root.appendChild(courseInvestCard(curRange));
+
+  }
 
   function segMinutes(segments, key) {
     for (var i = 0; i < segments.length; i++) if (segments[i].key === key) return segments[i].minutes;
     return 0;
+  }
+
+  /* ==========================================================
+   * 积分曲线（每日获得 / 累计，可在分页内切换）
+   * ========================================================== */
+  function pointCurveCard(rangeKey) {
+    var src = Store.pointSeries(rangeKey);
+    var max = Math.max(1, src.reduce(function (m, d) { return Math.max(m, d.n); }, 0));
+    var total = src.reduce(function (s, d) { return s + d.n; }, 0);
+    var cum = 0;
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, [
+      '积分曲线',
+      el('div', { class: 'dim-tabs' }, [
+        { v: 'daily', n: '每日获得' },
+        { v: 'cumulative', n: '累计' }
+      ].map(function (o) {
+        return el('button', {
+          class: 'dim-tab' + (curveMode === o.v ? ' active' : ''),
+          text: o.n,
+          onclick: function () { curveMode = o.v; StatsPane.render(sHost); }
+        });
+      }))
+    ]));
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '本区间共获得 ' + Math.round(total) + ' 积分'
+    }));
+    var chart = el('div', {
+      style: { display: 'flex', alignItems: 'flex-end', gap: '3px', height: '88px', marginTop: '4px' }
+    });
+    src.forEach(function (d) {
+      cum += d.n;
+      var val = curveMode === 'cumulative' ? cum : d.n;
+      var barH = val > 0 ? Math.max(2, Math.round(val / max * 82)) : 0;
+      chart.appendChild(el('div', {
+        style: { flex: '1 1 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' },
+      }, [
+        el('div', {
+          style: {
+            width: '100%', height: barH + 'px', borderRadius: '3px 3px 0 0',
+            background: 'var(--primary)', opacity: val > 0 ? 1 : 0.15,
+            title: md(d.date) + '：' + Math.round(val) + ' 分'
+          }
+        }),
+        el('div', { style: { fontSize: '9px', color: 'var(--text-3)', marginTop: '2px' }, text: md(d.date).split('/')[1] || '' })
+      ]));
+    });
+    card.appendChild(chart);
+    if (total === 0) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '8px' },
+        text: '这个区间还没有积分记录（积分流水从升级当天开始统计）。'
+      }));
+    }
+    return card;
+  }
+
+  /* ==========================================================
+   * 积分来源构成（各渠道累计）
+   * ========================================================== */
+  var SRC_LABELS = {
+    focus: '专注', task: '完成待办', plan: '计划', goal: '目标 / KR',
+    ach: '成就', sleep: '睡眠', meal: '饮食', activity: '活动', other: '其他'
+  };
+  var SRC_ORDER = ['focus', 'task', 'plan', 'goal', 'ach', 'sleep', 'meal', 'activity', 'other'];
+
+  /* ==========================================================
+   * 消费构成（账本 → 统计）：每日支出小柱 + 分类构成
+   * ========================================================== */
+  function spendCard(rangeKey) {
+    var b = Store.ledgerBreakdown(rangeKey, 'expense');
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['消费构成']));
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '本区间支出 ¥' + b.total
+    }));
+    if (!b.total) {
+      card.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: '这个区间还没有支出记录。' }));
+      return card;
+    }
+    // 每日支出小柱（日期序列借 pointSeries 的有序日期）
+    var dates = Store.pointSeries(rangeKey).map(function (x) { return x.date; });
+    var maxDay = Math.max(1, dates.reduce(function (m, d) { return Math.max(m, b.daily[d] || 0); }, 0));
+    var chart = el('div', { style: { display: 'flex', alignItems: 'flex-end', gap: '3px', height: '64px', marginBottom: '10px' } });
+    dates.forEach(function (d) {
+      var v = b.daily[d] || 0;
+      var h = v > 0 ? Math.max(2, Math.round(v / maxDay * 58)) : 0;
+      chart.appendChild(el('div', { style: { flex: '1 1 0', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', height: '100%' } }, [
+        el('div', { style: { width: '100%', height: h + 'px', background: 'var(--amber)', borderRadius: '3px 3px 0 0', opacity: v > 0 ? 1 : 0.12 },
+          title: md(d) + '：¥' + v })
+      ]));
+    });
+    card.appendChild(chart);
+    // 分类构成
+    var cats = (global.LEDGER_CATS && LEDGER_CATS.expense) || [];
+    cats.forEach(function (c) {
+      var amt = b.byCategory[c.key] || 0;
+      if (!amt) return;
+      var pct = Math.round(amt / b.total * 100);
+      card.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0' } }, [
+        el('span', { style: { width: '48px', fontSize: '12px', color: 'var(--text-2)' }, text: c.name }),
+        el('div', { style: { flex: '1', height: '8px', background: 'var(--bg-2)', borderRadius: '4px', overflow: 'hidden' } }, [
+          el('div', { style: { width: pct + '%', height: '100%', background: c.color } })
+        ]),
+        el('span', { style: { width: '84px', textAlign: 'right', fontSize: '12px', color: 'var(--text-2)' },
+          text: '¥' + Math.round(amt) + ' · ' + pct + '%' })
+      ]));
+    });
+    return card;
+  }
+
+  /* ==========================================================
+   * 课程投入（时间记录 → 按课程汇总）
+   * ========================================================== */
+  function courseInvestCard(rangeKey) {
+    var map = Store.courseInvest(rangeKey);
+    var keys = Object.keys(map);
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['课程投入']));
+    if (!keys.length) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.7' },
+        text: '这段时间还没有关联课程的时间记录。记录活动时选一门课，或专注时关联到挂课的待办。'
+      }));
+      return card;
+    }
+    keys.sort(function (a, b) { return map[b] - map[a]; });
+    var total = keys.reduce(function (s, k) { return s + map[k]; }, 0);
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '合计 ' + hmText(total)
+    }));
+    var max = map[keys[0]] || 1;
+    keys.slice(0, 8).forEach(function (k) {
+      var mins = map[k];
+      var pct = Math.round(mins / max * 100);
+      card.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0' } }, [
+        el('span', { style: { width: '84px', fontSize: '12px', color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, text: k }),
+        el('div', { style: { flex: '1', height: '8px', background: 'var(--bg-2)', borderRadius: '4px', overflow: 'hidden' } }, [
+          el('div', { style: { width: pct + '%', height: '100%', background: 'var(--primary)' } })
+        ]),
+        el('span', { style: { width: '72px', textAlign: 'right', fontSize: '12px', color: 'var(--text-2)' }, text: hmShort(mins) })
+      ]));
+    });
+    return card;
+  }
+
+  function pointSourceCard() {
+    var map = Store.pointSources();
+    var total = 0;
+    SRC_ORDER.forEach(function (k) { if (map[k]) total += map[k]; });
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['积分来源']));
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '累计获得 ' + Math.round(Store.totalPoints()) + ' 积分（含合成玉折算）'
+    }));
+    if (!total) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)' },
+        text: '还没有任何积分记录。'
+      }));
+      return card;
+    }
+    SRC_ORDER.forEach(function (k) {
+      if (!map[k]) return;
+      var pct = total ? Math.round(map[k] / total * 100) : 0;
+      card.appendChild(el('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0' }
+      }, [
+        el('span', { style: { width: '64px', fontSize: '12px', color: 'var(--text-2)' }, text: SRC_LABELS[k] || k }),
+        el('div', { style: { flex: '1', height: '8px', background: 'var(--bg-2)', borderRadius: '4px', overflow: 'hidden' } }, [
+          el('div', { style: { width: pct + '%', height: '100%', background: 'var(--primary)' } })
+        ]),
+        el('span', { style: { width: '96px', textAlign: 'right', fontSize: '12px', color: 'var(--text-2)' },
+          text: Math.round(map[k]) + ' · ' + pct + '%' })
+      ]));
+    });
+    return card;
   }
 
   /** 对比小标签：涨红跌绿不合适（时间不是股票），统一用「多了/少了」+ 中性色 */
@@ -204,7 +388,7 @@
       return el('button', {
         class: 'dim-tab' + (chartType === o.v ? ' active' : ''),
         text: o.n,
-        onclick: function () { chartType = o.v; view.render(); }
+        onclick: function () { chartType = o.v; StatsPane.render(sHost); }
       });
     })));
     card.appendChild(head);
@@ -424,8 +608,8 @@
 
   global.openStats = function (key) {
     if (key && RANGES[key]) curRange = key;
-    App.go('stats');
+    App.go('tasks', { tab: 'stats' });
   };
 
-  (window.VIEWS = window.VIEWS || []).push(view);
+  global.StatsPane = StatsPane;
 })(window);

@@ -22,7 +22,11 @@
     diary: { id: 'tasks', tab: 'diary' },
     notes: { id: 'tasks', tab: 'notes' },
     inspiration: { id: 'tasks', tab: 'notes' },
-    goals: { id: 'plans', tab: 'goals' }
+    goals: { id: 'plans', tab: 'goals' },
+    // 合并后原来的独立模块改挂到宿主页的分页，旧深链接照常生效
+    agenda: { id: 'calendar', tab: 'agenda' },
+    quadrant: { id: 'tasks', tab: 'quadrant' },
+    stats: { id: 'tasks', tab: 'stats' }
   };
 
   /** 取一段地址并做最宽松的规整：去掉 #、/ 与首尾空白 */

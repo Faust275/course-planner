@@ -174,10 +174,12 @@
       taskSeq: {},
       // —— 日程 / 象限 ——
       settings: {
-        trackMeal: true, trackSleep: true,
+        trackMeal: true, trackSleep: true, statsOn: true,   // statsOn：是否开启「统计」功能（待办的统计分页 + 今日卡片）
+        statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
+        health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         theme: 'indigo', customColor: '#4f46e5',
         quiz: { right: 0, wrong: 0 },
-        nav: { today: true, schedule: true, agenda: true, quadrant: true,
+        nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
         navOrder: [],   // 自定义模块顺序（空 = 用默认顺序）
         tagMeta: {},    // 标签自定义图标与颜色：{ '学习': {icon:'book', color:'#4f46e5'} }
@@ -241,6 +243,7 @@
         mode: 'forest',     // 当前奖励机制：forest | gacha
         gacha: { pity6: 0, total: 0, ops: [], log: [], dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0 },
         earned: 0,          // 累计获得
+        pointLog: [],       // 积分流水：[{date, n, src}]，src ∈ focus/task/plan/goal/ach/sleep/meal/activity
         focusMinutes: 0,    // 累计专注分钟
         trees: [],
         sessions: [],
@@ -730,12 +733,19 @@
     PLAN_CHECKIN: 2,       // 完成一次打卡
     PLAN_DONE: 30,         // 完成一个计划
     GOAL_DONE: 60,         // 目标推进到 100% 并归档留档（每目标一次，周期需满 7 天）
+    KR_DONE: 15,           // 单条 KR 首次达成 100%（每 KR 一次）
+    /* —— 记录类发分（睡眠 / 饮食 / 活动）—— */
+    SLEEP_DAY: 4,          // 每天首条睡眠记录
+    MEAL_EACH: 2,          // 每餐
+    MEAL_MAX_DAY: 3,       // 每天封顶几餐
+    ACTIVITY_PER_MIN: 0.25, // 活动每分钟积分
+    ACTIVITY_MAX_DAY: 60,   // 活动每天积分上限
     PLANT_COST: 100,       // 第一棵树
     PLANT_STEP: 30,        // 每多一棵，价格递增
     WATER_COST: 20,        // 浇一次水
     /* —— 抽卡机制 —— */
-    JADE_PER_POINT: 600,   // 1 积分 = 600 合成玉（与 PULL_COST 对齐：单抽 600 玉 = 1 积分）
-    PULL_COST: 600,        // 单抽 600 合成玉（= 1 积分）
+    JADE_PER_POINT: 180,   // 1 积分 = 180 合成玉（PULL_COST 仍为 600，故单抽 ≈ 3.33 积分）
+    PULL_COST: 600,        // 单抽 600 合成玉（≈ 3.33 积分）
     TEN_COST: 6000,        // 十连 6000 合成玉（= 10 积分）
     RATE_6: 2,             // 六星基础概率 %
     RATE_5: 8,
@@ -1034,6 +1044,12 @@
     { id: 'use_focus_1', group: '历练', name: '初出茅庐：专注', desc: '首次完成一次专注', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:focus', threshold: 1 },
     { id: 'use_focus_10', group: '历练', name: '小有心得：专注', desc: '完成专注 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:focus', threshold: 10, req: 'use_focus_1' },
     { id: 'use_focus_100', group: '历练', name: '炉火纯青：专注', desc: '完成专注 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:focus', threshold: 100, req: 'use_focus_10' },
+    /* 专注里程：累计专注时长解锁，走成就发分 */
+    { id: 'focus_h10', group: '专注', name: '专注里程 10 小时', desc: '累计专注满 10 小时', icon: 'clock', tier: 'bronze', points: 30, metric: 'focusMinutes', threshold: 600 },
+    { id: 'focus_h30', group: '专注', name: '专注里程 30 小时', desc: '累计专注满 30 小时', icon: 'clock', tier: 'silver', points: 60, metric: 'focusMinutes', threshold: 1800, req: 'focus_h10' },
+    { id: 'focus_h60', group: '专注', name: '专注里程 60 小时', desc: '累计专注满 60 小时', icon: 'star', tier: 'silver', points: 120, metric: 'focusMinutes', threshold: 3600, req: 'focus_h30' },
+    { id: 'focus_h100', group: '专注', name: '专注里程 100 小时', desc: '累计专注满 100 小时', icon: 'crown', tier: 'gold', points: 200, metric: 'focusMinutes', threshold: 6000, req: 'focus_h60' },
+    { id: 'focus_h200', group: '专注', name: '专注里程 200 小时', desc: '累计专注满 200 小时', icon: 'crown', tier: 'gold', points: 400, metric: 'focusMinutes', threshold: 12000, req: 'focus_h100' },
     { id: 'use_note_1', group: '历练', name: '初出茅庐：速记', desc: '首次使用速记', icon: 'sparkle', tier: 'bronze', points: 10, metric: 'usage:note', threshold: 1 },
     { id: 'use_note_10', group: '历练', name: '小有心得：速记', desc: '使用速记 10 次', icon: 'star', tier: 'silver', points: 30, metric: 'usage:note', threshold: 10, req: 'use_note_1' },
     { id: 'use_note_100', group: '历练', name: '炉火纯青：速记', desc: '使用速记 100 次', icon: 'crown', tier: 'gold', points: 80, metric: 'usage:note', threshold: 100, req: 'use_note_10' },
@@ -1043,7 +1059,7 @@
   ];
 
   /** 成就分类顺序：抽卡 / 集卡 / 种树 */
-  var ACH_GROUPS = ['抽卡', '集卡', '种树', '目标', '历练'];
+  var ACH_GROUPS = ['抽卡', '集卡', '种树', '目标', '专注', '历练'];
 
   /** 当前各成就指标的实际数值 */
   function achValue(metric) {
@@ -1052,6 +1068,7 @@
       var uk = metric.slice(6);
       return (s.usage && s.usage[uk]) || 0;
     }
+    if (metric === 'focusMinutes') return (s.pomodoro && s.pomodoro.focusMinutes) || 0;
     if (metric === 'goalTotal') return (s.goals || []).length;
     if (metric === 'goalActive') {
       var tg = DateUtil.toStr(DateUtil.today());
@@ -1357,6 +1374,7 @@
   var KR_KINDS = [
     { key: 'plan', name: '挂计划', desc: '按这条计划在周期内的打卡进度算' },
     { key: 'task', name: '挂待办', desc: '按周期内相关待办的完成率算' },
+    { key: 'grade', name: '学期 GPA', desc: '按本学期已出分课程的加权 GPA 算（未出分显示待出分）' },
     { key: 'manual', name: '自己填', desc: '出分、有结果后自己填一个数' }
   ];
 
@@ -1392,6 +1410,19 @@
       out.target = t;
       out.unit = kr.unit || '';
       out.pct = Math.max(0, Math.min(1, v / t));
+      return out;
+    }
+
+    /* 学期 GPA：按该学期已出分课程的加权 GPA（用户自填的换算规则 + 占比权重）；
+       一门都没出分时 gpa 为 null → 待出分（pct 保持 null，不进平均） */
+    if (kr.kind === 'grade') {
+      var gsid = kr.semesterId || (state && state.currentSemesterId) || '';
+      var gsum = Store.gradeSummary([gsid]);
+      out.target = Math.max(0.01, Number(kr.target) || 0);
+      out.unit = 'GPA';
+      if (gsum.gpa == null) { out.empty = true; out.value = 0; out.pct = null; return out; }
+      out.value = gsum.gpa;
+      out.pct = Math.max(0, Math.min(1, gsum.gpa / out.target));
       return out;
     }
 
@@ -1505,7 +1536,9 @@
     var g = raw || {};
     var krs = (Array.isArray(g.krs) ? g.krs : []).map(function (k, i) {
       k = k || {};
-      var kind = (k.kind === 'plan' || k.kind === 'task' || k.kind === 'manual') ? k.kind : 'manual';
+      var kind = (k.kind === 'plan' || k.kind === 'task' || k.kind === 'manual' || k.kind === 'grade') ? k.kind : 'manual';
+      // GPA 目标可以是 0~5 的小数，别被「至少 1」夹掉
+      var tgt = kind === 'grade' ? Math.max(0, Number(k.target) || 0) : Math.max(1, Number(k.target) || 1);
       return {
         id: k.id || uid('kr'),
         title: String(k.title || '').slice(0, 60) || ('关键结果 ' + (i + 1)),
@@ -1513,9 +1546,12 @@
         planId: String(k.planId || ''),
         tags: Array.isArray(k.tags) ? k.tags.slice(0, 6) : [],
         courseId: String(k.courseId || ''),
-        target: Math.max(1, Number(k.target) || 1),
+        target: tgt,
         current: Math.max(0, Number(k.current) || 0),
-        unit: String(k.unit || '')
+        unit: String(k.unit || ''),
+        metric: kind === 'grade' ? 'semesterGpa' : '',
+        semesterId: kind === 'grade' ? String(k.semesterId || '') : '',
+        awarded: k.awarded || ''    // KR 达成奖励只发一次（归一化时要保留）
       };
     }).slice(0, 4);    // 最多 4 条：再多就没人看得完
     var today = DateUtil.toStr(DateUtil.today());
@@ -1669,6 +1705,11 @@
       }
       if (state.settings.trackMeal == null) state.settings.trackMeal = true;
       if (state.settings.trackSleep == null) state.settings.trackSleep = true;
+      if (state.settings.statsOn == null) state.settings.statsOn = true;
+      state.settings.statsWidgets = Object.assign(
+        { time: true, curve: true, sources: true, spend: true, course: true }, state.settings.statsWidgets || {});
+      state.settings.health = Object.assign(
+        { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, state.settings.health || {});
       if (!state.settings.nav) state.settings.nav = ds.settings.nav;
       if (!Array.isArray(state.settings.navOrder)) state.settings.navOrder = [];
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
@@ -1707,6 +1748,7 @@
       if (gc.streakNo6 == null) gc.streakNo6 = 0;
       if (gc.streakNo5 == null) gc.streakNo5 = 0;
       if (state.pomodoro.earned == null) state.pomodoro.earned = 0;
+      if (!state.pomodoro.pointLog) state.pomodoro.pointLog = [];
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
       if (!state.pomodoro.sessions) state.pomodoro.sessions = [];
       if (!state.plans) state.plans = [];
@@ -2713,7 +2755,7 @@
       }
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
-        this.addPoints(POMO.TASK_DONE);
+        this.addPoints(POMO.TASK_DONE, 'task');
         // 重复任务：完成时生成下一期实例（保留 repeat 链条）
         if (t.repeat && t.repeat.type !== 'none') {
           var nt = genNextTask(t);
@@ -2761,7 +2803,7 @@
       if (pr.allDone && p.status !== 'done') {
         p.status = 'done';
         p.doneAt = new Date().toISOString();
-        this.addPoints(POMO.TASK_DONE);
+        this.addPoints(POMO.TASK_DONE, 'task');
       }
     },
 
@@ -3043,13 +3085,30 @@
         tags: normalizeTags(data.tags),
         note: (data.note || '').trim(),
         taskId: String(data.taskId || ''),   // 挂在哪条待办上：双向关联的这一头
+        courseId: String(data.courseId || ''),   // 关联课程（可选）：用于「课程投入」统计
+        courseName: String(data.courseName || ''),
         from: String(data.from || ''),       // 记录来源：'block' = 月历里补录的时间块
         planned: !!data.planned              // true = 计划专注块（还没发生，不进统计与投入）
       };
       state.activities.push(a);
       this.emit();
       this.checkAchievements(true);
+      // 记录类发分：手动在象限记的活动给积分；月历时间块(from:'block')与番茄钟自动记录(noAward)不重复发
+      if (!data.noAward && a.from !== 'block') this.awardActivityPoints(a);
       return a;
+    },
+
+    /** 活动记录发分：0.25 分/分钟，每天上限 60 分（按活动所属日计） */
+    awardActivityPoints: function (a) {
+      var mins = TimeUtil.diffMin(a.start, a.end);
+      if (!mins || mins <= 0) return;
+      var gain = POMO.ACTIVITY_PER_MIN * mins;
+      var todayAct = (state.pomodoro.pointLog || [])
+        .filter(function (l) { return l.date === a.date && l.src === 'activity'; })
+        .reduce(function (s, l) { return s + l.n; }, 0);
+      var allowed = Math.max(0, POMO.ACTIVITY_MAX_DAY - todayAct);
+      var award = Math.min(gain, allowed);
+      if (award > 0) this.addPoints(award, 'activity', a.date);
     },
 
     updateActivity: function (id, data) {
@@ -3107,6 +3166,9 @@
           tags: m.tags
         });
       }
+      // 记录类发分：每天封顶 3 餐，每餐 2 分（含本条，第 4 餐起不发）
+      var dayCount = state.meals.filter(function (x) { return x.date === m.date; }).length;
+      if (dayCount <= POMO.MEAL_MAX_DAY) this.addPoints(POMO.MEAL_EACH, 'meal', m.date);
       this.emit();
       return m;
     },
@@ -3292,8 +3354,11 @@
         quality: data.quality || 'normal',                     // good / normal / bad
         note: (data.note || '').trim()
       };
+      // 记录类发分：当天首条睡眠记录给 4 分（防重复刷）；push 前判断，避免把自己算进去
+      var isFirst = !state.sleeps.some(function (s) { return s.date === r.date; });
       state.sleeps.push(r);
       this.bumpUsage('sleep');
+      if (isFirst) this.addPoints(POMO.SLEEP_DAY, 'sleep', r.date);
       this.emit();
       return r;
     },
@@ -3338,17 +3403,61 @@
      * 增加积分（不自动 emit，由调用方决定何时通知界面）
      * 两种奖励机制的积分分开存放：
      *   forest → points（种树 / 浇水）
-     *   gacha  → jade（合成玉，1 积分 = 600）
+     *   gacha  → jade（合成玉，1 积分 = 180）
      * 无论哪种，earned 都记总积分，切换机制时总量不变。
      */
-    addPoints: function (n) {
+    addPoints: function (n, src, date) {
       n = Math.round(n) || 0;
       if (n <= 0) return this.pomodoro.points;
       var pm = state.pomodoro;
       if (pm.mode === 'gacha') pm.jade += n * POMO.JADE_PER_POINT;
       else pm.points += n;
       pm.earned += n;
+      // 写流水（用于统计分页的「积分曲线」与「来源构成」）；date 缺省为今天，记录类可传记录的所属日
+      pm.pointLog.push({ date: date || DateUtil.toStr(DateUtil.today()), n: n, src: src || 'other' });
+      if (pm.pointLog.length > 2000) pm.pointLog = pm.pointLog.slice(-2000);
       return pm.mode === 'gacha' ? pm.jade : pm.points;
+    },
+
+    /** 各渠道累计获得积分（按 src 汇总）；聚合逻辑见 stats-calc.js */
+    pointSources: function () {
+      return global.StatsCalc.sumBySource(state.pomodoro.pointLog);
+    },
+
+    /** 某区间按日聚合的积分（每日获得）；日期从 from 到 to 连续 */
+    pointSeries: function (rangeKey) {
+      rangeKey = rangeKey || 'week';
+      var r = rangeDates(rangeKey);
+      var dates = [], d = r.from;
+      for (var i = 0; i < r.days; i++) {
+        dates.push(d);
+        d = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(d), 1));
+      }
+      return global.StatsCalc.seriesFromLog(state.pomodoro.pointLog, dates);
+    },
+
+    /** 某区间账本聚合（按分类构成 + 每日支出）；聚合逻辑见 stats-calc.js */
+    ledgerBreakdown: function (rangeKey, type) {
+      rangeKey = rangeKey || 'month';
+      var r = rangeDates(rangeKey);
+      var dates = [], d = r.from;
+      for (var i = 0; i < r.days; i++) {
+        dates.push(d);
+        d = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(d), 1));
+      }
+      return global.StatsCalc.ledgerBreakdown(state.ledger, dates, type || 'expense');
+    },
+
+    /** 某区间按课程聚合的投入时长（分钟）；聚合逻辑见 stats-calc.js */
+    courseInvest: function (rangeKey) {
+      rangeKey = rangeKey || 'month';
+      var r = rangeDates(rangeKey);
+      var dates = [], d = r.from;
+      for (var i = 0; i < r.days; i++) {
+        dates.push(d);
+        d = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(d), 1));
+      }
+      return global.StatsCalc.sumByCourse(state.activities, dates);
     },
 
     /** 当前机制的余额（森林=积分，抽卡=合成玉） */
@@ -3357,7 +3466,7 @@
       return pm.mode === 'gacha' ? pm.jade : pm.points;
     },
 
-    /** 折算成积分的总余额：森林积分 + 合成玉 ÷ 600 */
+    /** 折算成积分的总余额：森林积分 + 合成玉 ÷ 180 */
     totalPoints: function () {
       var pm = state.pomodoro;
       return Math.round((pm.points + pm.jade / POMO.JADE_PER_POINT) * 100) / 100;
@@ -3384,7 +3493,7 @@
       var pm = state.pomodoro;
       pm.focusMinutes += minutes;
       var gain = minutes * POMO.POINT_PER_MIN;
-      this.addPoints(gain);
+      this.addPoints(gain, 'focus');
 
       // 记录本次专注（用于统计）
       var dateStr = (extra && extra.date) || DateUtil.toStr(DateUtil.today());
@@ -3397,8 +3506,17 @@
       });
       if (pm.sessions.length > 400) pm.sessions = pm.sessions.slice(-400);
 
-      // 自动把专注时长写进象限的活动记录
+      // 自动把专注时长写进象限的活动记录（专注分已单独结算，这里不再重复发活动分）
       if (extra && extra.start && extra.end && minutes >= 1) {
+        var fCourseId = '', fCourseName = '';
+        if (taskId) {
+          var fTask = this.getTask(taskId);
+          if (fTask && fTask.courseId) {
+            fCourseId = fTask.courseId;
+            var fCourse = this.getCourse(fTask.courseId);
+            fCourseName = fCourse ? fCourse.name : '';
+          }
+        }
         this.addActivity({
           date: dateStr,
           start: extra.start,
@@ -3407,7 +3525,10 @@
           type: 'study',
           tags: extra.tags,
           note: '番茄钟自动记录',
-          taskId: taskId || ''
+          taskId: taskId || '',
+          courseId: fCourseId,
+          courseName: fCourseName,
+          noAward: true
         });
       }
       state.pomodoro.timer = {
@@ -3632,7 +3753,7 @@
           if (!state.achievements) state.achievements = { done: {} };
           if (!state.achievements.done) state.achievements.done = {};
           state.achievements.done[a.id] = { at: Date.now() };
-          self.addPoints(a.points);
+          self.addPoints(a.points, 'ach');
           newly.push(a);
         }
       });
@@ -3903,6 +4024,7 @@
       if (!g) return null;
       var next = normGoal(Object.assign({}, g, data, { id: g.id, createdAt: g.createdAt }));
       state.goals = state.goals.map(function (x) { return x.id === id ? next : x; });
+      this.settleKRs();      // KR 进度变化后结算：达成 100% 的发一次积分
       this.emit();
       return next;
     },
@@ -3938,7 +4060,35 @@
         gained.push(g);
       });
       if (gained.length) {
-        this.addPoints(POMO.GOAL_DONE * gained.length);
+        this.addPoints(POMO.GOAL_DONE * gained.length, 'goal');
+        this.checkAchievements(true);
+        this.save();
+      }
+      this.settleKRs();
+      return gained;
+    },
+
+    /**
+     * KR 结算：单条 KR 首次推进到 100% 时发一次积分（POMO.KR_DONE）。
+     * 用 kr.awarded 挡住重复发放；降低再升高也不会重发。
+     * 与 settleGoals 一样惰性地跑——进目标页、改目标、归档时都会触发。
+     */
+    settleKRs: function () {
+      var gained = 0;
+      (state.goals || []).forEach(function (g) {
+        // 与目标结算一致：周期太短的目标不参与，防止「建个 3 天目标刷 KR 分」
+        if (goalDays(g) < GOAL_MIN_DAYS) return;
+        (g.krs || []).forEach(function (kr) {
+          if (kr.awarded) return;
+          // 注意：krProgress().pct 是 0–1 的比例（不是 0–100）
+          if (krProgress(kr, Store.goalCtx(g)).pct >= 1) {
+            kr.awarded = new Date().toISOString();
+            gained += POMO.KR_DONE;
+          }
+        });
+      });
+      if (gained) {
+        this.addPoints(gained, 'goal');
         this.checkAchievements(true);
         this.save();
       }
@@ -4111,7 +4261,7 @@
       var gain = 0;
       if (!exist) gain += POMO.PLAN_CHECKIN;
       if (!wasDone && plan.done) gain += POMO.PLAN_DONE;
-      if (gain) this.addPoints(gain);
+      if (gain) this.addPoints(gain, 'plan');
       this.emit();
       this.checkAchievements(true);
       return { checked: !exist, completed: plan.done && !exist, gain: gain };
@@ -4132,7 +4282,7 @@
       this.refreshPlanDone(plan);
       var gain = POMO.PLAN_CHECKIN;
       if (!wasDone && plan.done) gain += POMO.PLAN_DONE;
-      this.addPoints(gain);
+      this.addPoints(gain, 'plan');
       this.emit();
       this.checkAchievements(true);
       return { completed: plan.done, gain: gain };

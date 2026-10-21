@@ -12,6 +12,7 @@
   var cursor = null;     // { y, m }
   var selected = null;   // 选中日期 YYYY-MM-DD
   var onlyMine = false;  // 是否只看有内容的日子（预留）
+  var calTab = 'calendar';   // 分页：calendar 日历 / agenda 日程（日程来自 agenda.js 的 AgendaPane）
 
   function today0() { return DateUtil.today(); }
 
@@ -42,9 +43,18 @@
     order: 18,
     nav: true,
 
+    defaultTab: 'calendar',
+    getTab: function () { return calTab; },
+    setTab: function (t) { calTab = (t === 'agenda') ? 'agenda' : 'calendar'; this.render(); },
+
     root: null,
 
     actions: function (host) {
+      // 日程分页有自己的操作区（隐藏课程 / 纪念日 / 新建日程）
+      if (calTab === 'agenda') {
+        if (global.AgendaPane) global.AgendaPane.actions(host);
+        return;
+      }
       host.appendChild(el('button', {
         class: 'btn btn-primary',
         onclick: function () {
@@ -58,9 +68,10 @@
       host.appendChild(this.root);
 
       // 移动端横滑切月：左滑下个月，右滑上个月（与月份头箭头一致）
+      // 在「日程」分页下不接管手势，避免误触
       V.addSwipe(this.root, {
-        left: function () { shiftMonth(1); view.render(); },
-        right: function () { shiftMonth(-1); view.render(); }
+        left: function () { if (calTab === 'agenda') return; shiftMonth(1); view.render(); },
+        right: function () { if (calTab === 'agenda') return; shiftMonth(-1); view.render(); }
       });
 
       ensureCursor();
@@ -77,6 +88,28 @@
       var root = this.root;
       root.innerHTML = '';
       ensureCursor();
+
+      /* ---- 分页：日历 / 日程 ---- */
+      var paneBar = el('div', { class: 'pane-tabs' });
+      [
+        { v: 'calendar', l: '日历' },
+        { v: 'agenda', l: '日程' }
+      ].forEach(function (x) {
+        paneBar.appendChild(el('button', {
+          class: 'pane-tab' + (calTab === x.v ? ' active' : ''),
+          text: x.l,
+          onclick: function () { calTab = x.v; view.render(); }
+        }));
+      });
+      root.appendChild(paneBar);
+
+      // 日程分页：由 agenda.js 的 AgendaPane 渲染（未来 7 天安排 + 一次性日程）
+      if (calTab === 'agenda') {
+        var agHost = el('div', {});
+        root.appendChild(agHost);
+        if (global.AgendaPane) global.AgendaPane.render(agHost);
+        return;
+      }
 
       var y = cursor.y, m = cursor.m;
       var first = new Date(y, m, 1);
@@ -135,7 +168,7 @@
           '未来 7 天日程',
           el('a', {
             class: 'more', href: 'javascript:void 0',
-            onclick: function () { App.go('agenda'); }
+            onclick: function () { App.go('calendar', { tab: 'agenda' }); }
           }, ['去日程 →'])
         ]));
         var box = el('div', { class: 'card', style: { padding: '4px 8px' } });
@@ -179,6 +212,7 @@
     var wk = Store.weekOf(d);
     var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
+    var examCourses = (Store.courses || []).filter(function (c) { return c.exam && c.exam.date === ds; });
 
     // 当天已记录的时间（分钟）
     var st = Store.dayStat(ds);
@@ -202,7 +236,11 @@
       el('span', { class: 'cal-day', text: String(d.getDate()) }),
       el('span', { class: 'cal-dots' }, [
         courses.length ? el('i', { class: 'dot course', title: courses.length + ' 节课' }) : null,
-        events.length ? el('i', { class: 'dot event', title: events.length + ' 个日程' }) : null
+        events.length ? el('i', { class: 'dot event', title: events.length + ' 个日程' }) : null,
+        examCourses.length ? el('i', {
+          class: 'dot exam',
+          title: '考试：' + examCourses.map(function (c) { return c.name; }).join('、')
+        }) : null
       ]),
       el('span', { class: 'cal-rec' }, [
         el('i', { style: { width: pct + '%' } })
@@ -312,9 +350,8 @@
       el('button', {
         class: 'btn btn-sm',
         onclick: function () {
-          var v = App.views.filter(function (x) { return x.id === 'quadrant'; })[0];
-          if (v) { v.date = ds; }
-          App.go('quadrant');
+          if (global.openQuadrantAt) global.openQuadrantAt(ds);
+          else App.go('tasks', { tab: 'quadrant' });
         }
       }, ['查看象限']),
       el('button', {
