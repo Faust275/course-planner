@@ -85,7 +85,7 @@
   - `lite` 只带学期/课程/时段/节次 + 少量展示设置，其余清空。
   - `standard` 全量文本数据，剥离 `background.dataUrl`、`pet.src`、ASR/OCR 密钥。
   - `full` 原样；**不传参数默认 full**，保证旧代码与旧备份兼容。
-- `settings.js` `syncCodeDialog`：精简/标准/完整三档 chip 切换（默认标准），实时显示字符数与 KB，切换即重新生成。
+- `settings.js` `syncFileDialog`：精简/标准两档 chip 切换（默认标准），实时显示字符数与 KB，切换即重新生成。
 
 ### 实测效果（20 课 / 60 待办 / 40 账目 / 20 笔记 / 含 300KB 图片）
 | 档位 | 字符数 | 含图片 | 含密钥 |

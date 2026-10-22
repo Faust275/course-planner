@@ -64,8 +64,6 @@
     });
   }
 
-  function uiReady() { return (typeof UI !== 'undefined') && UI && UI.modal; }
-
   /** 兜底面板：复制内容 + 平台引导。二进制内容不提供复制（无意义）。 */
   function copyFallbackPanel(filename, content, opts) {
     opts = opts || {};

@@ -669,14 +669,6 @@
       return cols.map(function () { return []; });
     });
 
-    function colIndex(cx) {
-      for (var c = 0; c < cols.length; c++) {
-        if (cx >= cols[c].x0 && cx <= cols[c].x1) return c;
-      }
-      if (cx > tableRight + W * 0.02) return -1;
-      return nearestIndex(cols, cx);
-    }
-
     function rowIndexOf(cy) {
       for (var r = 0; r < rows.length; r++) {
         var y0 = rows[r].y0 != null ? rows[r].y0 : rows[r].y - mh * 1.2;

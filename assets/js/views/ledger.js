@@ -386,7 +386,6 @@
     });
   }
 
-  global.openLedgerDialog = function () { openEntryDialog(); };
   view.openDialog = openEntryDialog;
 
   (window.VIEWS = window.VIEWS || []).push(view);

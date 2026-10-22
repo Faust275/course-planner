@@ -358,7 +358,6 @@
 
   App.go = go;
   App.badge = badge;
-  App.buildNav = function () { buildNav(); markActive(App.currentId); };
   /* ===================== 龙泡泡桌宠（开发者/自用） ===================== */
   
 

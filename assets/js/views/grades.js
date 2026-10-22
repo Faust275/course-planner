@@ -402,12 +402,6 @@
     return String(Math.round(n * p) / p);
   }
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
   /** 展开某几个学期的成绩明细 */
   function transcriptRows(ids) {
     var out = [];
@@ -491,12 +485,12 @@
 
     var body = t.rows.map(function (r) {
       return '<tr>' +
-        '<td class="nm">' + esc(r.name) + '</td>' +
-        (showSem ? '<td class="sm">' + esc(r.semester) + '</td>' : '') +
+        '<td class="nm">' + UI.escapeHTML(r.name) + '</td>' +
+        (showSem ? '<td class="sm">' + UI.escapeHTML(r.semester) + '</td>' : '') +
         '<td class="num">' + fmt(r.credit, 1) + '</td>' +
         '<td class="num">' + (r.score == null ? '—' : fmt(r.score, 1)) + '</td>' +
         '<td class="num">' + gpa2(r.gp) + '</td>' +
-        '<td class="dt">' + esc(r.exam || '—') + '</td></tr>';
+        '<td class="dt">' + UI.escapeHTML(r.exam || '—') + '</td></tr>';
     }).join('');
 
     return [
@@ -519,16 +513,16 @@
       '@media print { body { padding: 0; } th { background: #eee !important; } }',
       '</style></head><body><div class="wrap">',
       '<h1>成绩单</h1>',
-      '<div class="meta">范围：' + esc(t.scope) + '　导出日期：' + esc(t.generated) + '</div>',
+      '<div class="meta">范围：' + UI.escapeHTML(t.scope) + '　导出日期：' + UI.escapeHTML(t.generated) + '</div>',
       '<table><thead><tr><th>课程</th>' + (showSem ? '<th class="sm">学期</th>' : '') +
       '<th class="num">学分</th><th class="num">成绩</th>',
       '<th class="num">绩点</th><th class="dt">考试时间</th></tr></thead><tbody>',
       body,
-      '</tbody><tfoot><tr><td>合计</td>' + (showSem ? '<td class="sm">' + esc(t.scope) + '</td>' : '') +
+      '</tbody><tfoot><tr><td>合计</td>' + (showSem ? '<td class="sm">' + UI.escapeHTML(t.scope) + '</td>' : '') +
       '<td class="num">' + fmt(t.summary.credits, 1) +
       '</td><td class="num">' + (t.summary.weighted == null ? '—' : fmt(t.summary.weighted, 1)) +
       '</td><td class="num">' + gpa2(t.summary.gpa) +
-      '</td><td class="dt">' + esc(t.summary.scored + '/' + t.summary.count + ' 门已出分') + '</td></tr></tfoot></table>',
+      '</td><td class="dt">' + UI.escapeHTML(t.summary.scored + '/' + t.summary.count + ' 门已出分') + '</td></tr></tfoot></table>',
       '</div><script>window.addEventListener("load",function(){window.print();});<\/script></body></html>'
     ].join('');
   }
@@ -619,7 +613,6 @@
     build: buildTranscript,
     csv: toCsv,
     html: toHtml,
-    esc: esc,
     fmt: fmt,
     /** 直接按给定学期导出 CSV */
     downloadCsv: function (ids, scopeName) {

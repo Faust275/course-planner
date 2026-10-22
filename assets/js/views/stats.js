@@ -606,10 +606,5 @@
    * ========================================================== */
   global.heatLevel = heatLevel;
 
-  global.openStats = function (key) {
-    if (key && RANGES[key]) curRange = key;
-    App.go('tasks', { tab: 'stats' });
-  };
-
   global.StatsPane = StatsPane;
 })(window);

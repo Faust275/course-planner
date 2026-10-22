@@ -627,11 +627,6 @@
   /* ==========================================================
    * 树木渲染：5 个阶段 + 枯萎态（参数化 SVG，按树种形态分化）
    * ========================================================== */
-  function rerender() {
-    var v = App.views.filter(function (x) { return x.id === 'collection'; })[0];
-    if (v) v.render();
-  }
-
   /** stage：1~5；withered：枯桩；sp：树种（shape/crown/crown2/trunk/bloom） */
   function treeSVG(stage, sp, withered) {
     sp = sp || speciesOf('camphor');
