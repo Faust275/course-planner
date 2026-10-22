@@ -12540,8 +12540,9 @@ window.AK_OPS = [
  *   3. a[download]          —— 常规浏览器可靠；WebView/iOS PWA 静默无效
  *   4. 复制文本兜底面板      —— 弱网/WebView 唯一可靠通道
  *
- * 诚实反馈原则：分享被取消（AbortError）不回落下载；下载/WebView 一律
- * 弹诚实面板告知「可能没存到」并给复制兜底 + 平台引导，不再无条件下「已保存」。
+ * 诚实反馈原则：下载/WebView 一律弹诚实面板告知「可能没存到」并给复制兜底 + 平台引导，
+ * 不再无条件下「已保存」；原生选择框/分享被取消或无法弹出时一律回落下载 + 复制兜底，
+ * 保证用户永远能拿到文件，绝不死在「已取消」。
  * ========================================================== */
 (function () {
   'use strict';
@@ -12651,6 +12652,24 @@ window.AK_OPS = [
   }
 
   /**
+   * 兜底保存：优先 a[download]（常规浏览器可靠），WebView/iOS PWA 静默无效则只弹
+   * 复制兜底面板。无论哪种，都保证用户最终能拿到文件或内容，绝不死在「已取消」。
+   * @returns {Promise<{method:string, ok:boolean}>}
+   */
+  function fallbackToDownload(filename, content, isBinary, blob, opts) {
+    if (!isWebView()) {
+      try { triggerDownload(filename, blob); } catch (e) { /* 忽略，交给面板兜底 */ }
+      // 下载成功与否无从感知，弹诚实面板：复制内容 + 平台引导
+      copyFallbackPanel(filename, isBinary ? blob : content,
+        Object.assign({}, opts, { panelTitle: opts.panelTitle || '文件已尝试保存' }));
+      return Promise.resolve({ method: 'download', ok: true });
+    }
+    // WebView：下载必然无效，复制兜底
+    copyFallbackPanel(filename, isBinary ? blob : content, opts);
+    return Promise.resolve({ method: 'copy-fallback', ok: true });
+  }
+
+  /**
    * 统一保存入口。
    * @param {string} filename 文件名（含扩展名）
    * @param {string|Blob} content 文本或二进制内容
@@ -12674,6 +12693,9 @@ window.AK_OPS = [
     var automated = !!(navigator.webdriver);
 
     // 1) 文件系统访问 API（桌面 Chrome/Edge，真存盘，最可靠）
+    //    注：file://、沙箱、非安全上下文等环境下 showSaveFilePicker 虽存在却会被浏览器
+    //    「自动 Abort」，无法可靠区分是否用户主动取消。此类情况一律回落下载 + 复制兜底，
+    //    保证用户始终能拿到文件，而不是卡在「已取消」。
     if (!automated && has(window, 'showSaveFilePicker')) {
       return window.showSaveFilePicker({
         suggestedName: filename,
@@ -12683,10 +12705,7 @@ window.AK_OPS = [
           return w.write(blob).then(function () { return w.close(); });
         });
       }).then(function () { return { method: 'picker', ok: true }; })
-        .catch(function (e) {
-          if (e && e.name === 'AbortError') return { method: 'picker', ok: false, canceled: true };
-          return Promise.reject(e);
-        });
+        .catch(function () { return fallbackToDownload(filename, content, isBinary, blob, opts); });
     }
 
     // 2) Web Share（带文件，手机一键发给微信/QQ/iCloud）
@@ -12695,26 +12714,12 @@ window.AK_OPS = [
     if (!automated && file && has(navigator, 'canShare') && navigator.canShare({ files: [file] })) {
       return navigator.share({ files: [file], title: filename, text: opts.shareText || filename })
         .then(function () { return { method: 'share', ok: true }; })
-        .catch(function (e) {
-          var aborted = e && (e.name === 'AbortError' ||
-            (e.message && /abort/i.test(e.message)) || e.name === 'NotAllowedError');
-          if (aborted) return { method: 'share', ok: false, canceled: true };
-          return Promise.reject(e);
-        });
+        // 分享被取消 / 不可用：回落兜底（复制面板），不报告「已取消」死路
+        .catch(function () { return fallbackToDownload(filename, content, isBinary, blob, opts); });
     }
 
-    // 3) 下载：常规浏览器可靠；WebView/iOS PWA 静默无效 → 直接进兜底面板
-    if (!isWebView()) {
-      try { triggerDownload(filename, blob); } catch (e) { /* 忽略，交给面板兜底 */ }
-      // 下载成功与否无从感知，弹诚实面板：复制内容 + 平台引导
-      copyFallbackPanel(filename, isBinary ? blob : content,
-        Object.assign({}, opts, { panelTitle: opts.panelTitle || '文件已尝试保存' }));
-      return Promise.resolve({ method: 'download', ok: true });
-    }
-
-    // 4) WebView：下载必然无效，复制兜底
-    copyFallbackPanel(filename, isBinary ? blob : content, opts);
-    return Promise.resolve({ method: 'copy-fallback', ok: true });
+    // 3) 下载 / 4) WebView 兜底
+    return fallbackToDownload(filename, content, isBinary, blob, opts);
   }
 
   // 暴露到全局

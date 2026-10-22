@@ -12,9 +12,9 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 同步重构（JSON 文件取代分片同步码）+ 统一保存通道 `save-file.js` + 死代码清理，见 ROADMAP §十四；此前：备份导入崩溃修复（shop 缺失 + 整体回滚），见 §十三（`1a2cc0a`） |
+| 最后提交 | 修复 `save-file.js`：picker/分享被浏览器自动 Abort（file://、沙箱、非安全上下文）时不再误报「已取消」死路，一律回落下载 + 复制兜底面板；新增 `verify_save_fallback.mjs`；此前：同步重构 + 统一保存通道 + 死代码清理，见 ROADMAP §十四 |
 | 单元测试 | `node tests/run.mjs` **582 条全过**（删除了已移除的同步码分片测试残留） |
-| UI 回归 | 31 个 `verify_*.mjs` 全部通过（`verify_sync.mjs`/`verify_sync_ui.mjs`/`verify_sync_scope.mjs` 为本次新增/重写；`verify_backup.mjs` 含 export→import 往返；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
+| UI 回归 | 35 个 `verify_*.mjs` 全部通过（含 `verify_save_fallback.mjs` 验证 picker 自动 Abort 回落；`verify_sync.mjs`/`verify_sync_ui.mjs`/`verify_sync_scope.mjs` 为同步重构新增/重写；`verify_backup.mjs` 含 export→import 往返；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 领先远程 10+ 提交，**本轮未发布**（按约定先本地验证） |

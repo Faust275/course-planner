@@ -879,6 +879,7 @@ StatsCalc.rangeDates('week', { util: DateUtil, ranges: RANGES, today, semester }
 - `verify_sync.mjs`（新建，21 项：standard/lite/full 脱敏、不含日记键、往返日记保留、密钥不回流、零控制台错误）；
 - `verify_sync_ui.mjs`（重写适配新 UI：入口按钮、生成 JSON、精简/标准切换、纯 JSON 导入、旧 CP1R 兼容、非法拒绝）；
 - `verify_sync_scope.mjs`、`verify_backup.mjs`、`verify_export.mjs`、`verify_ics.mjs`、`verify_diary.mjs`、`verify_shop.mjs` 全部通过；
-- `tests/run.mjs` 删除同步码分片测试残留后 **582 条全过**；全量 31 个 `verify_*.mjs` 通过。
+- `tests/run.mjs` 删除同步码分片测试残留后 **582 条全过**。
+- **跟进修复**：`save-file.js` 的 picker/分享被浏览器自动 Abort（file://、沙箱、非安全上下文）时不再误报「已取消」死路，改为回落下载 + 复制兜底面板；新增 `verify_save_fallback.mjs`（9 项，模拟 picker 自动 Abort 验证回落）。全量 35 个 `verify_*.mjs` 通过。
 - 本轮**未发布**（本地领先远程 10+ 提交），未对 WorkBuddy 内置浏览器做适配（按约定用本地 html 测试）。
 
