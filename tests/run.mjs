@@ -1,8 +1,14 @@
-// 最小单测：从 index.html 实时提取纯逻辑函数（无 DOM 依赖），
+// 最小单测：从源码模块实时提取纯逻辑函数（无 DOM 依赖），
 // 做边界断言，作为后续改动的回归基线。运行：node tests/run.mjs
 import { readFileSync } from 'node:fs';
 
-const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// 源码拼接：按 src/index.template.html 里的 <script src> 顺序读各模块源码。
+// 旧实现读构建产物 index.html 再做文本提取——产物格式一变测试就崩，
+// 而且没构建过就跑不了测试。源码才是唯一真相，产物只是它的内联副本。
+const SRC_BASE = new URL('../', import.meta.url);
+const SRC_FILES = [...readFileSync(new URL('src/index.template.html', SRC_BASE), 'utf8')
+  .matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+const SRC = SRC_FILES.map(f => readFileSync(new URL(f, SRC_BASE), 'utf8')).join('\n');
 
 // 从 openIdx（指向某个开括号）起，按嵌套括号计数提取到匹配闭括号的片段
 function extractBalanced(src, openIdx) {
@@ -15,21 +21,21 @@ function extractBalanced(src, openIdx) {
   throw new Error('括号不匹配 @' + openIdx);
 }
 function sliceFrom(marker, from = 0) {
-  const i = html.indexOf(marker, from);
+  const i = SRC.indexOf(marker, from);
   if (i < 0) throw new Error('找不到: ' + marker);
   return i;
 }
 
 // 1) TimeUtil 对象
 const tuStart = sliceFrom('var TimeUtil = {');
-const tuOpen = html.indexOf('{', tuStart);
-const TimeUtilSrc = extractBalanced(html, tuOpen); // 含首尾 {}
+const tuOpen = SRC.indexOf('{', tuStart);
+const TimeUtilSrc = extractBalanced(SRC, tuOpen); // 含首尾 {}
 
 // 2) expandRange / mergeTotal 函数
 function extractFn(name) {
   const i = sliceFrom('function ' + name + '(');
-  const open = html.indexOf('{', i);
-  return html.slice(i, open) + extractBalanced(html, open);
+  const open = SRC.indexOf('{', i);
+  return SRC.slice(i, open) + extractBalanced(SRC, open);
 }
 const expandRangeSrc = extractFn('expandRange');
 const mergeTotalSrc = extractFn('mergeTotal');
@@ -39,13 +45,13 @@ const mergeTotalSrc = extractFn('mergeTotal');
 const batchAnchor = sliceFrom('var DAY_CN = {');
 function extractObj(varName) {
   const i = sliceFrom('var ' + varName + ' = {', batchAnchor - 1);
-  const open = html.indexOf('{', i);
-  return 'var ' + varName + ' = ' + extractBalanced(html, open) + ';';
+  const open = SRC.indexOf('{', i);
+  return 'var ' + varName + ' = ' + extractBalanced(SRC, open) + ';';
 }
 function extractFnFrom(name, from) {
   const i = sliceFrom('function ' + name + '(', from);
-  const open = html.indexOf('{', i);
-  return html.slice(i, open) + extractBalanced(html, open);
+  const open = SRC.indexOf('{', i);
+  return SRC.slice(i, open) + extractBalanced(SRC, open);
 }
 const DAY_CNSrc = extractObj('DAY_CN');
 const headKeysSrc = extractObj('HEAD_KEYS');
@@ -65,9 +71,9 @@ const findConflictsSrc = extractFnFrom('findConflicts', conflictAnchor);
 
 // 6) 日历导出 .ics（remind.js 里的纯函数）
 const duStart = sliceFrom('var DateUtil = {');
-const DateUtilSrc = 'var DateUtil = ' + extractBalanced(html, html.indexOf('{', duStart)) + ';';
+const DateUtilSrc = 'var DateUtil = ' + extractBalanced(SRC, SRC.indexOf('{', duStart)) + ';';
 // DateUtil.weekdayCN 依赖这个模块级常量，单独从产物里取，避免测试里再抄一份
-const DAY_NAMESSrc = (html.match(/var DAY_NAMES = \[[^\]]*\];/) || ['var DAY_NAMES = [];'])[0];
+const DAY_NAMESSrc = (SRC.match(/var DAY_NAMES = \[[^\]]*\];/) || ['var DAY_NAMES = [];'])[0];
 const icsAnchor = sliceFrom('function icsEscape(');
 const icsEscapeSrc = extractFnFrom('icsEscape', icsAnchor);
 const icsFoldSrc = extractFnFrom('icsFold', icsAnchor);
@@ -80,7 +86,7 @@ const buildICSSrc = extractFnFrom('buildICS', icsAnchor);
 
 // 7) 全局搜索（search.js 里的纯函数）
 const searchAnchor = sliceFrom('var TYPE_META = {');
-const TYPE_METASrc = 'var TYPE_META = ' + extractBalanced(html, html.indexOf('{', searchAnchor)) + ';';
+const TYPE_METASrc = 'var TYPE_META = ' + extractBalanced(SRC, SRC.indexOf('{', searchAnchor)) + ';';
 const joinNonEmptySrc = extractFnFrom('joinNonEmpty', searchAnchor);
 const hitsInSrc = extractFnFrom('hitsIn', searchAnchor);
 const describeSrc = extractFnFrom('describe', searchAnchor);
@@ -106,15 +112,15 @@ const lunarIiFE = (() => {
   const i = sliceFrom("(function (global) {", sliceFrom('农历（1900–2100）') - 400);
   // 从该 IIFE 的起始位置提取到匹配的 })(window);
   let depth = 0, j = i;
-  for (; j < html.length; j++) {
-    const c = html[j];
+  for (; j < SRC.length; j++) {
+    const c = SRC[j];
     if (c === '{') depth++;
     else if (c === '}') {
       depth--;
       if (depth === 0) break;
     }
   }
-  return html.slice(i, html.indexOf('\n', j) + 1);
+  return SRC.slice(i, SRC.indexOf('\n', j) + 1);
 })();
 const lunarWin = {};
 // lunar.js 现依赖共享工具 UI.b64ToBytes（见 ui.js），单测隔离环境需注入等价实现
@@ -132,8 +138,8 @@ const clampDayOfMonthSrc = extractFn('clampDayOfMonth');
 const clampFeb29Src = extractFn('clampFeb29');
 const annivNextSrc = (() => {
   const i = sliceFrom('annivNext: function (ev, todayStr) {');
-  const o = html.indexOf('{', i + 'annivNext: function'.length);
-  return 'function annivNext(ev, todayStr) ' + extractBalanced(html, o);
+  const o = SRC.indexOf('{', i + 'annivNext: function'.length);
+  return 'function annivNext(ev, todayStr) ' + extractBalanced(SRC, o);
 })();
 
 // 11) 课表导出图片的纯函数（schedule-export.js）
@@ -145,7 +151,7 @@ const tintSrc = extractFnFrom('tint', expAnchor);
 const roundRectSrc = extractFnFrom('roundRect', expAnchor);
 const DEFAULT_OPTSSrc = (() => {
   const i = sliceFrom('var DEFAULT_OPTS = {');
-  return 'var DEFAULT_OPTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+  return 'var DEFAULT_OPTS = ' + extractBalanced(SRC, SRC.indexOf('{', i)) + ';';
 })();
 
 // 12) 子任务（store.js）
@@ -153,17 +159,17 @@ const DEFAULT_OPTSSrc = (() => {
 const STATS_ANCHOR = sliceFrom('var RANGES = {');
 const RANGESSrc = (() => {
   const i = sliceFrom('var RANGES = {');
-  return 'var RANGES = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+  return 'var RANGES = ' + extractBalanced(SRC, SRC.indexOf('{', i)) + ';';
 })();
 const LEDGER_RANGESSrc = (() => {
   const i = sliceFrom('var LEDGER_RANGES = [');
-  const open = html.indexOf('[', i);
+  const open = SRC.indexOf('[', i);
   let depth = 0, j = open;
-  for (; j < html.length; j++) {
-    if (html[j] === '[') depth++;
-    else if (html[j] === ']') { depth--; if (depth === 0) break; }
+  for (; j < SRC.length; j++) {
+    if (SRC[j] === '[') depth++;
+    else if (SRC[j] === ']') { depth--; if (depth === 0) break; }
   }
-  return 'var LEDGER_RANGES = ' + html.slice(open, j + 1) + ';';
+  return 'var LEDGER_RANGES = ' + SRC.slice(open, j + 1) + ';';
 })();
 const weekBoundsSrc = extractFn('weekBounds');
 const monthBoundsSrc = extractFn('monthBounds');
@@ -183,21 +189,21 @@ const heatLevelSrc = extractFn('heatLevel');   // stats.js 已改为 StatsPane�
 const MOODS_ANCHOR = sliceFrom('var MOODS = [');
 const MOODSSrc = (() => {
   const i = sliceFrom('var MOODS = [');
-  const open = html.indexOf('[', i);
+  const open = SRC.indexOf('[', i);
   let depth = 0, j = open;
-  for (; j < html.length; j++) {
-    if (html[j] === '[') depth++;
-    else if (html[j] === ']') { depth--; if (depth === 0) break; }
+  for (; j < SRC.length; j++) {
+    if (SRC[j] === '[') depth++;
+    else if (SRC[j] === ']') { depth--; if (depth === 0) break; }
   }
-  return 'var MOODS = ' + html.slice(open, j + 1) + ';';
+  return 'var MOODS = ' + SRC.slice(open, j + 1) + ';';
 })();
 const MOOD_MIN_DAYSSrc = (() => {
   const i = sliceFrom('var MOOD_MIN_DAYS =');
-  return html.slice(i, html.indexOf(';', i) + 1);
+  return SRC.slice(i, SRC.indexOf(';', i) + 1);
 })();
 const MOOD_CROSS_MIN_DAYSSrc = (() => {
   const i = sliceFrom('var MOOD_CROSS_MIN_DAYS =');
-  return html.slice(i, html.indexOf(';', i) + 1);
+  return SRC.slice(i, SRC.indexOf(';', i) + 1);
 })();
 const moodOfSrc = extractFnFrom('moodOf', MOODS_ANCHOR);
 const moodToneSrc = extractFnFrom('moodTone', MOODS_ANCHOR);
@@ -209,7 +215,7 @@ const diariesSortedSrc = extractFnFrom('diariesSorted', MOODS_ANCHOR);
 const SUBTASK_ANCHOR = sliceFrom('var SUBTASK_DEFAULTS = {');
 const SUBTASK_DEFAULTSSrc = (() => {
   const i = sliceFrom('var SUBTASK_DEFAULTS = {');
-  return 'var SUBTASK_DEFAULTS = ' + extractBalanced(html, html.indexOf('{', i)) + ';';
+  return 'var SUBTASK_DEFAULTS = ' + extractBalanced(SRC, SRC.indexOf('{', i)) + ';';
 })();
 const subOptsSrc = extractFnFrom('subOpts', SUBTASK_ANCHOR);
 const krProgressSrc = extractFn('krProgress');
@@ -1613,8 +1619,8 @@ console.log('Router：地址解析与拼装');
 {
   const routerSrc = (() => {
     const at = sliceFrom('Router：URL hash 深链接');
-    const aliasOpen = html.indexOf('{', html.indexOf('var ALIAS =', at));
-    const aliasSrc = 'var ALIAS = ' + extractBalanced(html, aliasOpen) + ';';
+    const aliasOpen = SRC.indexOf('{', SRC.indexOf('var ALIAS =', at));
+    const aliasSrc = 'var ALIAS = ' + extractBalanced(SRC, aliasOpen) + ';';
     const parts = ['segOf', 'parse', 'build', 'resolve'].map(n => extractFnFrom(n, at)).join('\n');
     return '(function(){' + aliasSrc + '\n' + parts + '\nreturn { parse: parse, build: build, resolve: resolve };})()';
   })();
@@ -2264,6 +2270,47 @@ console.log('\nTheme: 自然意象主题（解耦）与明日方舟主题体系'
   T.setArkTheme('roguelike');
   eq('切换后 arkTheme 为 roguelike', g.Store.state.settings.arkTheme, 'roguelike');
   eq('切换后 data-ark-theme=roguelike', rootEl['data-ark-theme'], 'roguelike');
+}
+
+/* ==========================================================
+ * 数据迁移回归：旧档（单学期 / 同名多课程 / 旧树 growth）导入后应被正确迁移。
+ * 这些迁移已拆到 store.js 的 migrate* 具名函数里，这里守住行为不回退。
+ * 注：pity6→分池、makeUp→摸鱼券 两项搬运会被 validateSchema 抢先初始化的
+ * 默认值挡住（既有缺陷，重构前后行为一致），暂不在此断言，避免把缺陷固化。
+ * ========================================================== */
+console.log('\n数据迁移: 旧档导入后的结构迁移');
+{
+  const S = await initTestStore();
+  const oldState = {
+    version: 1, model: 1,
+    semester: { name: '2025春', startDate: '2025-02-24', weeks: 18 },
+    courses: [
+      { id: 'c1', name: '高等数学', teacher: '张老师', day: 1, periodId: 'p1', location: 'A101' },
+      { id: 'c2', name: '高等数学', teacher: '张老师', day: 3, periodId: 'p2', location: 'A101' }
+    ],
+    tasks: [{ id: 't1', title: '作业', courseId: 'c2' }],
+    pomodoro: { trees: [{ id: 'tr1', growth: 130 }], gacha: { pity6: 42, ops: [], log: [] } },
+    shop: { tickets: { makeUp: 3 }, makeUpLog: ['2026-01-01'] }
+  };
+  await S.importJSON(JSON.stringify(oldState));
+  const st = S.state;
+  const tree = (st.pomodoro.trees || [])[0] || {};
+
+  // 旧树：growth 130 → 阶段 3，旧字段清掉
+  eq('旧树 growth 130 迁为阶段 3', tree.stage, 3);
+  eq('旧树迁移后 prog 归零', tree.prog, 0);
+  eq('旧树迁移后 growth 字段已删除', tree.growth, undefined);
+
+  // 学期：单个 state.semester → 学期列表
+  eq('旧档单学期迁为学期列表', st.semesters.length >= 1, true);
+  eq('学期名沿用旧值', st.semesters[0].name, '2025春');
+  eq('当前学期指向列表内存在的学期', st.semesters.some(s => s.id === st.currentSemesterId), true);
+
+  // 课程 v2：同名两条 → 一门课 + 两个时段
+  eq('同名课程合并为一门', st.courses.length, 1);
+  eq('合并后保留两个时段', (st.courses[0].slots || []).length, 2);
+  eq('合并后 model 升到 2', st.model, 2);
+  eq('被合并课程的任务关联回写主课', st.tasks[0].courseId, 'c1');
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

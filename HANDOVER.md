@@ -12,8 +12,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 文档补全 + 构建健壮性：README 新增「近期新增」章节（一键自然语言待办 / 白噪音 / 学业生活白皮书 / 全局搜索 Ctrl+K / 导航自定义 / 有效动作·全勤·摸鱼券），修正过时单测数；`build.py` 新增缺失文件清单自检（一次性列出全部缺失再中止）；同步更新本文状态 |
-| 单元测试 | `node tests/run.mjs` **746 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
+| 最后提交 | 测试与数据层健壮性：单测改为直读源码模块（不再依赖构建产物 `index.html`，产物移走仍可跑）；`ensure()` 的一次性迁移拆为 `migrateTrees` / `migratePools` / `migrateShop` / `migrateSemesters` / `migrateCourseSemester` / `migrateCoursesV2` 具名函数（对照实验确认行为等价），新增 10 条迁移回归断言 |
+| 单元测试 | `node tests/run.mjs` **756 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 746 条纯函数单测
+node tests/run.mjs              # 756 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -78,6 +78,8 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 ## 七、接下来做什么
 
 看 `ROADMAP.md`。当前明确的候选（按上一轮讨论结论）：
+
+- **（新发现，待修）旧档 `pity6` / `makeUp` 搬运失效**：`ensure()` 里「单池 pity6 → 分池」「makeUp → 摸鱼券」两处旧值搬运，会被 `validateSchema()` 抢先创建的默认值挡住——它先把 `pools.standard.pity6`、`tickets.fish` 初始化成 `0`，等迁移代码判断 `== null` 时已不成立，于是**老用户升级后保底计数与补签卡归零**。已用「重构前 vs 重构后」对照实验确认**行为一致，非本次重构引入**。修法：把这两处搬运提到 `validateSchema` 之前，或在它建空池 / 空券时先用旧值打底。
 
 - **新抽卡体系（多卡池/UP）**：**已实施**（见 `ROADMAP.md` §十一，`verify_pools.mjs`）。当时的决策记录：
   - **三个池**：标准池（轮换 UP）/ 中坚池 / 限定只出不进（不参与轮换，靠歪或定向券，UI 明示「定向券专供」）；4★/3★ 两池共用，仅 6★/5★ 分池。

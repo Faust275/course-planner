@@ -5936,6 +5936,149 @@ window.AK_OPS = [
     return out;
   }
 
+  /* ==========================================================
+   * 一次性数据迁移（与 ensure 里的「字段补齐」分开维护）
+   * 只做「旧结构 → 新结构」的转换：旧树 growth→阶段、单池 pity6→分池、
+   * makeUp→摸鱼券、单学期→学期列表、同名多课程→一门课多时段。
+   *
+   * 触发条件一律用「数据特征」判断（t.stage == null / gc.pools 不存在 / …），
+   * 不用版本号跳过——备份导入、旧档恢复随时可能发生，按版本跳过会漏迁。
+   * 代价是每次启动要空转遍历一次（树 ≤4、池 2、课程 <20），量级可忽略；
+   * 换来的是「任何来源的旧档都能被正确迁移」这个确定性。
+   * ========================================================== */
+
+  /** 旧树（按 growth 成长值）→ 新模型：阶段 + 阶段内记数 */
+  function migrateTrees(trees) {
+    (trees || []).forEach(function (t) {
+      if (t.stage != null) return;          // 已是新模型
+      var g = t.growth || 0;
+      t.stage = g >= 320 ? 5 : g >= 200 ? 4 : g >= 120 ? 3 : g >= 60 ? 2 : 1;
+      t.prog = 0;
+      t.withered = false;
+      delete t.growth;
+    });
+  }
+
+  /** 分池：旧档的单一 pity6 归入标准寻访；两池各自独立计数 */
+  function migratePools(gc) {
+    if (gc.currentPool !== 'classic') gc.currentPool = 'standard';
+    if (!gc.pools || typeof gc.pools !== 'object') {
+      gc.pools = { standard: { pity6: gc.pity6 || 0, total: 0, spark: 0, guaranteed: false } };
+    }
+    ['standard', 'classic'].forEach(function (id) {
+      var p = gc.pools[id];
+      if (!p || typeof p !== 'object') p = gc.pools[id] = { pity6: 0, total: 0, spark: 0, guaranteed: false };
+      if (p.pity6 == null) p.pity6 = 0;
+      if (p.total == null) p.total = 0;
+      if (p.spark == null) p.spark = 0;
+      if (p.guaranteed == null) p.guaranteed = false;
+    });
+  }
+
+  /** 摸鱼券：旧档的 makeUp 搬运过来，使用记录改名（调用前需已兜底 sh 对象） */
+  function migrateShop(sh) {
+    if (!sh.tickets) sh.tickets = { selection: 0, fish: 0 };
+    if (sh.tickets.fish == null) sh.tickets.fish = sh.tickets.makeUp || 0;
+    delete sh.tickets.makeUp;
+    if (!Array.isArray(sh.fishLog)) sh.fishLog = Array.isArray(sh.makeUpLog) ? sh.makeUpLog : [];
+    delete sh.makeUpLog;
+    if (!sh.validDays || typeof sh.validDays !== 'object') sh.validDays = {};
+    if (sh.growth == null) sh.growth = 0;
+    if (!sh.streak) sh.streak = { weekEnd: '', monthEnd: '' };
+  }
+
+  /** 学期列表：旧版本只有一个 state.semester，迁成列表并确定当前学期 */
+  function migrateSemesters(st, ds) {
+    if (!st.semesters || !st.semesters.length) {
+      var sid0 = uid('sem');
+      var old0 = st.semester || {};
+      st.semesters = [{
+        id: sid0,
+        name: old0.name || ds.semesters[0].name,
+        startDate: old0.startDate || ds.semesters[0].startDate,
+        weeks: old0.weeks || ds.semesters[0].weeks
+      }];
+      st.currentSemesterId = sid0;
+    }
+    var hasCur = st.semesters.some(function (x) { return x.id === st.currentSemesterId; });
+    if (!hasCur) st.currentSemesterId = st.semesters[0].id;
+  }
+
+  /** 老课程没有学期归属，归到当前学期 */
+  function migrateCourseSemester(st) {
+    var curSem = st.currentSemesterId;
+    st.courses.forEach(function (c) { if (!c.semesterId) c.semesterId = curSem; });
+  }
+
+  /**
+   * 数据模型 v2：旧版「同名多条课程」合并为「一门课 + 多时段 slots」。
+   * 只在 model < 2 时执行，跑完置 model = 2，之后不再进入。
+   */
+  function migrateCoursesV2(st) {
+    if (st.model >= 2) return;
+    // 1) 每条旧记录先补一个 slots（取其顶层 day/periodId/时间/地点）
+    st.courses.forEach(function (c) {
+      if (!c.slots || !c.slots.length) {
+        var cm = c.timeMode === 'custom';
+        c.slots = [{
+          day: c.day || 1,
+          timeMode: cm ? 'custom' : 'period',
+          periodId: cm ? '' : (c.periodId || ''),
+          startTime: cm ? (c.startTime || '') : '',
+          endTime: cm ? (c.endTime || '') : '',
+          location: c.location || ''
+        }];
+      }
+    });
+    // 2) 按「学期 + 课程名 + 老师」分组
+    var _groups = {}, _order = [];
+    st.courses.forEach(function (c) {
+      var key = [c.semesterId || '', c.name || '', c.teacher || ''].join('\u0001');
+      if (!_groups[key]) { _groups[key] = []; _order.push(key); }
+      _groups[key].push(c);
+    });
+    // 3) 每组合并为一门主课，收集去重后的 slots
+    var _idMap = {}, _merged = [];
+    _order.forEach(function (key) {
+      var list = _groups[key], main = list[0];
+      var seen = {}, slots = [];
+      list.forEach(function (c) {
+        (c.slots || []).forEach(function (s) {
+          var sk = (s.day || 1) + '|' + (s.timeMode === 'custom'
+            ? (s.startTime + '-' + s.endTime)
+            : (s.periodId || ''));
+          if (seen[sk]) return;
+          seen[sk] = 1;
+          slots.push({
+            day: s.day || 1,
+            timeMode: s.timeMode === 'custom' ? 'custom' : 'period',
+            periodId: s.timeMode === 'custom' ? '' : (s.periodId || ''),
+            startTime: s.timeMode === 'custom' ? (s.startTime || '') : '',
+            endTime: s.timeMode === 'custom' ? (s.endTime || '') : '',
+            location: s.location || c.location || ''
+          });
+        });
+        if (c !== main) _idMap[c.id] = main.id;
+      });
+      main.slots = slots;
+      // 4) 顶层字段镜像 slots[0]，保证旧代码/旧同步码仍可读
+      var s0 = slots[0] || {};
+      main.day = s0.day || 1;
+      main.timeMode = s0.timeMode || 'period';
+      main.periodId = s0.periodId || '';
+      main.startTime = s0.startTime || '';
+      main.endTime = s0.endTime || '';
+      main.location = s0.location || main.location || '';
+      _merged.push(main);
+    });
+    st.courses = _merged;
+    // 5) 被合并掉的旧 id → 主课 id，回写任务关联
+    Object.keys(_idMap).forEach(function (oldId) {
+      st.tasks.forEach(function (t) { if (t.courseId === oldId) t.courseId = _idMap[oldId]; });
+    });
+    st.model = 2;
+  }
+
   /** 时间工具：HH:MM <-> 分钟 */
   var TimeUtil = {
     toMin: function (hhmm) {
@@ -7678,16 +7821,7 @@ window.AK_OPS = [
       if (state.pomodoro.harvested == null) state.pomodoro.harvested = 0;
       if (!state.pomodoro.selectedSpecies) state.pomodoro.selectedSpecies = 'camphor';
       if (!state.pomodoro.timer.treeId) state.pomodoro.timer.treeId = '';
-      // 旧树（按 growth 成长值）迁移为新模型：阶段 + 阶段内记数
-      (state.pomodoro.trees || []).forEach(function (t) {
-        if (t.stage == null) {
-          var g = t.growth || 0;
-          t.stage = g >= 320 ? 5 : g >= 200 ? 4 : g >= 120 ? 3 : g >= 60 ? 2 : 1;
-          t.prog = 0;
-          t.withered = false;
-          delete t.growth;
-        }
-      });
+      migrateTrees(state.pomodoro.trees);      // 旧树 growth → 阶段模型
       if (!state.pomodoro.gacha || typeof state.pomodoro.gacha !== 'object') {
         state.pomodoro.gacha = { pity6: 0, total: 0, ops: [], log: [] };
       }
@@ -7698,31 +7832,11 @@ window.AK_OPS = [
       if (gc.total == null) gc.total = 0;
       if (gc.streakNo6 == null) gc.streakNo6 = 0;
       if (gc.streakNo5 == null) gc.streakNo5 = 0;
-      // 分池：旧档的单一 pity6 归入标准寻访；两个池各自独立计数
-      if (gc.currentPool !== 'classic') gc.currentPool = 'standard';
-      if (!gc.pools || typeof gc.pools !== 'object') {
-        gc.pools = { standard: { pity6: gc.pity6 || 0, total: 0, spark: 0, guaranteed: false } };
-      }
-      ['standard', 'classic'].forEach(function (id) {
-        var p = gc.pools[id];
-        if (!p || typeof p !== 'object') p = gc.pools[id] = { pity6: 0, total: 0, spark: 0, guaranteed: false };
-        if (p.pity6 == null) p.pity6 = 0;
-        if (p.total == null) p.total = 0;
-        if (p.spark == null) p.spark = 0;
-        if (p.guaranteed == null) p.guaranteed = false;
-      });
-      // 摸鱼券：旧档的 makeUp 搬运过来，使用记录改名
+      migratePools(gc);                        // 单池 pity6 → 标准/中坚分池
       // shop 兜底必须放在取值之前：导入/恢复路径可能带着没有 shop 的对象进来
       if (!state.shop || typeof state.shop !== 'object') state.shop = {};
       var sh = state.shop;
-      if (!sh.tickets) sh.tickets = { selection: 0, fish: 0 };
-      if (sh.tickets.fish == null) sh.tickets.fish = sh.tickets.makeUp || 0;
-      delete sh.tickets.makeUp;
-      if (!Array.isArray(sh.fishLog)) sh.fishLog = Array.isArray(sh.makeUpLog) ? sh.makeUpLog : [];
-      delete sh.makeUpLog;
-      if (!sh.validDays || typeof sh.validDays !== 'object') sh.validDays = {};
-      if (sh.growth == null) sh.growth = 0;
-      if (!sh.streak) sh.streak = { weekEnd: '', monthEnd: '' };
+      migrateShop(sh);                         // makeUp → 摸鱼券，旧使用记录改名
       // 限定井：登记目标 + 累计抽数（与 UP 井双计，但不叠加使用）
       if (!gc.limited || typeof gc.limited !== 'object') gc.limited = { target: '', count: 0 };
       if (gc.limited.target == null) gc.limited.target = '';
@@ -7765,89 +7879,10 @@ window.AK_OPS = [
       if (!state.taskSeq) state.taskSeq = {};
       if (!state.periods || !state.periods.length) state.periods = ds.periods;
 
-      // 学期列表（旧版本只有一个 state.semester，迁过来）
-      if (!state.semesters || !state.semesters.length) {
-        var sid0 = uid('sem');
-        var old0 = state.semester || {};
-        state.semesters = [{
-          id: sid0,
-          name: old0.name || ds.semesters[0].name,
-          startDate: old0.startDate || ds.semesters[0].startDate,
-          weeks: old0.weeks || ds.semesters[0].weeks
-        }];
-        state.currentSemesterId = sid0;
-      }
-      var hasCur = state.semesters.some(function (x) { return x.id === state.currentSemesterId; });
-      if (!hasCur) state.currentSemesterId = state.semesters[0].id;
+      migrateSemesters(state, ds);      // 单学期 → 学期列表
+      migrateCourseSemester(state);     // 老课程补学期归属
 
-      // 老课程没有学期归属，归到当前学期
-      var curSem = state.currentSemesterId;
-      state.courses.forEach(function (c) { if (!c.semesterId) c.semesterId = curSem; });
-
-      // —— 数据模型 v2：把旧版「同名多条课程」合并为「一门课 + 多时段 slots」——
-      if (!state.model || state.model < 2) {
-        // 1) 每条旧记录先补一个 slots（取其顶层 day/periodId/时间/地点）
-        state.courses.forEach(function (c) {
-          if (!c.slots || !c.slots.length) {
-            var cm = c.timeMode === 'custom';
-            c.slots = [{
-              day: c.day || 1,
-              timeMode: cm ? 'custom' : 'period',
-              periodId: cm ? '' : (c.periodId || ''),
-              startTime: cm ? (c.startTime || '') : '',
-              endTime: cm ? (c.endTime || '') : '',
-              location: c.location || ''
-            }];
-          }
-        });
-        // 2) 按「学期 + 课程名 + 老师」分组
-        var _groups = {}, _order = [];
-        state.courses.forEach(function (c) {
-          var key = [c.semesterId || '', c.name || '', c.teacher || ''].join('\u0001');
-          if (!_groups[key]) { _groups[key] = []; _order.push(key); }
-          _groups[key].push(c);
-        });
-        // 3) 每组合并为一门主课，收集去重后的 slots
-        var _idMap = {}, _merged = [];
-        _order.forEach(function (key) {
-          var list = _groups[key], main = list[0];
-          var seen = {}, slots = [];
-          list.forEach(function (c) {
-            (c.slots || []).forEach(function (s) {
-              var sk = (s.day || 1) + '|' + (s.timeMode === 'custom'
-                ? (s.startTime + '-' + s.endTime)
-                : (s.periodId || ''));
-              if (seen[sk]) return;
-              seen[sk] = 1;
-              slots.push({
-                day: s.day || 1,
-                timeMode: s.timeMode === 'custom' ? 'custom' : 'period',
-                periodId: s.timeMode === 'custom' ? '' : (s.periodId || ''),
-                startTime: s.timeMode === 'custom' ? (s.startTime || '') : '',
-                endTime: s.timeMode === 'custom' ? (s.endTime || '') : '',
-                location: s.location || c.location || ''
-              });
-            });
-            if (c !== main) _idMap[c.id] = main.id;
-          });
-          main.slots = slots;
-          // 4) 顶层字段镜像 slots[0]，保证旧代码/旧同步码仍可读
-          var s0 = slots[0] || {};
-          main.day = s0.day || 1;
-          main.timeMode = s0.timeMode || 'period';
-          main.periodId = s0.periodId || '';
-          main.startTime = s0.startTime || '';
-          main.endTime = s0.endTime || '';
-          main.location = s0.location || main.location || '';
-          _merged.push(main);
-        });
-        state.courses = _merged;
-        // 5) 被合并掉的旧 id → 主课 id，回写任务关联
-        Object.keys(_idMap).forEach(function (oldId) {
-          state.tasks.forEach(function (t) { if (t.courseId === oldId) t.courseId = _idMap[oldId]; });
-        });
-        state.model = 2;
-      }
+      migrateCoursesV2(state);          // 同名多条课程 → 一门课 + 多时段 slots
 
       // 成绩按学期归档
       if (!state.grades || typeof state.grades !== 'object') state.grades = {};
