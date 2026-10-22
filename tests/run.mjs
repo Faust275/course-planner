@@ -108,7 +108,14 @@ const lunarIiFE = (() => {
   return html.slice(i, html.indexOf('\n', j) + 1);
 })();
 const lunarWin = {};
-new Function('window', lunarIiFE)(lunarWin);
+// lunar.js 现依赖共享工具 UI.b64ToBytes（见 ui.js），单测隔离环境需注入等价实现
+const b64ToBytesForTest = function (b64) {
+  var bin = atob(String(b64 == null ? '' : b64).replace(/\s+/g, ''));
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+};
+new Function('window', 'UI', lunarIiFE)(lunarWin, { b64ToBytes: b64ToBytesForTest });
 const Lunar = lunarWin.Lunar;
 
 // 10) 纪念日顺延（store.js，依赖 DateUtil + global.Lunar）

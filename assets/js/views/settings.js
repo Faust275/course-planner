@@ -1950,13 +1950,6 @@
   }
 
   /** base64 → 字节（仅用于兼容旧版 CP1G/CP1R 同步码解码） */
-  function b64ToBytes(b64) {
-    var bin = atob(String(b64).replace(/\s+/g, ''));
-    var out = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-
   /** 同步内容 → 备份 JSON（兼容：纯 JSON 文本 / 旧版 CP1G/CP1R 同步码） */
   function unpackSync(text) {
     var s = String(text || '').trim();
@@ -1965,7 +1958,7 @@
 
     var head = s.slice(0, 4), body = s.slice(4);
     var bytes;
-    try { bytes = b64ToBytes(body); } catch (e) { return Promise.reject(new Error('同步内容不完整或已损坏')); }
+    try { bytes = UI.b64ToBytes(body); } catch (e) { return Promise.reject(new Error('同步内容不完整或已损坏')); }
     var txt;
     if (head === 'CP1R') {
       txt = new TextDecoder().decode(bytes);

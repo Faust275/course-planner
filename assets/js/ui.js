@@ -759,9 +759,17 @@
     });
   }
 
+  /* ---------- 共享：base64 → 字节（settings 同步 与 lunar 农历数据 共用，避免两份实现） ---------- */
+  function b64ToBytes(b64) {
+    var bin = atob(String(b64 == null ? '' : b64).replace(/\s+/g, ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
   global.UI = {
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
-    $: $, $$: $$, escapeHTML: escapeHTML,
+    $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,

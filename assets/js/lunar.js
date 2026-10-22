@@ -41,26 +41,6 @@
   /* ---------- 解码（惰性，只做一次） ---------- */
   var cache = null;
 
-  function b64ToBytes(str) {
-    var CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    var map = {};
-    for (var i = 0; i < CH.length; i++) map[CH[i]] = i;
-    var out = [];
-    var buf = 0, bits = 0;
-    for (var k = 0; k < str.length; k++) {
-      var c = str[k];
-      if (c === '=') break;
-      if (map[c] === undefined) continue;
-      buf = (buf << 6) | map[c];
-      bits += 6;
-      if (bits >= 8) {
-        bits -= 8;
-        out.push((buf >> bits) & 0xff);
-      }
-    }
-    return out;
-  }
-
   /**
    * 解出农历表。
    * @returns { baseOff, lens, leap, monthStarts }
@@ -72,7 +52,7 @@
   function decode() {
     if (cache) return cache;
 
-    var bytes = b64ToBytes(LUNAR_B64);
+    var bytes = UI.b64ToBytes(LUNAR_B64);
     var baseOff = (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
     var pad = bytes[3] || 0;
 
