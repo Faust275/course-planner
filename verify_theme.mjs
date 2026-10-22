@@ -17,6 +17,7 @@ await p.goto(BASE, { waitUntil: 'networkidle' });
 await p.waitForTimeout(650);
 await p.evaluate(() => { const e = document.querySelector('.cp-ob-skip, .ob-skip'); if (e) e.click(); });
 await p.waitForTimeout(300);
+await p.evaluate(() => Store.setGachaEnabled(true));   // 本测试专验机制皮肤（含抽卡），先开启抽卡系统
 
 const read = () => p.evaluate(() => ({
   skin: Store.state.settings.themeSkin,

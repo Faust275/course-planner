@@ -13,6 +13,7 @@
   var selected = null;   // 选中日期 YYYY-MM-DD
   var onlyMine = false;  // 是否只看有内容的日子（预留）
   var calTab = 'calendar';   // 分页：calendar 日历 / agenda 日程（日程来自 agenda.js 的 AgendaPane）
+  var COURSE_COLOR = '#0ea5e9';   // 时间块里课程统一显示为该色（与「学习/课程」主色一致），不再用每门课各自颜色
 
   function today0() { return DateUtil.today(); }
 
@@ -315,7 +316,7 @@
           if (global.__CourseDialog) global.__CourseDialog.detail(c.id);
         } }, [
           el('span', { class: 'cal-time', text: t ? t.start : '--:--' }),
-          el('i', { class: 'cal-color', style: { background: c.color } }),
+          el('i', { class: 'cal-color', style: { background: COURSE_COLOR } }),
           el('span', {
             class: 'cal-name',
             text: c.name + (c.location ? ' · ' + c.location : '') +
@@ -408,7 +409,7 @@
     Store.coursesOnDate(ds).forEach(function (c) {
       var t = Store.courseTime(c);
       if (t && t.start && t.end) {
-        paintRange(slots, t.start, t.end, { kind: 'course', color: c.color, label: c.name });
+        paintRange(slots, t.start, t.end, { kind: 'course', color: COURSE_COLOR, label: c.name });
       }
     });
 
@@ -606,7 +607,7 @@
       }),
       el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#6366f1' } }), '睡眠']),
       el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#ef4444' } }), '用餐']),
-      el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#cbd5e1' } }), '课程'])
+      el('span', { class: 'tb-lg' }, [el('i', { style: { background: COURSE_COLOR } }), '课程'])
     ]));
     wrap.appendChild(el('div', { class: 'tb-acts' }, [
       el('button', { class: 'btn btn-sm', onclick: clearAll }, ['清空这天的时间块'])

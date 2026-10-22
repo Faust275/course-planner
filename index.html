@@ -5446,6 +5446,7 @@ window.AK_OPS = [
                tasks: true, pomodoro: true, settings: true },
         navOrder: [],   // 自定义模块顺序（空 = 用默认顺序）
         ui: { sidebarMini: false },   // 桌面侧边栏是否折叠成图标条
+        devArknights: false,         // 开发者选项：输入「明日方舟」开启抽卡系统；默认关闭（仅种树）
         tagMeta: {},    // 标签自定义图标与颜色：{ '学习': {icon:'book', color:'#4f46e5'} }
         fav: { poems: [], words: [] },   // 收藏的每日一句（索引）与每日一词（单词）
         diet: {            // 每日热量目标与三餐配比
@@ -7003,6 +7004,8 @@ window.AK_OPS = [
       if (typeof state.settings.themeSkinAuto !== 'boolean') state.settings.themeSkinAuto = true;
       if (['auto', 'light', 'dark'].indexOf(state.settings.themeMode) < 0) state.settings.themeMode = 'auto';
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
+      if (typeof state.settings.devArknights !== 'boolean') state.settings.devArknights = false;
+      if (!state.settings.devArknights && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
       if (!state.settings.ocr) state.settings.ocr = ds.settings.ocr;
       var defNav = ds.settings.nav;
       Object.keys(defNav).forEach(function (k) {
@@ -8813,8 +8816,25 @@ window.AK_OPS = [
       return pm.mode === 'gacha' ? pm.jade : pm.points;
     },
 
-    /** 切换奖励机制（余额各自保留，总量不变） */
+    /** 抽卡系统是否开启（开发者选项「明日方舟」开启；默认关闭，仅种树） */
+    gachaEnabled: function () {
+      return !!(state.settings && state.settings.devArknights);
+    },
+
+    /** 开发者选项：setGachaEnabled(true) 开启抽卡；false 关闭并切回森林 */
+    setGachaEnabled: function (on) {
+      on = !!on;
+      state.settings.devArknights = on;
+      if (!on && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
+      this.save();
+      this.emit();
+      if (typeof App !== 'undefined' && App.rebuildNav) App.rebuildNav();
+      return on;
+    },
+
+    /** 切换奖励机制（余额各自保留，总量不变）；抽卡未开启时拒绝切到 gacha */
     setRewardMode: function (mode) {
+      if (mode === 'gacha' && !this.gachaEnabled()) return state.pomodoro.mode;
       var pm = state.pomodoro;
       pm.mode = (mode === 'gacha') ? 'gacha' : 'forest';
       this.emit();
@@ -16587,7 +16607,7 @@ window.AK_OPS = [
 
       /* ---------- 奖励区：森林 或 干员展示 ---------- */
       var rewardBlock = null;
-      if (Store.pomodoro.mode === 'gacha' && global.Gacha) {
+      if (Store.gachaEnabled() && Store.pomodoro.mode === 'gacha' && global.Gacha) {
         rewardBlock = gachaBlock();
       } else if (global.TreeArt) {
         var fm = el('div', { style: { marginTop: '18px' } });
@@ -16685,7 +16705,7 @@ window.AK_OPS = [
       Gacha.jadeTag(pm.jade),
       el('span', {
         class: 'gh-sub',
-        text: '≈ ' + (Math.round(pm.jade / POMO.JADE_PER_POINT * 10) / 10) +
+        text: '≈ ' + Math.round(pm.jade / POMO.JADE_PER_POINT) +
               ' 积分 · 可抽 ' + Math.floor(pm.jade / POMO.PULL_COST) + ' 次'
       }),
       el('button', {
@@ -16952,6 +16972,7 @@ window.AK_OPS = [
   var selected = null;   // 选中日期 YYYY-MM-DD
   var onlyMine = false;  // 是否只看有内容的日子（预留）
   var calTab = 'calendar';   // 分页：calendar 日历 / agenda 日程（日程来自 agenda.js 的 AgendaPane）
+  var COURSE_COLOR = '#0ea5e9';   // 时间块里课程统一显示为该色（与「学习/课程」主色一致），不再用每门课各自颜色
 
   function today0() { return DateUtil.today(); }
 
@@ -17254,7 +17275,7 @@ window.AK_OPS = [
           if (global.__CourseDialog) global.__CourseDialog.detail(c.id);
         } }, [
           el('span', { class: 'cal-time', text: t ? t.start : '--:--' }),
-          el('i', { class: 'cal-color', style: { background: c.color } }),
+          el('i', { class: 'cal-color', style: { background: COURSE_COLOR } }),
           el('span', {
             class: 'cal-name',
             text: c.name + (c.location ? ' · ' + c.location : '') +
@@ -17347,7 +17368,7 @@ window.AK_OPS = [
     Store.coursesOnDate(ds).forEach(function (c) {
       var t = Store.courseTime(c);
       if (t && t.start && t.end) {
-        paintRange(slots, t.start, t.end, { kind: 'course', color: c.color, label: c.name });
+        paintRange(slots, t.start, t.end, { kind: 'course', color: COURSE_COLOR, label: c.name });
       }
     });
 
@@ -17545,7 +17566,7 @@ window.AK_OPS = [
       }),
       el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#6366f1' } }), '睡眠']),
       el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#ef4444' } }), '用餐']),
-      el('span', { class: 'tb-lg' }, [el('i', { style: { background: '#cbd5e1' } }), '课程'])
+      el('span', { class: 'tb-lg' }, [el('i', { style: { background: COURSE_COLOR } }), '课程'])
     ]));
     wrap.appendChild(el('div', { class: 'tb-acts' }, [
       el('button', { class: 'btn btn-sm', onclick: clearAll }, ['清空这天的时间块'])
@@ -24686,7 +24707,7 @@ window.AK_OPS = [
     nav: true,
 
     root: null,
-    tab: 'ops',   // ops 干员图鉴 / forest 我的森林
+    tab: 'forest',   // ops 干员图鉴 / forest 我的森林（加载期不读 Store，避免 state 未就绪；进入时再按开关/模式判定）
 
     mount: function (host) {
       this.root = el('section', { class: 'view', id: 'view-collection' });
@@ -24695,7 +24716,15 @@ window.AK_OPS = [
       return this.root;
     },
 
-    onEnter: function () { this.render(); },
+    onEnter: function () {
+      // 进入时按「是否开启抽卡 + 当前机制模式」决定默认分页
+      if (Store.gachaEnabled() && Store.pomodoro.mode === 'gacha') {
+        if (this.tab !== 'ops' && this.tab !== 'forest') this.tab = 'ops';
+      } else {
+        this.tab = 'forest';
+      }
+      this.render();
+    },
 
     onLeave: function () { /* 无需处理 */ },
 
@@ -24707,11 +24736,15 @@ window.AK_OPS = [
       var s = Store.gachaStats();
       var pm = Store.pomodoro;
       var isForest = pm.mode === 'forest';
-      if (isForest && this.tab === 'ops') this.tab = 'forest';
+      var gachaOn = Store.gachaEnabled();
+      if (this.tab === 'ops' && (isForest || !gachaOn)) this.tab = 'forest';
       var done = 0;
       Store.achievementList().forEach(function (a) {
-        // 抽卡 / 集卡 未解锁的成就不在总数里计入（其本身也隐藏）
-        if ((a.group === '抽卡' || a.group === '集卡') && !Store.isAchieved(a)) return;
+        // 抽卡 / 集卡 成就：未开启抽卡时整体隐藏；开启后未解锁的也不计入总数
+        if (a.group === '抽卡' || a.group === '集卡') {
+          if (!gachaOn) return;
+          if (!Store.isAchieved(a)) return;
+        }
         if (Store.isAchieved(a)) done++;
       });
 
@@ -24725,7 +24758,7 @@ window.AK_OPS = [
       }
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
-        (!isForest) ? el('button', {
+        (gachaOn && !isForest) ? el('button', {
           class: 'gacha-tab' + (this.tab === 'ops' ? ' active' : ''),
           text: '干员图鉴 ' + s.owned + '/' + s.total,
           onclick: function () { self.tab = 'ops'; self.render(); }
@@ -24936,7 +24969,7 @@ window.AK_OPS = [
           text: '暂无待兑换的重复干员。抽到满潜（6 份）之后，多余的复制会存到这里。'
         }));
       }
-      wrap.appendChild(exBox);
+      if (Store.gachaEnabled()) wrap.appendChild(exBox);
 
       /* ---- 摸鱼券 / 全勤（人人可得）---- */
       (function () {
@@ -27591,26 +27624,37 @@ window.AK_OPS = [
           el('div', { class: 'section-title' }, ['开发者选项']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
-            text: '仅供调试种树与奖励机制使用。输入正确口令并点击按钮，可一次性发放 100000 养分（积分）。'
+            text: '仅供调试种树与奖励机制使用。口令：『我已经太烧了』一次性发放 100000 养分；『明日方舟』开启抽卡系统（含寻访/干员图鉴/抽卡商店），『关闭抽卡』恢复为仅种树。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
             devInput,
             el('button', {
               class: 'btn btn-primary',
               onclick: function () {
-                if (String(devInput.value || '').trim() !== '我已经太烧了') {
+                var pwd = String(devInput.value || '').trim();
+                if (pwd === '我已经太烧了') {
+                  var G = 100000;
+                  var pm = Store.state.pomodoro;
+                  pm.points += G;
+                  pm.earned += G;
+                  Store.emit();
+                  UI.toast('已发放 ' + G + ' 养分');
+                  view.render();
+                } else if (pwd === '明日方舟') {
+                  Store.setGachaEnabled(true);
+                  UI.toast('已开启抽卡系统');
+                  if (global.App) App.rebuildNav();
+                  view.render();
+                } else if (pwd === '关闭抽卡') {
+                  Store.setGachaEnabled(false);
+                  UI.toast('已关闭抽卡系统，仅保留种树');
+                  if (global.App) App.rebuildNav();
+                  view.render();
+                } else {
                   UI.toast('口令不正确', 'err');
-                  return;
                 }
-                var G = 100000;
-                var pm = Store.state.pomodoro;
-                pm.points += G;
-                pm.earned += G;
-                Store.emit();
-                UI.toast('已发放 ' + G + ' 养分');
-                view.render();
               }
-            }, ['发放养分'])
+            }, ['执行'])
           ])
         ]);
         root.appendChild(devCard);
@@ -29267,6 +29311,8 @@ window.AK_OPS = [
    * ========================================================== */
   function renderRewardPage(root) {
     var pm = Store.pomodoro;
+    var gachaOn = Store.gachaEnabled();
+    if (!gachaOn && pm.mode === 'gacha') { Store.setRewardMode('forest'); pm = Store.pomodoro; }
     var mode = pm.mode;
 
     var pickCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
@@ -29281,13 +29327,13 @@ window.AK_OPS = [
         k: 'forest', name: '森林', icon: V.icons.tree || V.icons.idea, color: '#4c8c4a',
         desc: '用积分种树、浇水，看着森林一天天长起来',
         bal: pm.points + ' 积分'
-      },
-      {
-        k: 'gacha', name: '抽卡寻访', icon: V.icons.jade, color: '#00a89a',
-        desc: '攒合成玉寻访明日方舟干员，主页展示已获得的角色',
-        bal: pm.jade + ' 合成玉'
       }
     ];
+    if (gachaOn) opts.push({
+      k: 'gacha', name: '抽卡寻访', icon: V.icons.jade, color: '#00a89a',
+      desc: '攒合成玉寻访明日方舟干员，主页展示已获得的角色',
+      bal: pm.jade + ' 合成玉'
+    });
 
     var gridBox = el('div', { class: 'reward-grid' });
     opts.forEach(function (o) {
@@ -29319,11 +29365,11 @@ window.AK_OPS = [
         el('b', { text: String(pm.points) }),
         el('span', { text: '森林积分' })
       ]),
-      el('span', { class: 'rwb-plus', text: '｜' }),
-      el('div', { class: 'rwb-item' }, [
+      gachaOn ? el('span', { class: 'rwb-plus', text: '｜' }) : null,
+      gachaOn ? el('div', { class: 'rwb-item' }, [
         el('b', { text: String(pm.jade) }),
         el('span', { text: '合成玉' })
-      ])
+      ]) : null
     ]));
     pickCard.appendChild(el('p', {
       class: 'ocr-hint', style: { marginBottom: '0' },

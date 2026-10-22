@@ -16,6 +16,7 @@ await p.goto(BASE, { waitUntil: 'networkidle' });
 await p.waitForTimeout(650);
 await p.evaluate(() => { const e = document.querySelector('.cp-ob-skip, .ob-skip'); if (e) e.click(); });
 await p.waitForTimeout(300);
+await p.evaluate(() => Store.setGachaEnabled(true));   // 本测试专验装饰层（含抽卡工厂皮肤），先开启抽卡系统
 
 const decoState = () => p.evaluate(() => {
   const t = document.querySelector('.cp-deco .deco-tree');

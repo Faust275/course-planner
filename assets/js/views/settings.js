@@ -1424,26 +1424,37 @@
           el('div', { class: 'section-title' }, ['开发者选项']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
-            text: '仅供调试种树与奖励机制使用。输入正确口令并点击按钮，可一次性发放 100000 养分（积分）。'
+            text: '仅供调试种树与奖励机制使用。口令：『我已经太烧了』一次性发放 100000 养分；『明日方舟』开启抽卡系统（含寻访/干员图鉴/抽卡商店），『关闭抽卡』恢复为仅种树。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } }, [
             devInput,
             el('button', {
               class: 'btn btn-primary',
               onclick: function () {
-                if (String(devInput.value || '').trim() !== '我已经太烧了') {
+                var pwd = String(devInput.value || '').trim();
+                if (pwd === '我已经太烧了') {
+                  var G = 100000;
+                  var pm = Store.state.pomodoro;
+                  pm.points += G;
+                  pm.earned += G;
+                  Store.emit();
+                  UI.toast('已发放 ' + G + ' 养分');
+                  view.render();
+                } else if (pwd === '明日方舟') {
+                  Store.setGachaEnabled(true);
+                  UI.toast('已开启抽卡系统');
+                  if (global.App) App.rebuildNav();
+                  view.render();
+                } else if (pwd === '关闭抽卡') {
+                  Store.setGachaEnabled(false);
+                  UI.toast('已关闭抽卡系统，仅保留种树');
+                  if (global.App) App.rebuildNav();
+                  view.render();
+                } else {
                   UI.toast('口令不正确', 'err');
-                  return;
                 }
-                var G = 100000;
-                var pm = Store.state.pomodoro;
-                pm.points += G;
-                pm.earned += G;
-                Store.emit();
-                UI.toast('已发放 ' + G + ' 养分');
-                view.render();
               }
-            }, ['发放养分'])
+            }, ['执行'])
           ])
         ]);
         root.appendChild(devCard);
@@ -3100,6 +3111,8 @@
    * ========================================================== */
   function renderRewardPage(root) {
     var pm = Store.pomodoro;
+    var gachaOn = Store.gachaEnabled();
+    if (!gachaOn && pm.mode === 'gacha') { Store.setRewardMode('forest'); pm = Store.pomodoro; }
     var mode = pm.mode;
 
     var pickCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
@@ -3114,13 +3127,13 @@
         k: 'forest', name: '森林', icon: V.icons.tree || V.icons.idea, color: '#4c8c4a',
         desc: '用积分种树、浇水，看着森林一天天长起来',
         bal: pm.points + ' 积分'
-      },
-      {
-        k: 'gacha', name: '抽卡寻访', icon: V.icons.jade, color: '#00a89a',
-        desc: '攒合成玉寻访明日方舟干员，主页展示已获得的角色',
-        bal: pm.jade + ' 合成玉'
       }
     ];
+    if (gachaOn) opts.push({
+      k: 'gacha', name: '抽卡寻访', icon: V.icons.jade, color: '#00a89a',
+      desc: '攒合成玉寻访明日方舟干员，主页展示已获得的角色',
+      bal: pm.jade + ' 合成玉'
+    });
 
     var gridBox = el('div', { class: 'reward-grid' });
     opts.forEach(function (o) {
@@ -3152,11 +3165,11 @@
         el('b', { text: String(pm.points) }),
         el('span', { text: '森林积分' })
       ]),
-      el('span', { class: 'rwb-plus', text: '｜' }),
-      el('div', { class: 'rwb-item' }, [
+      gachaOn ? el('span', { class: 'rwb-plus', text: '｜' }) : null,
+      gachaOn ? el('div', { class: 'rwb-item' }, [
         el('b', { text: String(pm.jade) }),
         el('span', { text: '合成玉' })
-      ])
+      ]) : null
     ]));
     pickCard.appendChild(el('p', {
       class: 'ocr-hint', style: { marginBottom: '0' },

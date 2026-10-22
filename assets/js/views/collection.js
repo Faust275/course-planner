@@ -31,7 +31,7 @@
     nav: true,
 
     root: null,
-    tab: 'ops',   // ops 干员图鉴 / forest 我的森林
+    tab: 'forest',   // ops 干员图鉴 / forest 我的森林（加载期不读 Store，避免 state 未就绪；进入时再按开关/模式判定）
 
     mount: function (host) {
       this.root = el('section', { class: 'view', id: 'view-collection' });
@@ -40,7 +40,15 @@
       return this.root;
     },
 
-    onEnter: function () { this.render(); },
+    onEnter: function () {
+      // 进入时按「是否开启抽卡 + 当前机制模式」决定默认分页
+      if (Store.gachaEnabled() && Store.pomodoro.mode === 'gacha') {
+        if (this.tab !== 'ops' && this.tab !== 'forest') this.tab = 'ops';
+      } else {
+        this.tab = 'forest';
+      }
+      this.render();
+    },
 
     onLeave: function () { /* 无需处理 */ },
 
@@ -52,11 +60,15 @@
       var s = Store.gachaStats();
       var pm = Store.pomodoro;
       var isForest = pm.mode === 'forest';
-      if (isForest && this.tab === 'ops') this.tab = 'forest';
+      var gachaOn = Store.gachaEnabled();
+      if (this.tab === 'ops' && (isForest || !gachaOn)) this.tab = 'forest';
       var done = 0;
       Store.achievementList().forEach(function (a) {
-        // 抽卡 / 集卡 未解锁的成就不在总数里计入（其本身也隐藏）
-        if ((a.group === '抽卡' || a.group === '集卡') && !Store.isAchieved(a)) return;
+        // 抽卡 / 集卡 成就：未开启抽卡时整体隐藏；开启后未解锁的也不计入总数
+        if (a.group === '抽卡' || a.group === '集卡') {
+          if (!gachaOn) return;
+          if (!Store.isAchieved(a)) return;
+        }
         if (Store.isAchieved(a)) done++;
       });
 
@@ -70,7 +82,7 @@
       }
 
       var tabs = el('div', { class: 'gacha-tabs' }, [
-        (!isForest) ? el('button', {
+        (gachaOn && !isForest) ? el('button', {
           class: 'gacha-tab' + (this.tab === 'ops' ? ' active' : ''),
           text: '干员图鉴 ' + s.owned + '/' + s.total,
           onclick: function () { self.tab = 'ops'; self.render(); }
@@ -281,7 +293,7 @@
           text: '暂无待兑换的重复干员。抽到满潜（6 份）之后，多余的复制会存到这里。'
         }));
       }
-      wrap.appendChild(exBox);
+      if (Store.gachaEnabled()) wrap.appendChild(exBox);
 
       /* ---- 摸鱼券 / 全勤（人人可得）---- */
       (function () {

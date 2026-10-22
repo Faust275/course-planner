@@ -186,6 +186,7 @@
                tasks: true, pomodoro: true, settings: true },
         navOrder: [],   // 自定义模块顺序（空 = 用默认顺序）
         ui: { sidebarMini: false },   // 桌面侧边栏是否折叠成图标条
+        devArknights: false,         // 开发者选项：输入「明日方舟」开启抽卡系统；默认关闭（仅种树）
         tagMeta: {},    // 标签自定义图标与颜色：{ '学习': {icon:'book', color:'#4f46e5'} }
         fav: { poems: [], words: [] },   // 收藏的每日一句（索引）与每日一词（单词）
         diet: {            // 每日热量目标与三餐配比
@@ -1743,6 +1744,8 @@
       if (typeof state.settings.themeSkinAuto !== 'boolean') state.settings.themeSkinAuto = true;
       if (['auto', 'light', 'dark'].indexOf(state.settings.themeMode) < 0) state.settings.themeMode = 'auto';
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
+      if (typeof state.settings.devArknights !== 'boolean') state.settings.devArknights = false;
+      if (!state.settings.devArknights && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
       if (!state.settings.ocr) state.settings.ocr = ds.settings.ocr;
       var defNav = ds.settings.nav;
       Object.keys(defNav).forEach(function (k) {
@@ -3553,8 +3556,25 @@
       return pm.mode === 'gacha' ? pm.jade : pm.points;
     },
 
-    /** 切换奖励机制（余额各自保留，总量不变） */
+    /** 抽卡系统是否开启（开发者选项「明日方舟」开启；默认关闭，仅种树） */
+    gachaEnabled: function () {
+      return !!(state.settings && state.settings.devArknights);
+    },
+
+    /** 开发者选项：setGachaEnabled(true) 开启抽卡；false 关闭并切回森林 */
+    setGachaEnabled: function (on) {
+      on = !!on;
+      state.settings.devArknights = on;
+      if (!on && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
+      this.save();
+      this.emit();
+      if (typeof App !== 'undefined' && App.rebuildNav) App.rebuildNav();
+      return on;
+    },
+
+    /** 切换奖励机制（余额各自保留，总量不变）；抽卡未开启时拒绝切到 gacha */
     setRewardMode: function (mode) {
+      if (mode === 'gacha' && !this.gachaEnabled()) return state.pomodoro.mode;
       var pm = state.pomodoro;
       pm.mode = (mode === 'gacha') ? 'gacha' : 'forest';
       this.emit();

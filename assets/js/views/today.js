@@ -456,7 +456,7 @@
 
       /* ---------- 奖励区：森林 或 干员展示 ---------- */
       var rewardBlock = null;
-      if (Store.pomodoro.mode === 'gacha' && global.Gacha) {
+      if (Store.gachaEnabled() && Store.pomodoro.mode === 'gacha' && global.Gacha) {
         rewardBlock = gachaBlock();
       } else if (global.TreeArt) {
         var fm = el('div', { style: { marginTop: '18px' } });
@@ -554,7 +554,7 @@
       Gacha.jadeTag(pm.jade),
       el('span', {
         class: 'gh-sub',
-        text: '≈ ' + (Math.round(pm.jade / POMO.JADE_PER_POINT * 10) / 10) +
+        text: '≈ ' + Math.round(pm.jade / POMO.JADE_PER_POINT) +
               ' 积分 · 可抽 ' + Math.floor(pm.jade / POMO.PULL_COST) + ' 次'
       }),
       el('button', {

@@ -18,6 +18,7 @@ async function fresh(viewport) {
   await p.waitForTimeout(650);
   await p.evaluate(() => { const e = document.querySelector('.cp-ob-skip, .ob-skip'); if (e) e.click(); });
   await p.waitForTimeout(350);
+  await p.evaluate(() => Store.setGachaEnabled(true));   // 本测试专验商城（含抽卡满潜兑换），先开启抽卡系统
   return p;
 }
 async function openShop(p) {
