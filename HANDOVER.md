@@ -8,16 +8,16 @@
 
 **核心交付物只有一个 `index.html`**（约 2MB，CSS/JS/语料全部内联）。双击即用、可直接转发；配合 `manifest.webmanifest` + `sw.js` + 图标可装到桌面并离线使用。开发期源码在 `src/` 和 `assets/`，用 `build.py` 打包回单文件。
 
-## 二、当前状态快照（2026-10-22 更新）
+## 二、当前状态快照（2026-10-23 更新）
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 修复 `save-file.js`：picker/分享被浏览器自动 Abort（file://、沙箱、非安全上下文）时不再误报「已取消」死路，一律回落下载 + 复制兜底面板；新增 `verify_save_fallback.mjs`；此前：同步重构 + 统一保存通道 + 死代码清理，见 ROADMAP §十四 |
-| 单元测试 | `node tests/run.mjs` **626 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则） |
+| 最后提交 | 文档补全 + 构建健壮性：README 新增「近期新增」章节（一键自然语言待办 / 白噪音 / 学业生活白皮书 / 全局搜索 Ctrl+K / 导航自定义 / 有效动作·全勤·摸鱼券），修正过时单测数；`build.py` 新增缺失文件清单自检（一次性列出全部缺失再中止）；同步更新本文状态 |
+| 单元测试 | `node tests/run.mjs` **746 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
-| 远程 | 领先远程多提交，**重复任务三档（文案 / 锚点引擎 / 自定义周期）均在本地、未上传**（按约定先本地验证） |
+| 远程 | **已推送至 GitHub `Faust275/course-planner` 的 `main`**，并经 GitHub Pages 上线 `https://faust275.github.io/course-planner/`；重复任务三档、周末展示开关、象限睡眠计时均已发布 |
 
 ## 三、第一小时上手路径
 
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 582 条纯函数单测
+node tests/run.mjs              # 746 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -64,6 +64,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 6. **数据口径用自然日历**：统计跨午夜睡眠归属、目标周期冻结等口径都有单测钉死，改动先跑 `node tests/run.mjs`。
 7. **弹窗子项过滤**：`ui.js` 的 `arrayify` 会滤掉 `null/false`，往弹窗塞条件渲染的节点时依赖它，别绕过。
 8. **设置页是三级状态**：`CAT`（当前分类）+ `SUB`（当前具体页），两者都在 `settings.js` 的 IIFE 里。外部跳转只走 `SettingsView.go(key)` 或 `App.go('settings', {tab:key})`，不要直接改 `SUB`——`onEnter` 会先清空状态，直接改会被覆盖。新增条目时必须给 `SUBS[]` 补 `group`，否则分类页筛不出来。
+9. **分发源码时务必带上模板引用的全部本地文件**：`src/index.template.html` 里每个 `<script src>` / `<link href>` 都必须在场。曾因 `assets/js/task-nlp.js` / `white-noise.js` / `white-paper.js` 三个文件没随包分发，导致 `build.py` 中断、排查多轮（这三个文件从未进过 git 历史，最终靠从产物 `index.html` 按位置还原才补齐）；现在 `build.py` 会**一次性列出全部缺失文件**再中止，不再只报第一个。
 
 ## 六、日常开发循环
 

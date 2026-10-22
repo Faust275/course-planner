@@ -13,7 +13,26 @@ ROOT = pathlib.Path(__file__).resolve().parent
 TPL = ROOT / "src" / "index.template.html"
 OUT = ROOT / "index.html"
 
+RE_SRC = r'<script src="([^"]+)"></script>'
+RE_CSS = r'<link rel="stylesheet" href="([^"]+)">'
+
 tpl = TPL.read_text(encoding="utf-8")
+
+# 预扫描：把模板引用的本地资源一次查完，缺失的整体列出来再退出。
+# 旧行为是遇到第一个缺失就 exit，打包漏文件时只报一处，排查要多轮往返。
+missing = []
+for m in re.finditer(RE_SRC, tpl):
+    if not (ROOT / m.group(1)).exists():
+        missing.append(m.group(1))
+for m in re.finditer(RE_CSS, tpl):
+    if not (ROOT / m.group(1)).exists():
+        missing.append(m.group(1))
+
+if missing:
+    print("[build] 以下被 src/index.template.html 引用的本地文件不存在（是否漏打包？）：")
+    for f in sorted(set(missing)):
+        print(f"    - {f}")
+    sys.exit("[build] 已中止：请先补齐上述文件再构建")
 
 
 def inline_css(m):
@@ -35,8 +54,8 @@ def inline_js(m):
     return "<script>\n" + code + "\n</script>"
 
 
-html = re.sub(r'<link rel="stylesheet" href="([^"]+)">', inline_css, tpl)
-html = re.sub(r'<script src="([^"]+)"></script>', inline_js, html)
+html = re.sub(RE_CSS, inline_css, tpl)
+html = re.sub(RE_SRC, inline_js, html)
 
 if 'href="assets' in html or 'src="assets' in html:
     sys.exit("[build] 仍存在未内联的外部资源引用")
