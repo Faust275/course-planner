@@ -1009,16 +1009,18 @@
     { id: 'collFaction', group: '集卡', name: '集齐阵营', desc: '集齐任意一个阵营的全部干员（≥6 人）', icon: 'box', tier: 'gold', points: 200,
       metric: 'collFaction', threshold: 1 },
     /* —— 种树 —— */
+    /* 种树：逐级解锁。先要「植下一棵树」解锁，后续「种更多棵树」的成就才会出现；
+     * 渲染层看到 req 前置未完成会直接隐藏该成就（见 collection.js achPane）。 */
     { id: 'tree1', group: '种树', name: '植下一棵树', desc: '种下 1 棵树', icon: 'leaf', tier: 'bronze', points: 3,
       metric: 'tree', threshold: 1 },
     { id: 'tree3', group: '种树', name: '植树新手', desc: '种下 3 棵树', icon: 'leaf', tier: 'bronze', points: 6,
-      metric: 'tree', threshold: 3 },
+      metric: 'tree', threshold: 3, req: 'tree1' },
     { id: 'tree10', group: '种树', name: '绿意盎然', desc: '种下 10 棵树', icon: 'tree', tier: 'silver', points: 12,
-      metric: 'tree', threshold: 10 },
+      metric: 'tree', threshold: 10, req: 'tree3' },
     { id: 'tree50', group: '种树', name: '森之守护', desc: '种下 50 棵树', icon: 'tree', tier: 'silver', points: 24,
-      metric: 'tree', threshold: 50 },
+      metric: 'tree', threshold: 50, req: 'tree10' },
     { id: 'tree100', group: '种树', name: '林海苍苍', desc: '种下 100 棵树', icon: 'tree', tier: 'gold', points: 48,
-      metric: 'tree', threshold: 100 },
+      metric: 'tree', threshold: 100, req: 'tree50' },
 
     /* —— 目标 —— */
     { id: 'goal_first', group: '目标', name: '不再只是待办', desc: '创建第一个目标', icon: 'target', tier: 'bronze', points: 10,
