@@ -12,8 +12,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 修复旧档数据丢失：新增 `hoistLegacy()`（早于 `validateSchema`）把旧 `pity6` 搬进标准池；`makeUp → 摸鱼券` 抢救移入 `mergeShop()`（覆盖 `validateSchema` 与 `importJSON` 两条路径）。对照实验：pity6 0→42、fish 0→3、使用记录 []→["2026-01-01"]；新增 5 条断言（单测 756→761） |
-| 单元测试 | `node tests/run.mjs` **761 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
+| 最后提交 | 重复任务实例归档：新增 `state.taskArchive`，完成超 60 天且无活动记录 / 子任务的重复实例每日自动归档（主列表变短）；历史统计（`goalPct` / `goalCtx`）改为 `tasks + taskArchive` 一起算以保住目标 KR 口径；`getTask` 可查归档区，同步码不带归档、完整备份带走。新增 10 条断言（单测 761→771） |
+| 单元测试 | `node tests/run.mjs` **771 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 761 条纯函数单测
+node tests/run.mjs              # 771 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -65,6 +65,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 7. **弹窗子项过滤**：`ui.js` 的 `arrayify` 会滤掉 `null/false`，往弹窗塞条件渲染的节点时依赖它，别绕过。
 8. **设置页是三级状态**：`CAT`（当前分类）+ `SUB`（当前具体页），两者都在 `settings.js` 的 IIFE 里。外部跳转只走 `SettingsView.go(key)` 或 `App.go('settings', {tab:key})`，不要直接改 `SUB`——`onEnter` 会先清空状态，直接改会被覆盖。新增条目时必须给 `SUBS[]` 补 `group`，否则分类页筛不出来。
 9. **分发源码时务必带上模板引用的全部本地文件**：`src/index.template.html` 里每个 `<script src>` / `<link href>` 都必须在场。曾因 `assets/js/task-nlp.js` / `white-noise.js` / `white-paper.js` 三个文件没随包分发，导致 `build.py` 中断、排查多轮（这三个文件从未进过 git 历史，最终靠从产物 `index.html` 按位置还原才补齐）；现在 `build.py` 会**一次性列出全部缺失文件**再中止，不再只报第一个。
+10. **重复任务的旧实例会自动归档进 `state.taskArchive`**：完成超过 60 天、且**没有活动记录、没有子任务**的重复实例，每天首次启动时搬走一次。主列表只读 `state.tasks`，所以待办 / 已完成列表自然变短；但**历史统计（目标 KR 完成率）必须把 `tasks + taskArchive` 一起算**——`goalPct` 与 `goalCtx` 两处 ctx 已这么处理，改动时别退回只算 `tasks`，否则归档会把目标周期内的分母与分子一起变小，进度会莫名其妙地变化。**绝对不要归档挂了 `activities.taskId` 或有子任务的实例**，那会让「已投入 X」和子任务计数找不到主人。归档区不进同步码（省体积），完整备份会带走；导入时备份带了就用备份的，没带则保留本机归档。
 
 ## 六、日常开发循环
 

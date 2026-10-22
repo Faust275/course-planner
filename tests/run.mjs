@@ -2321,5 +2321,52 @@ console.log('\n数据迁移: 旧档导入后的结构迁移');
   eq('迁移后 makeUp 旧字段已删除', st.shop.tickets.makeUp, undefined);
 }
 
+/* ==========================================================
+ * 重复任务实例归档：只搬「已完成 + 无关联 + 够老（>60 天）」的重复实例。
+ * 挂了时间记录或有子任务的必须留下——否则「已投入 X」和子任务计数会找不到主人。
+ * ========================================================== */
+console.log('\n重复任务归档: 旧实例移出主列表、历史统计不受影响');
+{
+  const S = await initTestStore();
+  const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const old = day(-100), fresh = day(0);
+  const mk = (id, extra) => Object.assign({
+    id: id, title: '任务' + id, status: 'done', dueDate: old, doneAt: old,
+    repeatFrom: 'root', occurrence: 3
+  }, extra || {});
+
+  const oldState = {
+    version: 2, model: 2, courses: [],
+    tasks: [
+      mk('old_plain'),                                                    // 老 + 无关联 → 应归档
+      mk('old_with_act'),                                                 // 挂了时间记录 → 保留
+      mk('old_with_kid'),                                                 // 有子任务 → 保留
+      Object.assign(mk('fresh_one'), { dueDate: fresh, doneAt: fresh }),   // 刚完成 → 保留
+      { id: 'once', title: '一次性', status: 'done', dueDate: old, doneAt: old },  // 非重复 → 保留
+      { id: 'kid1', title: '子任务', parentId: 'old_with_kid', status: 'todo' }
+    ],
+    activities: [{ id: 'a1', taskId: 'old_with_act', date: old, minutes: 30 }]
+  };
+  await S.importJSON(JSON.stringify(oldState));
+
+  const st = S.state;
+  const ids = st.tasks.map(t => t.id);
+  const arc = (st.taskArchive || []).map(t => t.id);
+
+  eq('老且无关联的重复实例被归档', arc.indexOf('old_plain') >= 0, true);
+  eq('归档后移出主列表', ids.indexOf('old_plain'), -1);
+  eq('挂了时间记录的实例保留', ids.indexOf('old_with_act') >= 0, true);
+  eq('有子任务的实例保留', ids.indexOf('old_with_kid') >= 0, true);
+  eq('刚完成的实例保留', ids.indexOf('fresh_one') >= 0, true);
+  eq('一次性任务不归档', ids.indexOf('once') >= 0, true);
+  eq('子任务本身不动', ids.indexOf('kid1') >= 0, true);
+  eq('归档实例仍可按 id 查回', !!S.getTask('old_plain'), true);
+
+  // 归档区必须仍参与历史统计，否则目标 KR 的分母/分子会一起变小
+  const ctx = S.goalCtx({ startDate: day(-200), endDate: day(1) });
+  eq('历史统计把归档区一起算', ctx.tasks.length, st.tasks.length + (st.taskArchive || []).length);
+  eq('归档区不为空（本次确有归档）', (st.taskArchive || []).length > 0, true);
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

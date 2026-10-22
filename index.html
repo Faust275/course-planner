@@ -5694,6 +5694,7 @@ window.AK_OPS = [
       periods: defaultPeriods(),
       courses: [],
       tasks: [],
+      taskArchive: [],   // 重复任务旧实例归档区：不进主列表，但仍参与历史统计
       taskSeq: {},
       // —— 日程 / 象限 ——
       settings: {
@@ -5866,7 +5867,7 @@ window.AK_OPS = [
 
     // 1. 数组类型安全收敛
     var arrayKeys = [
-      'courses', 'tasks', 'plans', 'goals', 'ledger', 'notes',
+      'courses', 'tasks', 'taskArchive', 'plans', 'goals', 'ledger', 'notes',
       'diaries', 'events', 'activities', 'meals', 'sleeps',
       'courseExceptions', 'periods', 'semesters'
     ];
@@ -6118,6 +6119,51 @@ window.AK_OPS = [
       st.tasks.forEach(function (t) { if (t.courseId === oldId) t.courseId = _idMap[oldId]; });
     });
     st.model = 2;
+  }
+
+  /* ==========================================================
+   * 重复任务实例归档
+   * 重复任务每完成一次就克隆一个新实例（genNextTask），用得越久 tasks 越长。
+   * 这里把「已完成 + 无任何关联 + 够老」的重复实例挪进 taskArchive：
+   *   - 归档区不参与列表渲染，待办 / 已完成列表自然变短
+   *   - 但仍参与历史统计（目标 KR 完成率把 tasks + taskArchive 一起算），
+   *     否则归档会把目标周期内的分母与分子一起变小，进度会莫名其妙地变
+   * 只搬「没有活动记录、没有子任务」的实例：有时间投入或子任务的留在原地，
+   * 免得「已投入 X」和子任务计数找不到主人——宁可不归档，也不做假数据。
+   * ========================================================== */
+
+  /** 完成超过这么多天的重复实例才考虑归档 */
+  var ARCHIVE_AFTER_DAYS = 60;
+
+  function archiveOldRepeats(st, todayStr) {
+    var tasks = st.tasks || [];
+    if (!tasks.length) return 0;
+    if (!Array.isArray(st.taskArchive)) st.taskArchive = [];
+
+    // 关联检查：挂了活动记录（时间投入）或子任务的一律不归档
+    var withActs = {};
+    (st.activities || []).forEach(function (a) { if (a && a.taskId) withActs[a.taskId] = 1; });
+    var withKids = {};
+    tasks.forEach(function (t) { if (t && t.parentId) withKids[t.parentId] = 1; });
+
+    var base = DateUtil.parse(todayStr) || DateUtil.today();
+    var cutoff = DateUtil.toStr(DateUtil.addDays(base, -ARCHIVE_AFTER_DAYS));
+
+    var move = [], ids = {};
+    tasks.forEach(function (t) {
+      if (!t || t.status !== 'done') return;
+      // 只归档重复任务生成的实例（膨胀来自它们），一次性任务保持原样
+      if (!t.repeatFrom && !(t.occurrence > 0)) return;
+      if (withActs[t.id] || withKids[t.id]) return;
+      var d = (t.doneAt || t.dueDate || '').slice(0, 10);
+      if (!d || d >= cutoff) return;                 // 太新：先留着，别刚完成就搬走
+      move.push(t); ids[t.id] = 1;
+    });
+    if (!move.length) return 0;
+
+    st.tasks = tasks.filter(function (t) { return !ids[t.id]; });
+    move.forEach(function (t) { st.taskArchive.push(t); });
+    return move.length;
   }
 
   /** 时间工具：HH:MM <-> 分钟 */
@@ -7636,7 +7682,7 @@ window.AK_OPS = [
     if (!goal) return 0;
     return goalProgress(goal, {
       from: goal.startDate, to: goal.endDate, today: todayStr,
-      plans: state.plans || [], tasks: state.tasks || []
+      plans: state.plans || [], tasks: (state.tasks || []).concat(state.taskArchive || [])
     }).pct;
   }
 
@@ -7910,6 +7956,7 @@ window.AK_OPS = [
       if (!state.courses) state.courses = [];
       if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
+      if (!Array.isArray(state.taskArchive)) state.taskArchive = [];
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
@@ -7925,6 +7972,13 @@ window.AK_OPS = [
       migrateCourseSemester(state);     // 老课程补学期归属
 
       migrateCoursesV2(state);          // 同名多条课程 → 一门课 + 多时段 slots
+
+      // 重复任务旧实例归档：每天最多跑一次，只搬「已完成 + 无关联 + 够老」的
+      var _today = DateUtil.toStr(DateUtil.today());
+      if (state.lastArchive !== _today) {
+        archiveOldRepeats(state, _today);
+        state.lastArchive = _today;
+      }
 
       // 成绩按学期归档
       if (!state.grades || typeof state.grades !== 'object') state.grades = {};
@@ -8998,6 +9052,11 @@ window.AK_OPS = [
     getTask: function (id) {
       for (var i = 0; i < state.tasks.length; i++) {
         if (state.tasks[i].id === id) return state.tasks[i];
+      }
+      // 已归档的旧实例不在主列表里，但统计 / 时间投入可能仍按 id 找过来
+      var _arc = state.taskArchive || [];
+      for (var j = 0; j < _arc.length; j++) {
+        if (_arc[j].id === id) return _arc[j];
       }
       return null;
     },
@@ -11348,7 +11407,7 @@ window.AK_OPS = [
         to: g.endDate,
         today: DateUtil.toStr(DateUtil.today()),
         plans: state.plans || [],
-        tasks: state.tasks || []
+        tasks: (state.tasks || []).concat(state.taskArchive || [])
       };
     },
 
@@ -12224,6 +12283,8 @@ window.AK_OPS = [
       // 日记一律不进同步码。用 delete 而不是置空数组：
       // 置空会在导入端被当成「对方没有日记」而覆盖掉本机已有的日记
       delete out.diaries;
+      // 归档区不进同步码：它只是历史沉淀，换设备不需要搬；完整备份仍然带走
+      delete out.taskArchive;
 
       if (s === 'standard') {
         out.exportScope = 'standard';
@@ -12283,6 +12344,7 @@ window.AK_OPS = [
       // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
       // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
       next.diaries = Array.isArray(obj.diaries) ? obj.diaries : (prev && prev.diaries) || [];
+      next.taskArchive = Array.isArray(obj.taskArchive) ? obj.taskArchive : (prev && prev.taskArchive) || [];
       next.events = obj.events || [];
       next.activities = obj.activities || [];
       next.meals = obj.meals || [];
