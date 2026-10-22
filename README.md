@@ -12,6 +12,8 @@
 
 数据保存在**各自设备的浏览器**里（优先 IndexedDB，`file://` 或隐私模式自动回退 `localStorage`），不随文件复制。跨设备迁移用应用内的「同步码」。
 
+**导出的备份文件默认不含 API 密钥**（语音 / OCR）：备份常被存网盘或发给别人，泄露会被盗刷，而重填成本极低。需要带走时在设置页勾选「备份里包含 API 密钥」；本机的自动备份不受影响，仍会保留密钥。
+
 ## 源码结构
 
 ```
@@ -69,7 +71,7 @@ course-planner-web/
 ├── verify_b_records.mjs      记录类发分（睡眠/饮食/活动）+ KR 发分
 ├── verify_bg.mjs             板块联动 B–G：目标今日卡 / 本周考试 / 消费构成 / 健康提示 / 课程投入 / GPA KR / 专注里程
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（771 条，Palette / CourseException / TaskNLP 直读源文件）
+└── tests/run.mjs             纯函数单测（779 条，Palette / CourseException / TaskNLP 直读源文件）
 ```
 
 ## 构建

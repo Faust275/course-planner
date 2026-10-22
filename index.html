@@ -5824,6 +5824,23 @@ window.AK_OPS = [
    * 商城状态逐项合并：老备份没有 shop 整块缺失，新备份也可能缺某个子键。
    * importJSON 必须走这里，不能裸 `obj.shop` —— 否则 ensure 里取 tickets 直接崩。
    */
+  /**
+   * 剥掉本机凭据：语音（讯飞）与 OCR 的密钥。
+   * 密钥泄露的代价（API 额度被盗刷）远大于重填一次的成本，所以导出一律默认剥掉。
+   */
+  function stripKeys(st) {
+    if (!st || !st.settings) return st;
+    if (st.settings.asr) {
+      st.settings.asr.appId = '';
+      st.settings.asr.apiKey = '';
+      st.settings.asr.apiSecret = '';
+    }
+    if (st.settings.ocr) {
+      st.settings.ocr.apiKey = '';
+    }
+    return st;
+  }
+
   function mergeShop(def, src) {
     var s = (src && typeof src === 'object') ? src : {};
     // 旧档抢救：补签卡 makeUp → 摸鱼券 fish，使用记录 makeUpLog → fishLog。
@@ -8040,7 +8057,7 @@ window.AK_OPS = [
       var ts = Date.now();
       var key = this.BK_PREFIX + ts;
       var str;
-      try { str = this.exportJSON('full'); } catch (e) { return Promise.resolve(null); }
+      try { str = this.exportJSON('full', { includeKeys: true }); } catch (e) { return Promise.resolve(null); }
       // 空数据没必要占备份位
       var probe = null;
       try { probe = JSON.parse(str); } catch (e) { probe = null; }
@@ -12261,11 +12278,15 @@ window.AK_OPS = [
      * @param {string} [scope='full'] 导出档位。'full' 仅用于本地备份（含图片与日记），
      *   不再作为同步码档位暴露给用户；老版本的 full 码仍能被 importJSON 识别。
      */
-    exportJSON: function (scope) {
+    exportJSON: function (scope, opts) {
       var s = scope || 'full';
+      var withKeys = !!(opts && opts.includeKeys);
       if (s === 'full') {
         var full = JSON.parse(JSON.stringify(state));
         delete full.sleepSession;   // 进行中的计时是临时状态，不写进备份
+        // 密钥默认不带走：备份文件常被存网盘 / 发给别人，泄露会被盗刷，
+        // 而重填一次的成本极低。只有不离开本机的自动备份才显式传 includeKeys。
+        if (!withKeys) stripKeys(full);
         return JSON.stringify(full, null, 2);
       }
 
@@ -12277,8 +12298,7 @@ window.AK_OPS = [
         if (out.settings.background) out.settings.background.dataUrl = '';
         if (out.settings.pet) out.settings.pet.src = '';
         // 密钥属于本机凭据，不随同步码外传
-        if (out.settings.asr) { out.settings.asr.appId = ''; out.settings.asr.apiKey = ''; out.settings.asr.apiSecret = ''; }
-        if (out.settings.ocr) { out.settings.ocr.apiKey = ''; }
+        stripKeys(out);
       }
       // 日记一律不进同步码。用 delete 而不是置空数组：
       // 置空会在导入端被当成「对方没有日记」而覆盖掉本机已有的日记
@@ -13180,6 +13200,29 @@ window.AK_OPS = [
     return s;
   }
 
+  /**
+   * 通用开关，与设置页其它开关同一套样式（.cp-switch）。
+   * 历史遗留：settings.js「精力节律 → 自定义」一直在调 V.toggle，
+   * 但这个方法从来没实现过，一进那页就抛 "V.toggle is not a function"。
+   * @param {boolean} checked 初始是否打开
+   * @param {Function} [onChange] 切换回调，参数是新的布尔值
+   */
+  function toggle(checked, onChange) {
+    var on = !!checked;
+    var node = el('button', {
+      class: 'switch' + (on ? ' on' : ''),
+      type: 'button',
+      'aria-pressed': on ? 'true' : 'false',
+      onclick: function () {
+        on = !on;
+        node.classList.toggle('cp-on', on);
+        node.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (typeof onChange === 'function') onChange(on);
+      }
+    }, [el('i')]);
+    return node;
+  }
+
   function segment(options, value, onChange) {
     var wrap = el('div', { class: 'segment' });
     options.forEach(function (o) {
@@ -13635,6 +13678,7 @@ window.AK_OPS = [
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
+    toggle: toggle,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,
     chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, rangeTabs: rangeTabs,
     icons: {
@@ -30286,7 +30330,7 @@ window.AK_OPS = [
 
         spCard.appendChild(el('p', {
           style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
-          text: '在讯飞开放平台创建「语音听写」应用即可拿到这三个值，有免费额度。密钥只存在这台设备的浏览器里。'
+          text: '在讯飞开放平台创建「语音听写」应用即可拿到这三个值，有免费额度。密钥只存在这台设备的浏览器里，导出备份默认不会带走（可在备份处勾选包含）。'
         }));
 
         spCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
@@ -30333,7 +30377,7 @@ window.AK_OPS = [
 
         ocCard.appendChild(el('p', {
           style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
-          text: '密钥只保存在本机浏览器里，请求直接从浏览器发往你填的接口。'
+          text: '密钥只保存在本机浏览器里，请求直接从浏览器发往你填的接口；导出备份默认不会带走（可在备份处勾选包含）。'
         }));
 
         ocCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
@@ -30856,6 +30900,7 @@ window.AK_OPS = [
         root.appendChild(syncCard);
 
         /* ---- 文件备份 ---- */
+        var keysBox = el('input', { type: 'checkbox', style: { width: '15px', height: '15px' } });
         var dataCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
           el('div', { class: 'section-title' }, ['文件备份']),
           el('p', {
@@ -30864,10 +30909,18 @@ window.AK_OPS = [
           }),
           el('p', {
             style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
+            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
+          }),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+            keysBox,
+            el('span', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: '备份里包含 API 密钥（语音 / OCR）' })
+          ]),
+          el('p', {
+            style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '默认不带：备份文件可能被存到网盘或发给别人，密钥泄露会被盗刷。勾选上面这项才会写进文件；不带的话恢复后重填一次即可。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
-            el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
+            el('button', { class: 'btn', onclick: function () { exportData(keysBox.checked); } }, [V.svg(V.icons.download, 16), '导出备份']),
             el('button', { class: 'btn', onclick: importData }, [V.svg(V.icons.upload, 16), '导入备份']),
             el('button', {
               class: 'btn btn-danger', onclick: function () {
@@ -31408,8 +31461,8 @@ window.AK_OPS = [
     return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
   }
 
-  function exportData() {
-    var text = Store.exportJSON();   // 完整备份（含日记、图片、设置）
+  function exportData(withKeys) {
+    var text = Store.exportJSON('full', { includeKeys: !!withKeys });   // 完整备份（含日记、图片、设置）
     var name = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
     var sizeKB = Math.max(1, Math.round(new Blob([text]).size / 1024));
     SaveFile.save(name, text, {

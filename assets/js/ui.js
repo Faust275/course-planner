@@ -387,6 +387,29 @@
     return s;
   }
 
+  /**
+   * 通用开关，与设置页其它开关同一套样式（.cp-switch）。
+   * 历史遗留：settings.js「精力节律 → 自定义」一直在调 V.toggle，
+   * 但这个方法从来没实现过，一进那页就抛 "V.toggle is not a function"。
+   * @param {boolean} checked 初始是否打开
+   * @param {Function} [onChange] 切换回调，参数是新的布尔值
+   */
+  function toggle(checked, onChange) {
+    var on = !!checked;
+    var node = el('button', {
+      class: 'switch' + (on ? ' on' : ''),
+      type: 'button',
+      'aria-pressed': on ? 'true' : 'false',
+      onclick: function () {
+        on = !on;
+        node.classList.toggle('cp-on', on);
+        node.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (typeof onChange === 'function') onChange(on);
+      }
+    }, [el('i')]);
+    return node;
+  }
+
   function segment(options, value, onChange) {
     var wrap = el('div', { class: 'segment' });
     options.forEach(function (o) {
@@ -842,6 +865,7 @@
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
+    toggle: toggle,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,
     chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, rangeTabs: rangeTabs,
     icons: {

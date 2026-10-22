@@ -12,8 +12,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 重复任务实例归档：新增 `state.taskArchive`，完成超 60 天且无活动记录 / 子任务的重复实例每日自动归档（主列表变短）；历史统计（`goalPct` / `goalCtx`）改为 `tasks + taskArchive` 一起算以保住目标 KR 口径；`getTask` 可查归档区，同步码不带归档、完整备份带走。新增 10 条断言（单测 761→771） |
-| 单元测试 | `node tests/run.mjs` **771 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
+| 最后提交 | 备份默认剥离 API 密钥（`exportJSON` 新增 `includeKeys` 选项，设置页可勾选；本机自动备份仍保留密钥）；导出剥离统一走 `stripKeys()`。顺手修复既有 bug：`settings.js` 一直在调 `V.toggle` 但 `ui.js` 从未实现，进「精力节律 → 自定义」就报错，现已补上（复用 `.cp-switch` 样式）。新增 8 条断言（单测 771→779） |
+| 单元测试 | `node tests/run.mjs` **779 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 771 条纯函数单测
+node tests/run.mjs              # 779 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```

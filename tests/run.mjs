@@ -2368,5 +2368,34 @@ console.log('\n重复任务归档: 旧实例移出主列表、历史统计不受
   eq('归档区不为空（本次确有归档）', (st.taskArchive || []).length > 0, true);
 }
 
+/* ==========================================================
+ * 备份导出：API 密钥默认剥离。
+ * 备份文件常被存网盘 / 发给别人，密钥泄露会被盗刷；重填成本极低，所以默认不带。
+ * ========================================================== */
+console.log('\n备份导出: API 密钥默认剥离');
+{
+  const S = await initTestStore();
+  S.updateSettings({
+    asr: { prefer: 'auto', appId: 'fake-app', apiKey: 'fake-key', apiSecret: 'fake-secret' },
+    ocr: { prefer: 'auto', provider: '', apiKey: 'fake-ocr', endpoint: '', model: '' }
+  });
+
+  const dft = JSON.parse(S.exportJSON('full'));
+  eq('完整备份默认不含讯飞 apiKey', dft.settings.asr.apiKey, '');
+  eq('完整备份默认不含讯飞 appId', dft.settings.asr.appId, '');
+  eq('完整备份默认不含讯飞 secret', dft.settings.asr.apiSecret, '');
+  eq('完整备份默认不含 OCR apiKey', dft.settings.ocr.apiKey, '');
+
+  const withK = JSON.parse(S.exportJSON('full', { includeKeys: true }));
+  eq('勾选后完整备份带走讯飞密钥', withK.settings.asr.apiKey, 'fake-key');
+  eq('勾选后完整备份带走 OCR 密钥', withK.settings.ocr.apiKey, 'fake-ocr');
+
+  const sync = JSON.parse(S.exportJSON('standard'));
+  eq('同步码同样不含密钥', sync.settings.asr.apiKey, '');
+
+  // 剥离不能影响原状态：本机填的密钥还在
+  eq('导出未污染本机设置', S.state.settings.asr.apiKey, 'fake-key');
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

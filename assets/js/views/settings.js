@@ -825,7 +825,7 @@
 
         spCard.appendChild(el('p', {
           style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
-          text: '在讯飞开放平台创建「语音听写」应用即可拿到这三个值，有免费额度。密钥只存在这台设备的浏览器里。'
+          text: '在讯飞开放平台创建「语音听写」应用即可拿到这三个值，有免费额度。密钥只存在这台设备的浏览器里，导出备份默认不会带走（可在备份处勾选包含）。'
         }));
 
         spCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
@@ -872,7 +872,7 @@
 
         ocCard.appendChild(el('p', {
           style: { fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.7', marginTop: '10px' },
-          text: '密钥只保存在本机浏览器里，请求直接从浏览器发往你填的接口。'
+          text: '密钥只保存在本机浏览器里，请求直接从浏览器发往你填的接口；导出备份默认不会带走（可在备份处勾选包含）。'
         }));
 
         ocCard.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '12px' } }, [
@@ -1395,6 +1395,7 @@
         root.appendChild(syncCard);
 
         /* ---- 文件备份 ---- */
+        var keysBox = el('input', { type: 'checkbox', style: { width: '15px', height: '15px' } });
         var dataCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
           el('div', { class: 'section-title' }, ['文件备份']),
           el('p', {
@@ -1403,10 +1404,18 @@
           }),
           el('p', {
             style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
+            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
+          }),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
+            keysBox,
+            el('span', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: '备份里包含 API 密钥（语音 / OCR）' })
+          ]),
+          el('p', {
+            style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
+            text: '默认不带：备份文件可能被存到网盘或发给别人，密钥泄露会被盗刷。勾选上面这项才会写进文件；不带的话恢复后重填一次即可。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
-            el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
+            el('button', { class: 'btn', onclick: function () { exportData(keysBox.checked); } }, [V.svg(V.icons.download, 16), '导出备份']),
             el('button', { class: 'btn', onclick: importData }, [V.svg(V.icons.upload, 16), '导入备份']),
             el('button', {
               class: 'btn btn-danger', onclick: function () {
@@ -1947,8 +1956,8 @@
     return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
   }
 
-  function exportData() {
-    var text = Store.exportJSON();   // 完整备份（含日记、图片、设置）
+  function exportData(withKeys) {
+    var text = Store.exportJSON('full', { includeKeys: !!withKeys });   // 完整备份（含日记、图片、设置）
     var name = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
     var sizeKB = Math.max(1, Math.round(new Blob([text]).size / 1024));
     SaveFile.save(name, text, {

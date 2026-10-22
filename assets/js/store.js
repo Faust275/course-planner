@@ -301,6 +301,23 @@
    * 商城状态逐项合并：老备份没有 shop 整块缺失，新备份也可能缺某个子键。
    * importJSON 必须走这里，不能裸 `obj.shop` —— 否则 ensure 里取 tickets 直接崩。
    */
+  /**
+   * 剥掉本机凭据：语音（讯飞）与 OCR 的密钥。
+   * 密钥泄露的代价（API 额度被盗刷）远大于重填一次的成本，所以导出一律默认剥掉。
+   */
+  function stripKeys(st) {
+    if (!st || !st.settings) return st;
+    if (st.settings.asr) {
+      st.settings.asr.appId = '';
+      st.settings.asr.apiKey = '';
+      st.settings.asr.apiSecret = '';
+    }
+    if (st.settings.ocr) {
+      st.settings.ocr.apiKey = '';
+    }
+    return st;
+  }
+
   function mergeShop(def, src) {
     var s = (src && typeof src === 'object') ? src : {};
     // 旧档抢救：补签卡 makeUp → 摸鱼券 fish，使用记录 makeUpLog → fishLog。
@@ -2517,7 +2534,7 @@
       var ts = Date.now();
       var key = this.BK_PREFIX + ts;
       var str;
-      try { str = this.exportJSON('full'); } catch (e) { return Promise.resolve(null); }
+      try { str = this.exportJSON('full', { includeKeys: true }); } catch (e) { return Promise.resolve(null); }
       // 空数据没必要占备份位
       var probe = null;
       try { probe = JSON.parse(str); } catch (e) { probe = null; }
@@ -6738,11 +6755,15 @@
      * @param {string} [scope='full'] 导出档位。'full' 仅用于本地备份（含图片与日记），
      *   不再作为同步码档位暴露给用户；老版本的 full 码仍能被 importJSON 识别。
      */
-    exportJSON: function (scope) {
+    exportJSON: function (scope, opts) {
       var s = scope || 'full';
+      var withKeys = !!(opts && opts.includeKeys);
       if (s === 'full') {
         var full = JSON.parse(JSON.stringify(state));
         delete full.sleepSession;   // 进行中的计时是临时状态，不写进备份
+        // 密钥默认不带走：备份文件常被存网盘 / 发给别人，泄露会被盗刷，
+        // 而重填一次的成本极低。只有不离开本机的自动备份才显式传 includeKeys。
+        if (!withKeys) stripKeys(full);
         return JSON.stringify(full, null, 2);
       }
 
@@ -6754,8 +6775,7 @@
         if (out.settings.background) out.settings.background.dataUrl = '';
         if (out.settings.pet) out.settings.pet.src = '';
         // 密钥属于本机凭据，不随同步码外传
-        if (out.settings.asr) { out.settings.asr.appId = ''; out.settings.asr.apiKey = ''; out.settings.asr.apiSecret = ''; }
-        if (out.settings.ocr) { out.settings.ocr.apiKey = ''; }
+        stripKeys(out);
       }
       // 日记一律不进同步码。用 delete 而不是置空数组：
       // 置空会在导入端被当成「对方没有日记」而覆盖掉本机已有的日记
