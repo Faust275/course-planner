@@ -435,18 +435,15 @@
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
+  /** 导出成绩单 CSV（统一走 SaveFile 保存通道，含复制兜底） */
   function downloadText(name, text, mime) {
-    var blob = new Blob(['\ufeff' + text], { type: mime || 'text/plain;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () {
-      if (a.parentNode) a.parentNode.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 300);
+    SaveFile.save(name, '\ufeff' + text, {
+      mime: (mime || 'text/csv').split(';')[0],
+      ext: 'csv'
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker' || r.method === 'share') UI.toast('已保存 ' + name, 'ok');
+    }).catch(function (e) { UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err'); });
   }
 
   /** 生成一份成绩单数据 */
@@ -595,7 +592,6 @@
             downloadText('成绩单-' + t.scope.replace(/[\\/:*?"<>|]/g, '') + '-' + t.generated + '.csv',
               toCsv(t), 'text/csv;charset=utf-8');
             m.close();
-            UI.toast('已导出 CSV');
           }
         }, [V.svg(V.icons.download, 16), 'CSV']),
         el('button', {

@@ -12,12 +12,12 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 备份导入崩溃修复（shop 缺失 + 整体回滚）+ 弹窗关闭按钮失效修复，见 ROADMAP §十三；此前：三池抽卡/摸鱼券（`41c059a`） |
-| 单元测试 | `node tests/run.mjs` **597 条全过**（Palette / CourseException 直读源文件） |
-| UI 回归 | 30 个 `verify_*.mjs` 全部通过（`verify_backup.mjs` 扩到 10 组断言，含 export→import 往返）（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
+| 最后提交 | 同步重构（JSON 文件取代分片同步码）+ 统一保存通道 `save-file.js` + 死代码清理，见 ROADMAP §十四；此前：备份导入崩溃修复（shop 缺失 + 整体回滚），见 §十三（`1a2cc0a`） |
+| 单元测试 | `node tests/run.mjs` **582 条全过**（删除了已移除的同步码分片测试残留） |
+| UI 回归 | 31 个 `verify_*.mjs` 全部通过（`verify_sync.mjs`/`verify_sync_ui.mjs`/`verify_sync_scope.mjs` 为本次新增/重写；`verify_backup.mjs` 含 export→import 往返；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
-| 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |
+| 远程 | 领先远程 10+ 提交，**本轮未发布**（按约定先本地验证） |
 
 ## 三、第一小时上手路径
 
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 597 条纯函数单测
+node tests/run.mjs              # 582 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -46,6 +46,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 - **`assets/js/store.js`** —— 唯一的数据模型与持久化层。所有页面都通过它读写，不直接碰 localStorage/IndexedDB。含版本迁移、自动备份、同步码导出。改数据结构先改这里，并写迁移逻辑。
 - **`assets/js/stats-calc.js`** —— 统计与区间计算的纯函数层：区间展开/合并、`rangeDates`/`compareRange`、单日 5 段汇总（`sumDaySegments`）、区间汇总（`rangeSummary`）、积分/账本/课程聚合。日期工具按参数注入，可脱离 Store 单测；`store.js` 只留同名薄封装。
 - **`assets/js/ui.js`** —— `el()` 元素工厂、`V.modal/confirm/segment/select` 弹窗组件、Toast。
+- **`assets/js/save-file.js`** —— 统一保存通道 `window.SaveFile.save(name, content, opts)`：能力探测 `showSaveFilePicker → navigator.share → a[download] → 复制兜底面板`，诚实反馈（取消不谎报、WebView 不假成功）；`el` 经 ui.js 封装仅以 `UI.el` 暴露，本模块取别名使用。新增下载需求一律走它，不要自造 `a[download]`。
 - **`assets/js/router.js` / `app.js`** —— hash 深链接（`#/today`、`#/diary` 等）、启动 boot、SW 注册、安装提示。
 - **`assets/js/views/*.js`** —— 每个页面一个文件（课表、今日、日历、待办、计划、目标、日记、记账、专注、设置……），互不 import。注意：**日程 / 象限 / 统计已由独立视图改为宿主页分页**（`calendar.js` 承载 `AgendaPane`，`tasks.js` 承载 `QuadrantPane` / `StatsPane`），地址是 `#/calendar/agenda`、`#/tasks/quadrant`、`#/tasks/stats`。
 - **`tests/run.mjs`** —— 纯函数单测，不依赖浏览器；`verify_*.mjs` 是 Playwright 端到端回归。

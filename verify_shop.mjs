@@ -111,7 +111,7 @@ const sim = await p.evaluate(() => {
     for (let i = 1; i <= 30; i++) {
       if (skip.indexOf(i) >= 0) continue;
       DateUtil.today = () => D('2026-01-' + String(i).padStart(2, '0'));
-      Store.settleCard();
+      Store.settleCardFor(DateUtil.toStr(DateUtil.today()));
     }
     DateUtil.today = real;
     return {

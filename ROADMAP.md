@@ -846,3 +846,39 @@ StatsCalc.rangeDates('week', { util: DateUtil, ranges: RANGES, today, semester }
 
 ### 4. 同批小修
 - 7 处 `closest('.modal-wrap')` 改 `.cp-modal-wrap`（el() 自动加前缀，旧写法永远匹配不上）：导出备份的「知道了」、抽卡 4 处、收藏兑换 2 处弹窗按钮此前点击即抛错、弹窗关不掉。
+
+## §十四 同步重构（JSON 文件取代分片同步码）+ 统一保存通道（已实施，2026-10-22）
+
+### 1. 起因
+- 旧同步码：`gzip → base64 → 每 700 字符切一片（CP1P 头 + 序号）→ 微信分多条发`。用户反馈「**同步码过长**」，且头部带序号的文本在聊天里复制极易被「第 N/M 条」标注、用户名时间戳等噪音污染，拼回脆弱。
+- 5 处下载实现各抄一份 `a[download]`（备份、同步、成绩单、提醒 .ics、课表 PNG），参数顺序还不一致；iOS PWA / WebView 里 `a[download]` 静默无文件却照报「已保存」，属假成功（P1）。
+
+### 2. 同步重构
+- **删除** base64 分片整套：`utf8Bytes`/`bytesToB64`/`b64ToBytes`(加密工具另留)/`packSync`/`splitSyncCode`/`joinSyncParts`/`PART_HEAD`/`PART_SIZE`/`pad2`/`saveSyncFile`(旧 txt 版)/`syncCodeDialog`/`pasteSyncDialog`，约 150 行。
+- **改为**「导出不含图片的 **.json 文件**为主 + 系统分享/复制纯 JSON 文本降级兜底」：
+  - `saveSyncFile(json, scopeKey)` → `SaveFile.save(name, json, …)`，文件名 `课表同步-日期-档位.json`；
+  - `SYNC_SCOPES = { lite: '精简', standard: '标准' }` 两档（都在 `settings.js` 内定义），都不含日记、不含图片、脱敏密钥；
+  - 导入 `unpackSync(text)` 兼容：纯 JSON（`{` 开头直接解析）/ 旧 CP1R 编码 / 旧 CP1G 编码；`doImportSync` 走 `importJSON` 的打底覆盖逻辑。
+- **保留旧解码兼容**：老用户手里的 CP1R/CP1G 同步码仍能导入，不强制升级。
+- **信任模型对齐**：同步文件经微信等不可控中转 → 剥离密钥 + 日记 + 图片；文件备份（用户自有文件）保持完整（含日记正文、密钥），与同步明确区分，设置页文案同步更新为「同步不含日记 / 文件备份唯一包含日记」。
+
+### 3. 统一保存通道 `assets/js/save-file.js`
+- `window.SaveFile = { save, isWebView, copyText }`。
+- `save(filename, content, opts)` 能力探测顺序：**`showSaveFilePicker` → `navigator.share(files)` → `a[download]` → 复制文本兜底面板**，返回 `Promise<{method, ok, canceled}>`。
+- **诚实反馈**：分享被取消（`AbortError`/`NotAllowedError`）视为取消、**不回落下载**；下载/WebView 一律弹「可能没存到」面板，给复制兜底 + 按平台（iOS/Android/桌面）写引导文案，不再无条件下「已保存」。
+- **自动化兼容**：`navigator.webdriver` 为真（Playwright 等无头环境）时跳过 picker/share，直接走 `a[download]`，保证行为可预期（否则 picker 在 headless 抛 AbortError 被当取消而永不下载）。
+- `el` 经 ui.js IIFE 封装、仅以 `UI.el` 暴露，故本模块顶部取 `var el = UI.el` 别名。
+- 收敛 5 处下载：备份(`exportData`)、同步(`saveSyncFile`)、成绩单(`grades.downloadText` 加 BOM)、提醒(`remind.downloadText` → .ics)、课表 PNG(`schedule-export.downloadBlob`)。
+
+### 4. 死代码 / 冗余清理（store.js）
+- 删 `settleCard` 旧别名（重构为 `settleCardFor` 后残留，仅 `verify_shop.mjs` 引用，已同步改测）；
+- `ticketInfo()` 返回 `{ selection, fish }`，去 `makeUp` 别名；
+- `exportJSON` lite 分支删除重复清空 `background.dataUrl`/`pet.src`（上行已清，且 `pet` 不在 lite 的 keep 名单，属死代码）。
+
+### 5. 回归
+- `verify_sync.mjs`（新建，21 项：standard/lite/full 脱敏、不含日记键、往返日记保留、密钥不回流、零控制台错误）；
+- `verify_sync_ui.mjs`（重写适配新 UI：入口按钮、生成 JSON、精简/标准切换、纯 JSON 导入、旧 CP1R 兼容、非法拒绝）；
+- `verify_sync_scope.mjs`、`verify_backup.mjs`、`verify_export.mjs`、`verify_ics.mjs`、`verify_diary.mjs`、`verify_shop.mjs` 全部通过；
+- `tests/run.mjs` 删除同步码分片测试残留后 **582 条全过**；全量 31 个 `verify_*.mjs` 通过。
+- 本轮**未发布**（本地领先远程 10+ 提交），未对 WorkBuddy 内置浏览器做适配（按约定用本地 html 测试）。
+

@@ -3681,16 +3681,6 @@
     },
 
     /**
-     * 结算当天月卡（补签也走同一条路径，见 settleCardFor）。
-     * 规则：有效期 30 天内，每天首次达成「有效日」（2 次有效动作）返 CARD_DAILY；
-     * 任意连续 7 天全勤额外 +CARD_WEEK_BONUS（滚动窗口，发过后窗口不重叠）；
-     * 30 天一天不漏再 +CARD_FULL_BONUS。漏签只损失当天和该窗口，有效期不顺延。
-     */
-    settleCard: function () {
-      return this.settleCardFor(DateUtil.toStr(DateUtil.today()));
-    },
-
-    /**
      * 结算指定日期的月卡签到。补签与当天签到走同一套逻辑（返还、周窗口、全勤判定完全一致），
      * 因此补签后如果凑满了窗口或 30 天，同样会补发周奖励 / 全勤奖励与对应的卡。
      */
@@ -3777,7 +3767,7 @@
 
     ticketInfo: function () {
       var t = (state.shop && state.shop.tickets) || {};
-      return { selection: t.selection || 0, fish: t.fish || 0, makeUp: t.fish || 0 };
+      return { selection: t.selection || 0, fish: t.fish || 0 };
     },
 
     /** 干员名 → 抽卡记录对象（源数据 AK_OPS） */
@@ -5935,8 +5925,6 @@
       var ns = {};
       keep.forEach(function (k) { if (out.settings && out.settings[k] !== undefined) ns[k] = out.settings[k]; });
       out.settings = Object.assign({}, empty.settings, ns);
-      if (out.settings.background) out.settings.background.dataUrl = '';
-      if (out.settings.pet) out.settings.pet.src = '';
       out.exportScope = 'lite';
       return JSON.stringify(out, null, 2);
     },

@@ -34,12 +34,7 @@ function extractFn(name) {
 const expandRangeSrc = extractFn('expandRange');
 const mergeTotalSrc = extractFn('mergeTotal');
 
-// 3) 同步码分片逻辑（settings.js 里的纯函数）
-const splitSyncCodeSrc = extractFn('splitSyncCode');
-const joinSyncPartsSrc = extractFn('joinSyncParts');
-const pad2Src = extractFn('pad2');
-
-// 4) 批量课表导入的解析器（schedule.js 里的纯函数）
+// 3) 批量课表导入的解析器（schedule.js 里的纯函数）
 //    注意 parseWeeks 在别处还有同名重载，所以统一从 DAY_CN 之后开始找，锁死取 schedule.js 那份
 const batchAnchor = sliceFrom('var DAY_CN = {');
 function extractObj(varName) {
@@ -216,15 +211,11 @@ const childIdsSrc = extractFnFrom('childIds', SUBTASK_ANCHOR);
 // 在隔离作用域里求值并导出
 const mod = `var TimeUtil = ${TimeUtilSrc};
   ${DateUtilSrc}
-  var PART_HEAD = 'CP1P', PART_SIZE = 700;
   var BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
   ${DAY_CNSrc}
   ${headKeysSrc}
   ${expandRangeSrc}
   ${mergeTotalSrc}
-  ${pad2Src}
-  ${splitSyncCodeSrc}
-  ${joinSyncPartsSrc}
   ${splitRowSrc}
   ${parseDaySrc}
   ${parsePeriodNumsSrc}
@@ -322,7 +313,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   function D(u) { return u || DateUtil; }
   function T(u) { return u || TimeUtil; }
   var global = { Lunar: __LUNAR__ };
-  globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
+  globalThis.__T = { TimeUtil, DateUtil, expandRange, mergeTotal,
                      parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
                      inWeekOf, weekOverlap, timeOverlap, findConflicts,
                      icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
@@ -338,7 +329,7 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      diaryDatePrompt, moodStats, diaryOn, diariesSorted };
 `;
 new Function('__LUNAR__', mod)(Lunar);
-const { TimeUtil, DateUtil, expandRange, mergeTotal, splitSyncCode, joinSyncParts, PART_HEAD, PART_SIZE,
+const { TimeUtil, DateUtil, expandRange, mergeTotal,
         parseDay, parsePeriodNums, parseWeeks, splitRow, parseCourseTable,
         inWeekOf, weekOverlap, timeOverlap, findConflicts,
         icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
@@ -463,53 +454,6 @@ console.log('mergeTotal（合并重叠区间）');
 eq('不重叠 [0,100]+[100,200] = 200', mergeTotal([[0, 100], [100, 200]]), 200);
 eq('重叠 [0,100]+[50,150] = 150', mergeTotal([[0, 100], [50, 150]]), 150);
 eq('空 = 0', mergeTotal([]), 0);
-
-// ---- 同步码分片 ----
-function mkCode(n) {                       // 造一个长度 n 的伪同步码（CP1G + base64）
-  let s = 'CP1G';
-  const CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  for (let i = 0; i < n - 4; i++) s += CH[i % CH.length];
-  return s;
-}
-
-console.log('splitSyncCode（分片切分）');
-eq('短码不分片（保持旧格式）', splitSyncCode(mkCode(700)), null);
-eq('空值不分片', splitSyncCode(''), null);
-{
-  const code = mkCode(1500);
-  const parts = splitSyncCode(code);
-  eq('1500 字符切成 3 片', parts.length, 3);
-  eq('每片以 CP1P 开头', parts.every(p => p.indexOf(PART_HEAD) === 0), true);
-  eq('头部带总数与序号', parts[0].slice(0, 8), 'CP1P0301');
-  eq('末片序号正确', parts[2].slice(0, 8), 'CP1P0303');
-  eq('拼接后等于原码', parts.map(p => p.slice(8)).join(''), code);
-}
-
-console.log('joinSyncParts（分片拼回）');
-{
-  const code = mkCode(1500);
-  const parts = splitSyncCode(code);
-  const j = joinSyncParts(parts.join('\n'));
-  eq('顺序粘贴可拼回', j.code, code);
-  eq('无缺片', j.missing, []);
-
-  const j2 = joinSyncParts(parts.slice().reverse().join('\n'));
-  eq('乱序粘贴可拼回', j2.code, code);
-
-  // 微信里复制常带「用户名 上午10:30」这类噪音，数字不能被当成内容
-  const noisy = parts.map(p => p + '\n小明 上午10:30').join('\n');
-  eq('夹带微信噪音仍可拼回', joinSyncParts(noisy).code, code);
-
-  // 带【1/3】标注：标注里的数字不能被拼进内容
-  const marked = parts.map((p, i) => '【' + (i + 1) + '/3】' + p).join('\n');
-  eq('带【N/M】标注仍可拼回', joinSyncParts(marked).code, code);
-
-  const miss = joinSyncParts(parts.filter((_, i) => i !== 1).join('\n'));
-  eq('缺第 2 片时报告缺失', miss.missing, [2]);
-  eq('缺片时不给码', miss.code, null);
-
-  eq('非分片内容返回 null', joinSyncParts('CP1Gabc'), null);
-}
 
 // ---- 批量导入课表解析 ----
 console.log('parseDay（星期识别）');

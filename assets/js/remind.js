@@ -282,17 +282,15 @@
     return lines.map(icsFold).join('\r\n') + '\r\n';
   }
 
-  /** 浏览器里下载成文件（file:// 下也可用，「导出备份」已验证过这条路） */
+  /** 浏览器里下载成文件（统一走 SaveFile 保存通道，含复制兜底） */
   function downloadText(text, filename, mime) {
-    var blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    SaveFile.save(filename, text, {
+      mime: (mime || 'text/calendar').split(';')[0],
+      ext: 'ics'
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker' || r.method === 'share') UI.toast('已保存 ' + filename, 'ok');
+    }).catch(function (e) { UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err'); });
   }
 
   var ICS = {

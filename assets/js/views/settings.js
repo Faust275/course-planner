@@ -1290,13 +1290,13 @@
           el('div', { class: 'section-title' }, ['手机 ⇄ 电脑同步']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
-            text: '数据只存在各自设备的浏览器里，没有服务器，所以要手动同步。用同步码最省事：点「生成同步码」复制一段文本，发到另一台设备（微信「文件传输助手」就行），在那台设备点「粘贴同步码」即可。'
+            text: '数据只存在各自设备的浏览器里，没有服务器，所以要手动同步。点「生成同步文件」导出一份 .json，用微信 / QQ 发到另一台设备，在那台设备点「导入同步文件」选文件或粘贴即可。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
-            el('button', { class: 'btn btn-primary', onclick: syncCodeDialog },
-              [V.svg(V.icons.copy, 16), '生成同步码']),
+            el('button', { class: 'btn btn-primary', onclick: syncFileDialog },
+              [V.svg(V.icons.download, 16), '生成同步文件']),
             el('button', { class: 'btn', onclick: pasteSyncDialog },
-              [V.svg(V.icons.download, 16), '粘贴同步码'])
+              [V.svg(V.icons.upload, 16), '导入同步文件'])
           ]),
           el('div', {
             class: 'ocr-hint',
@@ -1315,7 +1315,7 @@
           }),
           el('p', {
             style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '文件备份是唯一包含「日记」的迁移方式（同步码不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
+            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
             el('button', { class: 'btn', onclick: exportData }, [V.svg(V.icons.download, 16), '导出备份']),
@@ -1845,57 +1845,23 @@
   }
 
   function exportData() {
-    try {
-      var text = Store.exportJSON();
-      var name = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
-      var blob = new Blob([text], { type: 'application/json;charset=utf-8' });
-      var file = null;
-      try { file = new File([blob], name, { type: 'application/json' }); } catch (e) { /* 老浏览器 */ }
-
-      // 优先拉起系统分享面板（手机上一键发给微信/QQ），不支持时回落到下载
-      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({
-          files: [file],
-          title: '课表备份',
-          text: '课表备份文件，另一台设备在「设置 → 数据管理 → 导入备份」选择即可恢复（含日记）'
-        }).then(function () { UI.toast('已发起分享', 'ok'); })
-          .catch(function () { download(); });
-        return;
-      }
-      download();
-
-      function download() {
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-        UI.toast('备份已导出：' + name, 'ok');
-        UI.modal({
-          title: '备份已保存',
-          width: '460px',
-          body: [
-            el('p', {
-              class: 'ocr-hint',
-              text: '文件名「' + name + '」，已存到浏览器的下载目录（手机一般在「文件管理 → 下载」里）。'
-            }),
-            el('p', {
-              class: 'ocr-hint',
-              text: '如何换设备：把这个文件直接用微信 / QQ 发给另一台设备，在那台设备打开' +
-                    '「设置 → 数据管理 → 导入备份」，选择该文件即可恢复。备份文件包含日记正文，存在自己放心的位置。'
-            })
-          ],
-          footer: el('div', { class: 'modal-foot' }, [
-            el('button', { class: 'btn btn-primary', text: '知道了', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
-          ])
-        });
-      }
-    } catch (e) {
-      UI.toast('导出失败：' + e.message, 'err');
-    }
+    var text = Store.exportJSON();   // 完整备份（含日记、图片、设置）
+    var name = '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json';
+    var sizeKB = Math.max(1, Math.round(new Blob([text]).size / 1024));
+    SaveFile.save(name, text, {
+      mime: 'application/json',
+      ext: 'json',
+      panelTitle: '备份已生成',
+      panelHint: '备份文件包含日记正文，请存在自己放心的位置。换设备时在「设置 → 数据管理 → 导入备份」选择该文件即可恢复。',
+      sizeText: sizeKB + ' KB'
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker') UI.toast('已保存到本地', 'ok');
+      else if (r.method === 'share') UI.toast('已发起分享', 'ok');
+      // download / copy-fallback：诚实面板已由 SaveFile 弹出
+    }).catch(function (e) {
+      UI.toast('导出失败：' + (e && e.message ? e.message : e), 'err');
+    });
   }
 
   function importData() {
@@ -1938,18 +1904,52 @@
   }
 
   /* ==========================================================
-   * 同步码：备份压缩成一段文本，复制 / 粘贴即可跨设备同步
+   * 设备间同步：导出一份「不含图片」的 JSON 文件，发到另一台设备恢复
+   * （取代旧版 base64 同步码——数据一大要发上百条消息，体验差）
    * ========================================================== */
-  function utf8Bytes(str) { return new TextEncoder().encode(str); }
 
-  function bytesToB64(bytes) {
-    var s = '', CH = 0x8000;
-    for (var i = 0; i < bytes.length; i += CH) {
-      s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
-    }
-    return btoa(s);
+  /**
+   * 两档同步内容的说明。
+   * 两档都**不含日记**：日记只走「导出备份 / 恢复」，原因见下方 DIARY_SYNC_TIP。
+   * 两档都**不含自定义图片**与**脱敏密钥**：图片 base64 撑大文件、换设备本就要重选图；
+   * 密钥属于本机凭据，不随同步文件外传（文件走你自己发，不像纯文本码经过不可控中转）。
+   */
+  var SYNC_SCOPES = [
+    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、灵感、成绩，换设备后其它模块是空的。' },
+    { key: 'standard', name: '标准', desc: '除日记与自定义图片外的全部内容：课程、待办、计划、记账、灵感、成绩、成就。不含背景图和桌宠素材，换设备后需重新选图。' }
+  ];
+
+  /** 「为什么日记不在同步里」的统一说明，两处（生成 / 导入）都显示 */
+  var DIARY_SYNC_TIP =
+    '日记不随同步走。同步文件要经过聊天工具搬运，中途被谁看到无从控制；' +
+    '日记只通过「导出备份」传文件，那个通道是你自己的文件。本机已有的日记不会因为导入同步而丢失。';
+
+  /** 同步文件存盘（移动端长文本复制易截断，发文件最稳）。降级：复制纯 JSON 文本。 */
+  function saveSyncFile(json, scopeKey) {
+    if (!json) { UI.toast('同步文件还没生成好', 'err'); return; }
+    var name = '课表同步-' + DateUtil.toStr(DateUtil.today()) + '-' + scopeKey + '.json';
+    SaveFile.save(name, json, {
+      mime: 'application/json', ext: 'json',
+      panelTitle: '同步文件已生成',
+      panelHint: '把这份 .json 直接用微信 / QQ 发给另一台设备，在那台设备「设置 → 数据管理 → 导入同步文件」选文件或粘贴即可恢复。',
+      sizeText: (new Blob([json]).size / 1024).toFixed(0) + ' KB'
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker' || r.method === 'share') UI.toast('已保存同步文件', 'ok');
+      // download / copy-fallback：诚实面板已由 SaveFile 弹出
+    }).catch(function (e) {
+      UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err');
+    });
   }
 
+  /** 复制纯 JSON 文本（弱网 / WebView 下最可靠的降级通道）。 */
+  function copyToClipboard(text) {
+    SaveFile.copyText(text).then(function (ok) {
+      UI.toast(ok ? '已复制，去粘贴到另一台设备' : '复制失败，请长按文本框手动复制', ok ? 'ok' : 'err');
+    });
+  }
+
+  /** base64 → 字节（仅用于兼容旧版 CP1G/CP1R 同步码解码） */
   function b64ToBytes(b64) {
     var bin = atob(String(b64).replace(/\s+/g, ''));
     var out = new Uint8Array(bin.length);
@@ -1957,222 +1957,68 @@
     return out;
   }
 
-  /** 备份 JSON → 同步码（能压缩就压缩） */
-  function packSync(text) {
-    var raw = utf8Bytes(text);
-    if (typeof CompressionStream !== 'undefined') {
-      try {
-        return new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip')))
-          .arrayBuffer()
-          .then(function (buf) { return 'CP1G' + bytesToB64(new Uint8Array(buf)); })
-          .catch(function () { return 'CP1R' + bytesToB64(raw); });
-      } catch (e) { /* 老浏览器没有压缩能力，退化 */ }
-    }
-    return Promise.resolve('CP1R' + bytesToB64(raw));
-  }
+  /** 同步内容 → 备份 JSON（兼容：纯 JSON 文本 / 旧版 CP1G/CP1R 同步码） */
+  function unpackSync(text) {
+    var s = String(text || '').trim();
+    if (!s) return Promise.reject(new Error('请先选择文件或粘贴同步内容'));
+    if (s.charAt(0) === '{') return Promise.resolve(s);   // 直接是 JSON 文本
 
-  /* ---------- 分片：长码切成几段，方便微信分段发送 ---------- */
-  var PART_HEAD = 'CP1P';     // 分片头：CP1P + 总数(2位) + 序号(2位)
-  var PART_SIZE = 700;        // 每片字符数（微信单条消息轻松容纳）
-
-  function pad2(n) { return (n < 10 ? '0' : '') + n; }
-
-  /** 同步码 → 分片数组；码不长时返回 null（表示无需分片，保持旧格式） */
-  function splitSyncCode(code) {
-    if (!code || code.length <= PART_SIZE) return null;
-    var n = Math.ceil(code.length / PART_SIZE);
-    if (n > 99) return null;                 // 超出 2 位序号上限，不分片
-    var parts = [];
-    for (var i = 0; i < n; i++) {
-      parts.push(PART_HEAD + pad2(n) + pad2(i + 1) + code.substr(i * PART_SIZE, PART_SIZE));
-    }
-    return parts;
-  }
-
-  /**
-   * 从粘贴内容里提取并拼回同步码。
-   * 支持一次粘多片（顺序任意、可夹杂换行与「【1/3】」这类标注）。
-   * 返回 null 表示不是分片格式；否则返回 { total, missing, code }。
-   */
-  function joinSyncParts(text) {
-    var s = String(text || '');
-    var pos = [], idx = 0;
-    while (true) {
-      var at = s.indexOf(PART_HEAD, idx);
-      if (at < 0) break;
-      pos.push(at);
-      idx = at + PART_HEAD.length;
-    }
-    if (!pos.length) return null;
-
-    var total = 0, got = {};
-    for (var i = 0; i < pos.length; i++) {
-      var seg = s.slice(pos[i], i + 1 < pos.length ? pos[i + 1] : s.length);
-      var tn = parseInt(seg.substr(4, 2), 10);
-      var sq = parseInt(seg.substr(6, 2), 10);
-      if (!tn || !sq) continue;
-      total = tn;
-      // 只取紧随其后的连续 base64 字符：遇到中文、【标注】、换行或微信的
-      // "上午10:30" 之类的附加文字就停止，避免把噪音数字当成内容拼进去
-      var m = /^[A-Za-z0-9+/=]+/.exec(seg.substr(8));
-      got[sq] = m ? m[0] : '';
-    }
-    if (!total) return null;
-    var missing = [];
-    for (var k = 1; k <= total; k++) if (!got[k]) missing.push(k);
-    var code = null;
-    if (!missing.length) {
-      code = Object.keys(got).sort(function (a, b) { return a - b; })
-        .map(function (k2) { return got[k2]; }).join('');
-    }
-    return { total: total, missing: missing, code: code };
-  }
-
-  /** 同步码 → 备份 JSON */
-  function unpackSync(code) {
-    var s = String(code || '').replace(/\s+/g, '');
-    if (!s) return Promise.reject(new Error('请先粘贴同步码'));
-    if (s.charAt(0) === '{') return Promise.resolve(String(code));   // 直接粘了原始 JSON
-
-    // 分片格式：先拼回完整码再走原来的解析
-    if (s.indexOf(PART_HEAD) >= 0) {
-      var j = joinSyncParts(s);
-      if (j && j.total) {
-        if (j.missing.length) {
-          return Promise.reject(new Error(
-            '还差第 ' + j.missing.join('、') + ' 片（共 ' + j.total + ' 片），' +
-            '请把缺的那几片也一起粘贴进来'
-          ));
-        }
-        s = j.code;
-      }
-    }
     var head = s.slice(0, 4), body = s.slice(4);
     var bytes;
-    try { bytes = b64ToBytes(body); }
-    catch (e) { return Promise.reject(new Error('同步码不完整或已损坏')); }
+    try { bytes = b64ToBytes(body); } catch (e) { return Promise.reject(new Error('同步内容不完整或已损坏')); }
+    var txt;
     if (head === 'CP1R') {
-      var txt = new TextDecoder().decode(bytes);
-      // 未压缩档内容是裸 JSON，先自检，别等到覆盖时才报错
-      try { JSON.parse(txt); }
-      catch (e) {
-        return Promise.reject(new Error('同步码不完整（收到 ' + s.length + ' 字符），多半是复制时被截断了，请重新完整复制一遍'));
-      }
+      txt = new TextDecoder().decode(bytes);
+      try { JSON.parse(txt); } catch (e) { return Promise.reject(new Error('同步内容不完整（复制时被截断），请重新完整复制一遍')); }
       return Promise.resolve(txt);
     }
     if (head === 'CP1G') {
-      if (typeof DecompressionStream === 'undefined') {
-        return Promise.reject(new Error('这台设备不支持解压，请改用「导出备份」传文件'));
-      }
+      if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('这台设备不支持解压，请改用「导出备份」传文件'));
       return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')))
-        .arrayBuffer()
-        .then(function (buf) {
-          var txt = new TextDecoder().decode(buf);
-          try { JSON.parse(txt); }      // 解压成功也要校验，避免导入半份 JSON
-          catch (e) { throw new Error('内容不完整'); }
-          return txt;
-        })
-        .catch(function () {
-          // 压缩档自带校验，解压失败几乎只可能是复制漏了开头或结尾
-          return Promise.reject(new Error(
-            '同步码不完整（收到 ' + s.length + ' 字符），多半是复制时漏了开头或结尾。' +
-            '请回到原来那台设备重新完整复制，微信里建议分段发送。'
-          ));
+        .arrayBuffer().then(function (buf) {
+          var t = new TextDecoder().decode(buf);
+          try { JSON.parse(t); } catch (e) { throw new Error('内容不完整'); }
+          return t;
+        }).catch(function () {
+          return Promise.reject(new Error('同步内容不完整，多半是复制时漏了开头或结尾，请重新完整复制'));
         });
     }
-    return Promise.reject(new Error('不是有效的同步码（开头应为 CP1G 或 CP1R），请整段复制'));
+    return Promise.reject(new Error('不是有效的同步内容（应为 JSON 文本，或旧版同步码）'));
   }
 
-  function copyToClipboard(text, ta) {
-    function fallback() {
-      try {
-        ta.removeAttribute('readonly');
-        ta.focus();
-        ta.select();
-        ta.setSelectionRange(0, 999999);
-        var ok = document.execCommand('copy');
-        ta.setAttribute('readonly', 'readonly');
-        UI.toast(ok ? '同步码已复制' : '请长按文本框手动复制', ok ? 'ok' : 'err');
-      } catch (e) {
-        UI.toast('请长按文本框手动复制', 'err');
-      }
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { UI.toast('同步码已复制'); }, fallback);
-    } else {
-      fallback();
-    }
-  }
-
-  /**
-   * 两档同步码的说明文案。
-   * 两档都**不含日记**：日记只走「导出备份 / 恢复」，原因见下方 DAIRY_SYNC_TIP。
-   */
-  var SYNC_SCOPES = [
-    { key: 'lite',     name: '精简', desc: '只带课表：学期、课程、上课时段与节次。不含任务、记账、灵感、成绩，换设备后其它模块是空的。' },
-    { key: 'standard', name: '标准', desc: '除日记与自定义图片外的全部内容：课程、待办、计划、记账、灵感、成绩、成就。不含自定义背景图和桌宠素材，换设备后需重新选图。' }
-  ];
-
-  /** 「为什么日记不在同步码里」的统一说明，两处（生成 / 粘贴）都显示 */
-  var DIARY_SYNC_TIP =
-    '日记不随同步码走。同步码要经剪贴板、聊天工具来回搬运，中途被谁看到无从控制；' +
-    '日记只通过「导出备份」传文件，那个通道是你自己的文件。本机已有的日记不会因为导入同步码而丢失。';
-
-  /** 同步码存为 .txt 文件（移动端长文本复制易截断，发文件更稳） */
-  function saveSyncFile(text) {
-    if (!text) { UI.toast('同步码还没生成好', 'err'); return; }
-    try {
-      var blob = new Blob(['课表同步码（在另一台设备：设置 → 数据管理 → 粘贴同步码，整段导入本文件内容）\n\n' + text + '\n'],
-        { type: 'text/plain;charset=utf-8' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = '课表同步码-' + DateUtil.toStr(DateUtil.today()) + '.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      UI.toast('文件已保存，可以直接分享给另一台设备', 'ok');
-    } catch (e) {
-      UI.toast('保存失败：' + e.message, 'err');
-    }
-  }
-
-  /** 生成并展示同步码 */
-  function syncCodeDialog() {
+  /** 生成并展示同步文件 */
+  function syncFileDialog() {
     var scope = 'standard';          // 默认推荐标准档
     var code = '';
     var ta = V.textarea({ class: 'textarea sync-code', rows: 5, readonly: 'readonly' });
     var sizeTip = el('div', { class: 'ocr-hint', text: '' });
-    var partHost = el('div');
     var scopeTip = el('p', { class: 'ocr-hint', text: '' });
     var chipBar = el('div', { class: 'tag-bar' });
     var m = V.modal({
-      title: '同步码',
+      title: '生成同步文件',
       width: '520px',
       body: [
         el('p', {
           class: 'ocr-hint',
-          text: '手机上推荐点「存为文件」，把文件直接发给另一台设备（微信 / QQ 都行，长文本不会被截断）；' +
-                '在那台设备打开「设置 → 数据管理 → 粘贴同步码」导入就同步完成了。'
+          text: '点「保存同步文件」把 .json 直接发给另一台设备（微信 / QQ 都行，文件比文本长也不怕截断）；' +
+                '在那台设备打开「设置 → 数据管理 → 导入同步文件」选文件或粘贴即可恢复。'
         }),
         el('div', { class: 'section-title', text: '带哪些内容' }),
         chipBar,
         scopeTip,
         el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta,
-        sizeTip,
-        partHost
+        sizeTip
       ],
       footer: el('div', { class: 'modal-foot' }, [
         el('button', { class: 'btn', text: '关闭', onclick: function () { m.close(); } }),
         el('button', {
-          class: 'btn', text: '存为文件',
-          onclick: function () { if (code) saveSyncFile(ta.value); }
+          class: 'btn', text: '复制 JSON 文本',
+          onclick: function () { if (code) copyToClipboard(code); }
         }),
         el('button', {
-          class: 'btn btn-primary', text: '复制同步码',
-          onclick: function () { if (code) copyToClipboard(code, ta); }
+          class: 'btn btn-primary', text: '保存同步文件',
+          onclick: function () { if (code) saveSyncFile(ta.value, scope); }
         })
       ])
     });
@@ -2195,62 +2041,51 @@
     function refresh() {
       sizeTip.textContent = '正在生成…';
       ta.value = '';
-      partHost.innerHTML = '';
-      packSync(Store.exportJSON(scope)).then(function (c) {
-        code = c;
-        var kb = (c.length / 1024).toFixed(1);
-        var parts = splitSyncCode(c);
-        if (parts) {
-          // 太长就分片：文本框给出带序号的全部内容，便于一条条发
-          ta.value = parts.map(function (p, i) {
-            return '【' + (i + 1) + '/' + parts.length + '】' + p;
-          }).join('\n');
-          sizeTip.textContent = '共 ' + c.length + ' 字符，已分成 ' + parts.length +
-            ' 片（每片约 ' + PART_SIZE + ' 字符）。微信里建议一条一片发送。';
-          renderPartButtons(parts);
-        } else {
-          ta.value = c;
-          sizeTip.textContent = '大小约 ' + kb + ' KB（' + c.length + ' 字符）' +
-            (c.length > 80000 ? '，偏大，建议改用「导出备份」传文件' : '');
-        }
-      }).catch(function (e) {
+      try {
+        code = Store.exportJSON(scope);   // 已是标准/精简档：不含图片、不含日记、密钥脱敏
+        var kb = (code.length / 1024).toFixed(1);
+        ta.value = code;
+        sizeTip.textContent = '大小约 ' + kb + ' KB（' + code.length + ' 字符）。数据量大时请用「保存同步文件」，别用复制文本。';
+      } catch (e) {
         code = '';
         sizeTip.textContent = '生成失败：' + e.message;
-      });
-    }
-
-    function renderPartButtons(parts) {
-      var bar = el('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' } });
-      parts.forEach(function (p, i) {
-        bar.appendChild(el('button', {
-          class: 'btn btn-sm',
-          text: '复制第 ' + (i + 1) + ' 片',
-          onclick: function () { copyToClipboard(p, ta); }
-        }));
-      });
-      partHost.appendChild(bar);
+      }
     }
 
     renderChips();
     refresh();
   }
 
-  /** 粘贴同步码 */
+  /** 导入同步文件：支持选 .json 文件 或 粘贴纯 JSON 文本 */
   function pasteSyncDialog() {
     var ta = V.textarea({
       class: 'textarea sync-code', rows: 5,
-      placeholder: '在这里粘贴另一台设备复制的同步码'
+      placeholder: '把另一台设备的同步内容粘贴到这里，或点「选择文件」'
+    });
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json,application/json';
+    fileInput.style.cssText = 'margin-top:8px;';
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () { ta.value = String(reader.result); };
+      reader.readAsText(f, 'utf-8');
     });
     var m = V.modal({
-      title: '粘贴同步码',
+      title: '导入同步文件',
       width: '480px',
       autofocus: true,
       body: [
         el('p', {
           class: 'ocr-hint',
-          text: '粘贴后会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。' +
-                '如果对方发来的是多片，把几片全部粘进来即可，顺序乱了也没关系；少粘了会提示还差哪几片。'
+          text: '导入会把这份数据整体覆盖到这台设备（课程、待办、记账、计划、灵感、设置都会一起过来）。'
         }),
+        el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' } }, [
+          el('button', { class: 'btn btn-sm', text: '选择文件', onclick: function () { fileInput.click(); } }),
+          fileInput
+        ]),
         el('p', { class: 'ocr-hint sync-diary-tip', text: DIARY_SYNC_TIP }),
         ta
       ],
@@ -2267,8 +2102,7 @@
   function doImportSync(code, m) {
     unpackSync(code).then(function (json) {
       var obj;
-      try { obj = JSON.parse(json); }
-      catch (e) { throw new Error('内容不是有效的备份'); }
+      try { obj = JSON.parse(json); } catch (e) { throw new Error('内容不是有效的备份'); }
       var parts = [];
       if ((obj.courses || []).length) parts.push(obj.courses.length + ' 门课程');
       if ((obj.tasks || []).length) parts.push(obj.tasks.length + ' 条待办');

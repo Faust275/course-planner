@@ -448,17 +448,12 @@
     });
   }
 
+  /** 导出课表图片（统一走 SaveFile 保存通道，含复制兜底） */
   function downloadBlob(blob, filename) {
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 1200);
+    SaveFile.save(filename, blob, {}).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker' || r.method === 'share') UI.toast('已保存 ' + filename, 'ok');
+    }).catch(function (e) { UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err'); });
   }
 
   /** 预览弹窗：先画出来给人看，再决定下不下载 */
@@ -506,7 +501,6 @@
               var fname = (Store.semester && Store.semester.name ? Store.semester.name : '课表') +
                           '-第' + weekNo + '周.png';
               downloadBlob(blob, fname);
-              UI.toast('已保存 ' + fname);
               mdl.close();
             }, 'image/png');
           }

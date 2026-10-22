@@ -1,7 +1,7 @@
 // Playwright 端到端：日记 + 心情
 // 覆盖：待办页三分页、一天一篇（重复保存不新增）、心情选填与五档、
 //       心情统计 7 天门槛与开关、月历按心情上色、凌晨归属询问（开关 control）、
-//       灵感 ⇄ 日记双向拷贝与两个全角空格缩进、同步码不含日记、文件备份含日记、搜索能搜到日记
+//       灵感 ⇄ 日记双向拷贝与两个全角空格缩进、同步文件不含日记、文件备份含日记、搜索能搜到日记
 import { chromium } from 'playwright';
 
 const URL = process.env.URL || 'http://localhost:8201/index.html';
@@ -476,7 +476,7 @@ check('新灵感正文与日记一致', F5.body.indexOf('把番茄钟改成 45 �
 check('原日记仍在（两边各自独立）', F5.diaryStill === 1, F5.diaryStill);
 
 /* ==========================================================
- * G. 同步码不含日记 / 文件备份含日记
+ * G. 同步文件不含日记 / 文件备份含日记
  * ========================================================== */
 console.log('G. 迁移通道');
 // 先清掉前面留下的日记，只测一条我们能认出来的
@@ -517,7 +517,7 @@ const G2 = await p.evaluate(() => {
 check('导入不含日记的数据时，本机日记被保留', G2.kept === G2.before && G2.kept === 1, G2);
 check('保留的是本机原文（没被同步码冲掉）', G2.body === '本机日记，不能丢', G2.body);
 
-// 设置页：文件备份说明 + 同步码两档 + 日记说明
+// 设置页：文件备份说明 + 同步文件两档 + 日记说明
 await p.evaluate(() => App.go('settings'));
 await p.waitForTimeout(350);
 await p.evaluate(() => {
@@ -534,18 +534,18 @@ const G3 = await p.evaluate(() => document.querySelector('.cp-view.cp-active').t
 check('文件备份说明写明「唯一包含日记」', /唯一包含「日记」/.test(G3));
 
 await p.evaluate(() => {
-  const btn = [...document.querySelectorAll('.cp-view.cp-active button')].find(x => /生成同步码/.test(x.textContent));
+  const btn = [...document.querySelectorAll('.cp-view.cp-active button')].find(x => /生成同步文件/.test(x.textContent));
   if (btn) btn.click();
 });
 await p.waitForTimeout(500);
 const G4 = await p.evaluate(() => {
   const m = [...document.querySelectorAll('.cp-modal')].pop();
   const chips = [...m.querySelectorAll('.cp-tag-chip')].map(x => x.textContent.trim());
-  return { chips: chips, tip: m.textContent.indexOf('日记不随同步码走') >= 0 };
+  return { chips: chips, tip: m.textContent.indexOf('日记不随同步走') >= 0 };
 });
-check('同步码只有两档', G4.chips.length === 2, G4.chips);
+check('同步文件只有两档', G4.chips.length === 2, G4.chips);
 check('两档都不含日记', G4.chips.every(x => !/日记/.test(x)), G4.chips);
-check('同步码对话框说明日记为何不同步', G4.tip === true);
+check('同步文件对话框说明日记为何不同步', G4.tip === true);
 await p.evaluate(() => {
   const m = [...document.querySelectorAll('.cp-modal')].pop();
   const x = [...m.querySelectorAll('.cp-modal-foot button')].find(b => /关闭/.test(b.textContent));
