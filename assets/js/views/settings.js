@@ -1444,7 +1444,9 @@
                   Store.setGachaEnabled(true);
                   UI.toast('已开启抽卡系统');
                   if (global.App) App.rebuildNav();
-                  view.render();
+                  // 开启后弹出抽卡 / 合成玉 的专门引导（不进主流程，默认只种树看不到）
+                  if (global.Onboard && Onboard.startGacha) Onboard.startGacha({ from: 'settings' });
+                  else view.render();
                 } else if (pwd === '关闭抽卡') {
                   Store.setGachaEnabled(false);
                   UI.toast('已关闭抽卡系统，仅保留种树');

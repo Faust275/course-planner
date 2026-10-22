@@ -1,11 +1,10 @@
-
-
-
 /* ==========================================================
  * 新手教程：首次打开自动走一遍，之后可在「设置 → 新手教程」再看
  *  - 核心步骤（core 不写或 true）：走完整个流程
- *  - 非核心步骤（core: false）：介绍新增功能，卡片上直接给「关闭」按钮，
+ *  - 非核心步骤（core: false）：介绍进阶功能，卡片上直接给「关闭」按钮，
  *    第一次出现非核心步骤时高亮提醒「之后在设置也能打开」
+ *  - 合成玉 / 抽卡相关内容不放在主流程，改为开发者选项开启后单独弹出的引导
+ *    （见 GACHA_STEPS + startGacha），默认只种树的用户不会看到
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -14,7 +13,10 @@
   var el = V.el;
   var I = V.icons;
 
-  /* 每一步：view = 讲解时要切到的页面 */
+  /* 每一步：view = 讲解时要切到的页面。整体按「从前到后」排列：
+   * 今日 → 课表 → 日历/日程 → 待办家族（待办 / 子任务 / 灵感 / 搜索重复 / 时间投入）
+   * → 象限 → 专注 → 计划 / 目标 → 记账 / 成绩 → 日记 → 标签 / 设置；
+   * 之后才是非核心的进阶介绍，最后是收尾。 */
   var STEPS = [
     {
       view: 'today', icon: I.today, title: '欢迎使用课表',
@@ -52,15 +54,6 @@
       ]
     },
     {
-      view: 'tasks', tab: 'quadrant', icon: I.quadrant, title: '象限',
-      desc: '用 24 小时的环形图看时间都花在哪，也可以自己补记活动。',
-      tips: [
-        '饮食和睡眠默认记录，不需要的话在「设置 → 记录偏好」里关掉',
-        '可以切「今天 / 一周 / 一月 / 一季 / 今年」，图表能在饼图和方形图之间切换',
-        '专注记录会自动汇总到这里'
-      ]
-    },
-    {
       view: 'tasks', icon: I.check, title: '待办',
       desc: '作业、杂事都记在这里，可以关联课程、设截止日期和优先级。',
       tips: [
@@ -80,12 +73,45 @@
       ]
     },
     {
+      view: 'tasks', icon: I.idea, title: '灵感（在待办里）',
+      desc: '待办页顶上切到「灵感」，想到什么先随手记下来，不用想放在哪。',
+      tips: [
+        '一句话、一段话都行，也支持打标签',
+        '想变成待办时点一下「转待办」，不用重新输入'
+      ]
+    },
+    {
+      view: 'tasks', icon: I.search, title: '搜索与重复任务',
+      desc: '顶部的搜索框能跨所有模块找内容：课程、待办、账目、日记都能搜。待办设了重复规则（每天 / 每周 / 自定义）后，完成后会自动生成下一次。',
+      tips: [
+        '农历生日、纪念日也能设成每年重复的提醒',
+        '设置里能开启全局快捷键，电脑上更顺手'
+      ]
+    },
+    {
+      view: 'tasks', icon: I.chart, title: '待办与时间投入',
+      desc: '一条待办可以和时间记录双向关联：专注或补录时选它，待办里就会显示「已投入」总时长和最近记录；月历计划块则显示「今日计划 vs 实际」。',
+      tips: [
+        '计划块不算「已投入」——计划是打算做，实际专注才计入',
+        '点「已投入」里的记录，可直接跳到那天的象限查看'
+      ]
+    },
+    {
+      view: 'tasks', tab: 'quadrant', icon: I.quadrant, title: '象限',
+      desc: '用 24 小时的环形图看时间都花在哪，也可以自己补记活动。',
+      tips: [
+        '饮食和睡眠默认记录，不需要的话在「设置 → 记录偏好」里关掉',
+        '可以切「今天 / 一周 / 一月 / 一季 / 今年」，图表能在饼图和方形图之间切换',
+        '专注记录会自动汇总到这里'
+      ]
+    },
+    {
       view: 'pomodoro', icon: I.tomato, title: '番茄钟',
       desc: '专心做一件事的计时器，时长可以自己定，也能关联一条待办。',
       tips: [
-        '专注和完成待办都能拿积分。奖励有两种：森林（种树浇水）和抽卡（合成玉寻访干员）',
-        '两种机制的积分各自独立、不能混花，在「设置 → 奖励机制」里切换，切换时已攒的都保留',
-        '抽卡是 1 积分 = 180 合成玉，600 玉单抽、6000 玉十连（单抽约需 3.33 积分），抽到的干员会显示在首页'
+        '专注和完成待办都能拿积分，默认用来在「我的森林」里种树浇水，专注得越久树种得越多',
+        '积分与奖励机制的说明都在「设置 → 奖励机制」里，切换时已攒的都保留',
+        '还有一套可选的「抽卡」奖励玩法，在「设置 → 开发者选项」里开启后会专门引导介绍'
       ]
     },
     {
@@ -108,14 +134,6 @@
       ]
     },
     {
-      view: 'tasks', icon: I.idea, title: '灵感（在待办里）',
-      desc: '待办页顶上切到「灵感」，想到什么先随手记下来，不用想放在哪。',
-      tips: [
-        '一句话、一段话都行，也支持打标签',
-        '想变成待办时点一下「转待办」，不用重新输入'
-      ]
-    },
-    {
       view: 'ledger', icon: I.wallet, title: '记账',
       desc: '记一笔收入和支出，带上分类和标签。',
       tips: [
@@ -130,6 +148,14 @@
         '可以按「当前学期 / 某个学期 / 全部」汇总，按学分加权算均分',
         '点进一门课能设多层占比：总评 → 平时（再拆作业、考勤）+ 期末，填完自动算出总评',
         '学分怎么折绩点由你定：去「设置 → 成绩与 GPA」改换算表；右上角「导出」能存 CSV 或打印成 PDF'
+      ]
+    },
+    {
+      view: 'diary', icon: I.moon, title: '日记与心情',
+      desc: '底部「日记」可以记每天的心情和随笔，心情用颜色标记，月末能回看自己的情绪走势。',
+      tips: [
+        '写了日记的日期在日历上会有小圆点',
+        '目标复盘卡可以一键把进度写进当天日记'
       ]
     },
     {
@@ -150,7 +176,7 @@
       ]
     },
 
-    /* ===================== 以下为非核心功能介绍（core: false） ===================== */
+    /* ===================== 以下为非核心功能介绍（core: false），按模块归并、从前到后 ===================== */
     {
       core: false, view: 'schedule', icon: I.calendar, title: '课程单次调整',
       desc: '某一节的课临时有变？打开「课程表」里那门课，或今日页课程卡上的「调整」，可以停掉这一节、临时换教室，或把课调到别的日期。',
@@ -185,35 +211,11 @@
       ]
     },
     {
-      core: false, view: 'diary', icon: I.moon, title: '日记与心情',
-      desc: '底部「日记」可以记每天的心情和随笔，心情用颜色标记，月末能回看自己的情绪走势。',
-      tips: [
-        '写了日记的日期在日历上会有小圆点',
-        '目标复盘卡可以一键把进度写进当天日记'
-      ]
-    },
-    {
-      core: false, view: 'tasks', icon: I.search, title: '搜索与重复任务',
-      desc: '顶部的搜索框能跨所有模块找内容：课程、待办、账目、日记都能搜。待办设了重复规则（每天 / 每周 / 自定义）后，完成后会自动生成下一次。',
-      tips: [
-        '农历生日、纪念日也能设成每年重复的提醒',
-        '设置里能开启全局快捷键，电脑上更顺手'
-      ]
-    },
-    {
       core: false, view: 'tasks', tab: 'stats', icon: I.chart, title: '统计与年度视角',
       desc: '「统计」页用「今天 / 本周 / 本月 / 本学期 / 今年」切换周期。选「今年」能从元旦看到现在的累计，还能和去年同期对比。',
       tips: [
         '跨度超过 120 天，热力图会自动按月分组',
         '象限里的「今年」档同样能看到整年投入'
-      ]
-    },
-    {
-      core: false, view: 'tasks', icon: I.idea, title: '待办与时间投入',
-      desc: '一条待办可以和时间记录双向关联：专注或补录时选它，待办里就会显示「已投入」总时长和最近记录；月历计划块则显示「今日计划 vs 实际」。',
-      tips: [
-        '计划块不算「已投入」——计划是打算做，实际专注才计入',
-        '点「已投入」里的记录，可直接跳到那天的象限查看'
       ]
     },
 
@@ -229,8 +231,34 @@
     }
   ];
 
-  // 第一个非核心步骤的下标，用于「第一次」高亮提醒
-  var firstNonCore = STEPS.findIndex(function (s) { return s.core === false; });
+  /* 抽卡 / 合成玉 引导：仅在开发者选项输入「明日方舟」开启抽卡后弹出，
+   * 不进入主流程，默认只种树的用户完全看不到这些。 */
+  var GACHA_STEPS = [
+    {
+      view: 'collection', tab: 'ops', icon: I.star, title: '抽卡系统已解锁',
+      desc: '你通过开发者选项开启了抽卡系统。专注和完成待办攒下的积分，可以按 1 积分 = 180 合成玉 折算成合成玉，用来寻访干员。',
+      tips: [
+        '两套机制的积分各自独立、不能混花；在「设置 → 奖励机制」里切换，切换时已攒的都保留',
+        '抽到的干员会进入「收集 → 干员图鉴」，已获得的也会显示在首页'
+      ]
+    },
+    {
+      view: 'collection', tab: 'ops', icon: I.star, title: '合成玉与寻访',
+      desc: '合成玉用来抽卡：600 合成玉单抽、6000 合成玉十连（单抽约需 3.33 积分）。抽到的干员按星级进入图鉴。',
+      tips: [
+        '六星基础概率 2%，50 抽后概率递增；每个自然天第一个十连保底至少一位五星',
+        '重复干员提升潜能（0~5），满潜能后的多余复制会转化为积分',
+        '想回到只种树的状态，去「设置 → 开发者选项」输入『关闭抽卡』即可'
+      ]
+    }
+  ];
+
+  // 当前正在走哪一套步骤（主流程或抽卡引导），go / draw / finish 共用
+  var currentSteps = STEPS;
+  var firstNonCore = -1;
+  function recalcNonCore() {
+    firstNonCore = currentSteps.findIndex(function (s) { return s.core === false; });
+  }
 
   var idx = 0;
   var root = null;
@@ -267,9 +295,9 @@
   }
 
   function go(i) {
-    if (i >= STEPS.length) { finish(false); return; }
+    if (i >= currentSteps.length) { finish(false); return; }
     idx = Math.max(0, i);
-    var s = STEPS[idx];
+    var s = currentSteps[idx];
     // 有些步骤要落到某个分页（比如目标在计划页的第二个分页）
     if (s.view && global.App && App.go) App.go(s.view, s.tab ? { tab: s.tab } : null);
     draw(s);
@@ -277,7 +305,7 @@
 
   function draw(s) {
     card.innerHTML = '';
-    var isLast = idx === STEPS.length - 1;
+    var isLast = idx === currentSteps.length - 1;
     var nonCore = s.core === false;
     var showNotice = nonCore && idx === firstNonCore;
 
@@ -285,7 +313,7 @@
       el('span', { class: 'ob-icon' }, [V.svg(s.icon, 20)]),
       el('div', { class: 'ob-title' }, [
         el('b', { text: s.title }),
-        el('span', { text: '第 ' + (idx + 1) + ' / ' + STEPS.length + ' 步' })
+        el('span', { text: '第 ' + (idx + 1) + ' / ' + currentSteps.length + ' 步' })
       ]),
       isLast ? null : el('button', {
         class: 'ob-skip', type: 'button', text: '跳过',
@@ -308,7 +336,7 @@
     }
 
     var dots = el('div', { class: 'ob-dots' });
-    STEPS.forEach(function (_, i) {
+    currentSteps.forEach(function (_, i) {
       dots.appendChild(el('i', { class: 'ob-dot' + (i === idx ? ' on' : '') }));
     });
     card.appendChild(dots);
@@ -358,10 +386,12 @@
 
   /**
    * 开始教程
-   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页 }
+   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页, steps: 自定义步骤（抽卡引导用） }
    */
   function start(opts) {
     opts = opts || {};
+    currentSteps = opts.steps || STEPS;
+    recalcNonCore();
     fromView = opts.from || null;
     fromTab = opts.fromTab || null;
     idx = 0;
@@ -369,5 +399,14 @@
     go(0);
   }
 
-  global.Onboard = { start: start, steps: STEPS.length };
+  /**
+   * 抽卡 / 合成玉 引导：开发者选项开启抽卡后单独弹出，不进入主流程。
+   * @param {Object} opts { from: 结束后回到哪个页面 }
+   */
+  function startGacha(opts) {
+    opts = opts || {};
+    start({ from: opts.from || 'settings', fromTab: opts.fromTab || null, steps: GACHA_STEPS });
+  }
+
+  global.Onboard = { start: start, startGacha: startGacha, steps: STEPS.length };
 })(window);
