@@ -69,10 +69,16 @@
       return el('span', { class: cls, text: label });
     },
 
-    LABELS: { daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' },
-
-    repLabel: function (t) {
-      return (t.repeat && TaskRow.LABELS[t.repeat.type]) ? TaskRow.LABELS[t.repeat.type] : '';
+    /** 重复标记：↻ 每周五 · 10.30，完整规则放在 title 里 */
+    repChip: function (t) {
+      if (!t.repeat || t.repeat.type === 'none') return null;
+      var d = DateUtil.parse(t.dueDate);
+      return el('span', {
+        class: 'chip',
+        style: { padding: '0 6px', fontSize: '10.5px' },
+        title: Store.repeatSummary(t.repeat, t.dueDate),
+        text: '↻ ' + Store.repeatShort(t.repeat, t.dueDate) + (d ? ' · ' + DateUtil.mdShort(d) : '')
+      });
     },
 
     build: function (t, opts) {
@@ -115,10 +121,10 @@
             el('div', { class: 'task-title', text: t.title }),
             pr ? TaskRow.progBadge(t) : null
           ]),
-          (meta.length || t.note || (t.tags && t.tags.length) || TaskRow.repLabel(t)) ? el('div', { class: 'task-meta' }, [
+          (meta.length || t.note || (t.tags && t.tags.length) || (t.repeat && t.repeat.type !== 'none')) ? el('div', { class: 'task-meta' }, [
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
-            (t.repeat && t.repeat.type !== 'none') ? el('span', { class: 'chip', style: { padding: '0 6px', fontSize: '10.5px' }, text: '↻ ' + TaskRow.repLabel(t) }) : null,
+            TaskRow.repChip(t),
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -192,10 +198,57 @@
       );
 
       var fTitle = V.input({
-        placeholder: '例如：完成高数第三章习题',
+        placeholder: '例如：明天下午3点交高数作业 #作业 !重要',
         value: t ? t.title : '',
         dataset: { autofocus: '1' }
       });
+
+      /* ---- 自然语言实时解析与一键填充 ---- */
+      var nlpPreview = el('div', { class: 'nlp-preview', style: { display: 'none' } });
+      function refreshNLP() {
+        if (!global.TaskNLP || isEdit) return;
+        var val = fTitle.value.trim();
+        var p = TaskNLP.parse(val, { courses: Store.courses });
+        if (p && (p.hasDate || p.hasTime || p.courseId || (p.tags && p.tags.length) || p.important)) {
+          nlpPreview.innerHTML = '';
+          nlpPreview.style.display = 'flex';
+          var chips = [];
+          if (p.hasDate) chips.push('📅 ' + p.dueDate);
+          if (p.hasTime) chips.push('⏰ ' + p.dueTime);
+          if (p.courseName) chips.push('📚 ' + p.courseName);
+          if (p.tags && p.tags.length) chips.push('🏷️ ' + p.tags.join(' '));
+          if (p.important) chips.push('★ 重要');
+          chips.forEach(function (txt) {
+            nlpPreview.appendChild(el('span', { class: 'chip chip-primary', style: { padding: '2px 7px', fontSize: '11px' }, text: txt }));
+          });
+          var btn = el('button', {
+            class: 'btn btn-sm',
+            type: 'button',
+            style: { marginLeft: 'auto', padding: '2px 8px', fontSize: '11px' },
+            text: '一键填入',
+            onclick: function (e) {
+              e.preventDefault();
+              fTitle.value = p.title;
+              if (p.hasDate) fDate.value = p.dueDate;
+              if (p.hasTime) fTime.value = p.dueTime;
+              if (p.courseId) fCourse.value = p.courseId;
+              if (p.tags && p.tags.length) fTags.setValue(p.tags);
+              if (p.important) {
+                impOn = true;
+                fImp.style.background = 'var(--primary)';
+                fImp.style.color = '#fff';
+                fImp.textContent = '★ 已标记重要';
+              }
+              nlpPreview.style.display = 'none';
+              UI.toast('已识别并填入表单');
+            }
+          });
+          nlpPreview.appendChild(btn);
+        } else {
+          nlpPreview.style.display = 'none';
+        }
+      }
+      fTitle.addEventListener('input', refreshNLP);
 
       /* ---- 语音输入 ---- */
       var liveEl = el('div', { class: 'mic-live' });
@@ -313,6 +366,167 @@
       var fRepeatInterval = V.input({ type: 'number', min: '1', value: curRep.interval || 1, style: { width: '64px' } });
       var fRepeatUntil = V.input({ type: 'date', value: curRep.until || '' });
 
+      /* 星期选择器（周重复·多选）：label 一..日 -> getDay 1..6,0 */
+      var WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+      function wdOfLabel(i) { return i === 6 ? 0 : i + 1; }
+      var curWDs = (curRep.type === 'weekly' && curRep.weekdays && curRep.weekdays.length)
+        ? curRep.weekdays.slice()
+        : (curRep.type === 'weekly' && fDate.value ? [DateUtil.parse(fDate.value).getDay()] : [1]);
+      var wdItems = WEEK_LABELS.map(function (lab, i) {
+        var w = wdOfLabel(i);
+        var b = el('button', {
+          type: 'button',
+          class: 'item' + (curWDs.indexOf(w) !== -1 ? ' on' : ''),
+          text: '周' + lab
+        });
+        b._wd = w;
+        b.addEventListener('click', function () { b.classList.toggle('cp-on'); refreshRepeat(); });
+        return b;
+      });
+      var fWeekdays = el('div', { class: 'chip-pick days', style: { marginTop: '6px' } }, wdItems);
+
+      /* 月规则子选择器（月重复） */
+      var curMonthRule = (curRep.type === 'monthly' && curRep.monthRule) ? curRep.monthRule : 'date';
+      var fMonthRule = V.select([
+        { value: 'date', label: '按几号' },
+        { value: 'pos', label: '按第几个星期几' },
+        { value: 'lastday', label: '月末最后一天' }
+      ], curMonthRule);
+      var curPos = (curRep.type === 'monthly' && curRep.monthRule === 'pos')
+        ? (curRep.pos === -1 ? -1 : (curRep.pos || 1)) : 1;
+      var fPos = V.select([
+        { value: '1', label: '第 1 个' }, { value: '2', label: '第 2 个' },
+        { value: '3', label: '第 3 个' }, { value: '4', label: '第 4 个' },
+        { value: '-1', label: '最后一个' }
+      ], String(curPos));
+      var curMWd = (curRep.type === 'monthly' && curRep.monthRule === 'pos' && curRep.wd != null) ? curRep.wd : 3;
+      var mwdItems = WEEK_LABELS.map(function (lab, i) {
+        var w = wdOfLabel(i);
+        var b = el('button', {
+          type: 'button',
+          class: 'item' + (w === curMWd ? ' on' : ''),
+          text: '周' + lab
+        });
+        b._wd = w;
+        b.addEventListener('click', function () {
+          mwdItems.forEach(function (x) { x.classList.remove('cp-on'); });
+          b.classList.add('cp-on'); refreshRepeat();
+        });
+        return b;
+      });
+      var fMonthWd = el('div', { class: 'chip-pick days', style: { marginTop: '6px' } }, mwdItems);
+
+      /* ---- 日期标签、单位与实时摘要：把「日期 = 第一期」讲清楚 ---- */
+      var REP_UNITS = { daily: '天', weekly: '周', monthly: '个月', yearly: '年' };
+      var dateLabel = el('label', { text: '截止日期' });
+      var dateField = el('div', { class: 'field' }, [dateLabel, fDate]);
+
+      var unitEl = el('span', { class: 'rep-iv', text: '周' });
+      var everyWrap = el('span', {
+        style: { display: 'inline-flex', alignItems: 'center', gap: '6px' }
+      }, [
+        el('span', { class: 'rep-iv', text: '间隔' }),
+        fRepeatInterval,
+        unitEl
+      ]);
+      var repeatLine = el('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
+      }, [fRepeatType, everyWrap]);
+
+      var repeatSummaryEl = el('div', {
+        style: { fontSize: '12px', color: 'var(--text-2)', marginTop: '8px', lineHeight: '1.7' }
+      });
+      var repeatNoteEl = el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' },
+        text: '完成后自动生成下一期；把「最后一次」留空就一直重复。'
+      });
+      var weeklyOpts = el('div', { style: { marginTop: '6px', display: 'none' } }, [
+        el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '4px' }, text: '重复在星期几（可多选）' }),
+        fWeekdays
+      ]);
+      var posRow = el('div', { class: 'field-row', style: { marginTop: '6px', display: 'none' } }, [
+        V.field('第几个', fPos), V.field('星期', fMonthWd)
+      ]);
+      var monthlyOpts = el('div', { style: { marginTop: '6px', display: 'none' } }, [
+        V.field('按月规则', fMonthRule), posRow
+      ]);
+      var repeatField = el('div', { class: 'field' }, [
+        el('label', { text: '重复' }), repeatLine, repeatSummaryEl, repeatNoteEl, weeklyOpts, monthlyOpts
+      ]);
+      var untilField = el('div', { class: 'field' }, [
+        el('label', { text: '最后一次（可选）' }),
+        fRepeatUntil,
+        el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '5px' },
+          text: '到达该日期后不再生成新一期；留空表示一直重复。'
+        })
+      ]);
+
+      /* 从控件读出一个干净的 repeat 对象（不含 dueDate） */
+      function gatherRepeat() {
+        var type = fRepeatType.value;
+        if (type === 'none') return { type: 'none' };
+        var rep = {
+          type: type,
+          interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
+          until: fRepeatUntil.value || ''
+        };
+        if (type === 'weekly') {
+          var wds = wdItems.filter(function (b) { return b.classList.contains('cp-on'); })
+                           .map(function (b) { return b._wd; }).sort(function (a, b) { return a - b; });
+          if (wds.length) rep.weekdays = wds;
+        }
+        if (type === 'monthly') {
+          rep.monthRule = fMonthRule.value;
+          if (fMonthRule.value === 'pos') {
+            rep.pos = (fPos.value === '-1') ? -1 : (parseInt(fPos.value, 10) || 1);
+            var mw = mwdItems.filter(function (b) { return b.classList.contains('cp-on'); })[0];
+            rep.wd = mw ? mw._wd : 3;
+          }
+        }
+        return rep;
+      }
+
+      function refreshRepeat() {
+        var on = fRepeatType.value !== 'none';
+        // 不重复时它就是普通截止日；重复时它是这一期（新建则是第一期）的日期
+        dateLabel.textContent = on ? (isEdit ? '这一期的日期' : '第一次的日期') : '截止日期';
+        everyWrap.style.display = on ? 'inline-flex' : 'none';
+        untilField.style.display = on ? '' : 'none';
+        repeatSummaryEl.style.display = on ? '' : 'none';
+        repeatNoteEl.style.display = on ? '' : 'none';
+        weeklyOpts.style.display = (on && fRepeatType.value === 'weekly') ? '' : 'none';
+        monthlyOpts.style.display = (on && fRepeatType.value === 'monthly') ? '' : 'none';
+        if (!on) return;
+
+        unitEl.textContent = REP_UNITS[fRepeatType.value] || '周期';
+        var rep = Store.sanitizeRepeat(gatherRepeat());
+        var first = Store.firstOccurrence(fDate.value, rep);
+        repeatSummaryEl.textContent = Store.repeatSummary(rep, first);
+        // 没有日期时说明里已经带了警告，这里再用琥珀色提醒一次
+        repeatSummaryEl.style.color = first ? 'var(--text-2)' : 'var(--amber)';
+        posRow.style.display = (fMonthRule.value === 'pos') ? '' : 'none';
+      }
+
+      fRepeatType.addEventListener('change', function () {
+        if (fRepeatType.value !== 'none' && !fDate.value) {
+          fDate.value = DateUtil.toStr(DateUtil.today());
+          UI.toast('已把第一期设为今天');
+        }
+        if (fRepeatType.value === 'weekly') {
+          var w = fDate.value ? DateUtil.parse(fDate.value).getDay() : 1;
+          wdItems.forEach(function (b) { b.classList.toggle('cp-on', b._wd === w); });
+        }
+        if (fRepeatType.value === 'monthly') fMonthRule.value = 'date';
+        refreshRepeat();
+      });
+      fRepeatInterval.addEventListener('input', refreshRepeat);
+      fRepeatUntil.addEventListener('change', refreshRepeat);
+      fDate.addEventListener('change', refreshRepeat);
+      fMonthRule.addEventListener('change', refreshRepeat);
+      fPos.addEventListener('change', refreshRepeat);
+      refreshRepeat();
+
       var body = [
         /* ---- 子任务关系提示：只读，改关系靠「转为子任务 / 提升为顶层」---- */
         parent ? el('div', { class: 'subtask-parent-bar' }, [
@@ -331,20 +545,16 @@
         el('div', { class: 'field' }, [
           el('label', { text: parent ? '子任务内容' : '待办内容' }),
           el('div', { class: 'input-mic' }, [fTitle, micBtn]),
-          liveEl
+          liveEl,
+          nlpPreview
         ]),
         V.field('关联课程', fCourse, Store.courses.length ? '' : '还没有课程，可先到「课程表」添加'),
         el('div', { class: 'field-row' }, [
-          V.field('截止日期', fDate),
+          dateField,
           V.field('截止时间', fTime)
         ]),
-        V.field('重复', el('div', { class: 'field-inline' }, [
-          fRepeatType,
-          el('span', { class: 'rep-iv', text: '每' }),
-          fRepeatInterval,
-          el('span', { class: 'rep-iv', text: '周期' })
-        ]), '完成后自动生成下一期；留空「到」则一直重复'),
-        V.field('重复到（可选）', fRepeatUntil, '到达该日期后不再生成新一期'),
+        repeatField,
+        untilField,
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
@@ -435,26 +645,24 @@
           el('button', {
             class: 'btn btn-primary', text: '保存',
             onclick: function () {
+              var rep = Store.sanitizeRepeat(gatherRepeat());
+              var firstDue = Store.firstOccurrence(fDate.value, rep);
               var d = {
                 title: fTitle.value,
                 courseId: fCourse.value,
-                dueDate: fDate.value,
+                dueDate: firstDue,
                 dueTime: fTime.value,
                 status: data.status,
                 priority: data.priority,
                 important: impOn,
                 note: fNote.value,
                 tags: fTags.getValue(),
-                repeat: (function () {
-                  if (fRepeatType.value === 'none') return { type: 'none' };
-                  return {
-                    type: fRepeatType.value,
-                    interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
-                    until: fRepeatUntil.value || ''
-                  };
-                })()
+                repeat: rep
               };
               if (!d.title.trim()) { UI.toast('请填写待办内容', 'err'); fTitle.focus(); return; }
+              if (fRepeatType.value !== 'none' && !fDate.value) {
+                UI.toast('重复任务需要先定第一期日期', 'err'); fDate.focus(); return;
+              }
               if (isEdit) {
                 Store.updateTask(taskId, d);
               } else {
@@ -673,6 +881,49 @@
         V.statCard(all.length - pending.length, '已完成', 'var(--green)')
       ]);
       root.appendChild(summary);
+
+      /* ---- 快速添加条（支持自然语言快速录入） ---- */
+      var quickInput = V.input({
+        placeholder: '⚡ 快速添加，如：明天下午3点交高数作业 #作业 !重要（Enter 提交）'
+      });
+      var quickBtn = el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: { height: '32px', padding: '0 12px', flex: '0 0 auto' },
+        text: '添加',
+        onclick: doQuickAdd
+      });
+      function doQuickAdd() {
+        var val = (quickInput.value || '').trim();
+        if (!val) { UI.toast('请输入待办内容', 'err'); quickInput.focus(); return; }
+        var nlp = global.TaskNLP ? TaskNLP.parse(val, { courses: Store.courses }) : { title: val };
+        var d = {
+          title: nlp.title || val,
+          dueDate: nlp.dueDate || DateUtil.toStr(DateUtil.today()),
+          dueTime: nlp.dueTime || '',
+          courseId: nlp.courseId || '',
+          tags: nlp.tags || [],
+          priority: nlp.priority || 'normal',
+          important: !!nlp.important,
+          status: 'todo',
+          repeat: { type: 'none' }
+        };
+        Store.addTask(d);
+        quickInput.value = '';
+        UI.toast('已添加待办：' + d.title);
+        view.render();
+      }
+      quickInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          doQuickAdd();
+        }
+      });
+      var quickBar = el('div', { class: 'quick-task-bar' }, [
+        V.svg(V.icons.check, 16),
+        quickInput,
+        quickBtn
+      ]);
+      root.appendChild(quickBar);
 
       /* ---- 筛选 ---- */
       var tabs = [

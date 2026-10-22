@@ -47,7 +47,35 @@
     var root = host;
     var W = Store.settings.statsWidgets || { time: true, curve: true, sources: true };
 
-      var r = rangeDates(curRange);
+      // 学业生活白皮书全景横幅
+    var wpBanner = el('div', {
+      style: {
+        background: 'linear-gradient(135deg, var(--primary) 0%, #1e40af 100%)',
+        color: '#fff',
+        padding: '14px 18px',
+        borderRadius: '10px',
+        marginBottom: '14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+      }
+    }, [
+      el('div', {}, [
+        el('div', { style: { fontWeight: 'bold', fontSize: '15px' }, text: '📊 学业生活全景白皮书' }),
+        el('div', { style: { fontSize: '12px', opacity: 0.9, marginTop: '2px' }, text: '一键生成本学期学业GPA、作息健康、消费与心态综合总结长图' })
+      ]),
+      el('button', {
+        class: 'btn',
+        style: { background: '#ffffff', color: 'var(--primary)', fontWeight: 'bold', fontSize: '13px' },
+        onclick: function () {
+          if (global.WhitePaper) WhitePaper.openDialog();
+        }
+      }, ['生成白皮书'])
+    ]);
+    root.appendChild(wpBanner);
+
+    var r = rangeDates(curRange);
       // 学期还没开学：「本学期」区间会退化成今天，需要单独说清楚
       var sem = Store.currentSemester();
       var semStart = sem && sem.startDate ? sem.startDate : '';

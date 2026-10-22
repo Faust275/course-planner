@@ -105,7 +105,190 @@
    * 返回 { rows:[{name,teacher,location,day,periods,weeks}], skipped:[原行], cols }。
    * rows 里 day/periods 缺失的行会带 missing 标记，交给 UI 提示。
    */
+  /* ==========================================================
+   * 自动适配教务系统日历 .ics 文件
+   * ========================================================== */
+  function parseIcsCourseTable(text) {
+    var events = text.split(/BEGIN:VEVENT/i).slice(1);
+    var rows = [];
+    var DAY_MAP = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+
+    events.forEach(function (ev) {
+      var sm = ev.match(/SUMMARY.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var summary = (sm && sm[1]) ? sm[1] : '';
+      summary = summary.replace(/\r?\n\s*/g, '').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\').trim();
+      summary = summary.replace(/\[.*?周.*?\]/g, '').replace(/^\[.*?\]\s*/, '').replace(/（考试）$/, '').trim();
+      if (!summary) return;
+
+      var lm = ev.match(/LOCATION.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var location = (lm && lm[1]) ? lm[1] : '';
+      location = location.replace(/\r?\n\s*/g, '').replace(/\\,/g, ',').replace(/\\;/g, ';').trim();
+
+      var dm = ev.match(/DESCRIPTION.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var desc = (dm && dm[1]) ? dm[1] : '';
+      desc = desc.replace(/\r?\n\s*/g, '').replace(/\\n/g, ' ').trim();
+
+      var dtsm = ev.match(/DTSTART.*?:(\d{8}T\d{4,6}|\d{8})/i);
+      var dtem = ev.match(/DTEND.*?:(\d{8}T\d{4,6}|\d{8})/i);
+      var rrm = ev.match(/RRULE.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+
+      var dtstart = dtsm ? dtsm[1] : '';
+      var dtend = dtem ? dtem[1] : '';
+      var rrule = rrm ? rrm[1] : '';
+
+      var day = 0;
+      var bym = rrule.match(/BYDAY=([A-Z]{2})/i);
+      var byday = bym ? bym[1] : '';
+      if (byday && DAY_MAP[byday.toUpperCase()]) {
+        day = DAY_MAP[byday.toUpperCase()];
+      } else if (dtstart && dtstart.length >= 8) {
+        var y = parseInt(dtstart.slice(0, 4), 10);
+        var m = parseInt(dtstart.slice(4, 6), 10) - 1;
+        var d = parseInt(dtstart.slice(6, 8), 10);
+        var dt = new Date(y, m, d);
+        day = dt.getDay() === 0 ? 7 : dt.getDay();
+      }
+
+      var periods = [];
+      if (dtstart.indexOf('T') >= 0 && dtend.indexOf('T') >= 0) {
+        var stTime = dtstart.slice(9, 11) + ':' + dtstart.slice(11, 13);
+        var enTime = dtend.slice(9, 11) + ':' + dtend.slice(11, 13);
+        if (typeof Store !== 'undefined' && Store.periods) {
+          Store.periods.forEach(function (p, idx) {
+            if (p.start && p.end && ((p.start >= stTime && p.start < enTime) || (p.end > stTime && p.end <= enTime))) {
+              periods.push(idx + 1);
+            }
+          });
+        }
+      }
+      if (!periods.length) periods = [1, 2];
+
+      var startWeek = 1;
+      var cm = rrule.match(/COUNT=(\d+)/i);
+      var endWeek = cm ? Math.min(25, parseInt(cm[1], 10)) : 16;
+      var im = rrule.match(/INTERVAL=(\d+)/i);
+      var interval = im ? im[1] : '1';
+      var weekType = 'all';
+      if (interval === '2') {
+        weekType = (startWeek % 2 === 1) ? 'odd' : 'even';
+      }
+
+      rows.push({
+        name: summary,
+        teacher: desc,
+        location: location,
+        day: day || 1,
+        periods: periods,
+        weeks: { start: startWeek, end: endWeek, type: weekType },
+        missing: []
+      });
+    });
+
+    return { rows: rows, skipped: [], cols: { name: 0, day: 1, period: 2 } };
+  }
+
+  /* ==========================================================
+   * 自动解析教务系统网页源码 (HTML DOM 抽取)
+   * ========================================================== */
+  function parseHtmlCourseTable(htmlText) {
+    var doc = null;
+    try {
+      if (typeof DOMParser !== 'undefined') {
+        doc = new DOMParser().parseFromString(htmlText, 'text/html');
+      }
+    } catch (e) { doc = null; }
+
+    var rows = [], skipped = [];
+    if (!doc) return { rows: [], skipped: ['当前运行环境不支持 HTML DOMParser 解析'], cols: null };
+
+    var tables = doc.querySelectorAll('table');
+    var targetTable = null;
+    for (var i = 0; i < tables.length; i++) {
+      var t = tables[i];
+      var txt = t.textContent || '';
+      if (/星期[一二三四五六日天]|周[一二三四五六日天]/.test(txt)) {
+        targetTable = t;
+        break;
+      }
+    }
+    if (!targetTable && tables.length) targetTable = tables[0];
+    if (!targetTable) return { rows: [], skipped: ['未在 HTML 中找到课表表格'], cols: null };
+
+    var colDays = {};
+    var trs = targetTable.querySelectorAll('tr');
+    var trArr = Array.prototype.slice.call(trs);
+
+    trArr.forEach(function (tr) {
+      var ths = tr.querySelectorAll('th, td');
+      for (var c = 0; c < ths.length; c++) {
+        var d = parseDay(ths[c].textContent);
+        if (d > 0 && !colDays[c]) {
+          colDays[c] = d;
+        }
+      }
+    });
+
+    trArr.forEach(function (tr, rIdx) {
+      var tds = tr.querySelectorAll('td');
+      for (var c = 0; c < tds.length; c++) {
+        var td = tds[c];
+        var text = (td.textContent || '').trim();
+        if (!text || text.length < 2) continue;
+        if (/^(第?\d+节|节次|时间|上午|下午|晚上)$/.test(text)) continue;
+        if (parseDay(text) > 0 && text.length <= 5) continue;
+        if (rIdx === 0 && colDays[c]) continue;
+
+        var day = colDays[c] || 0;
+        if (!day) day = parseDay(text);
+
+        var periods = parsePeriodNums(text);
+        var rowspan = (td.getAttribute ? parseInt(td.getAttribute('rowspan'), 10) : 1) || 1;
+        if (!periods.length) {
+          var pStart = rIdx;
+          periods = [];
+          for (var rp = 0; rp < rowspan; rp++) periods.push(pStart + rp);
+          if (periods[0] === 0) periods = [1, 2];
+        }
+
+        var weeks = parseWeeks(text, 20);
+        var lines = text.split(/[\r\n\s]{2,}|\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+        var courseName = lines[0] || text.slice(0, 15);
+        var loc = '';
+        var teacher = '';
+        for (var l = 1; l < lines.length; l++) {
+          var line = lines[l];
+          if (/(?:[一-龥]{1,}(?:楼|教|室|馆|场|中心|基)\d*|[A-Za-z]\d{2,4}|\d{3,4})/.test(line)) {
+            loc = line;
+          } else if (/[\u4e00-\u9fa5]{2,4}(?:老师|教授|讲师)?$/.test(line) && !teacher) {
+            teacher = line;
+          }
+        }
+
+        if (day > 0 && courseName) {
+          rows.push({
+            name: courseName.replace(/\[.*?周.*?\]/, '').trim(),
+            teacher: teacher,
+            location: loc,
+            day: day,
+            periods: periods,
+            weeks: weeks,
+            missing: []
+          });
+        }
+      }
+    });
+
+    return { rows: rows, skipped: skipped, cols: { name: 0, day: 1, period: 2 } };
+  }
+
   function parseCourseTable(text) {
+    var raw = String(text || '').trim();
+    if (raw.indexOf('BEGIN:VCALENDAR') >= 0 || raw.indexOf('BEGIN:VEVENT') >= 0) {
+      return parseIcsCourseTable(raw);
+    }
+    if (raw.indexOf('<table') >= 0 || raw.indexOf('<tr') >= 0 || raw.indexOf('<!DOCTYPE') >= 0 || raw.indexOf('<html') >= 0) {
+      return parseHtmlCourseTable(raw);
+    }
     var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); })
       .filter(function (l) { return l; });
     var rows = [], skipped = [], cols = null;
@@ -362,15 +545,59 @@
                    '示例：高等数学\t张老师\t教学楼A301\t周一\t1-2节\t1-16周\n' +
                    '也可以写：周一 第1-2节 高等数学 张老师 A301'
     });
+    var fileInput = el('input', {
+      type: 'file', accept: '.html,.htm,.ics,.csv,.tsv,.txt', style: { display: 'none' },
+      onchange: function (e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          var content = evt.target.result;
+          ta.value = content;
+          preview(content);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    var dropZone = el('div', {
+      class: 'cp-batch-dropzone',
+      style: {
+        padding: '12px', border: '2px dashed var(--border)', borderRadius: '8px',
+        textAlign: 'center', marginBottom: '10px', background: 'var(--bg-weak)', cursor: 'pointer'
+      },
+      onclick: function () { fileInput.click(); }
+    }, [
+      el('span', { style: { fontSize: '13px', color: 'var(--text-2)' }, text: '📂 点击或拖拽上传教务课表文件（支持 .html 网页源码 / .ics 日历 / .csv / .tsv）' }),
+      fileInput
+    ]);
+
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.style.borderColor = 'var(--primary)'; });
+    dropZone.addEventListener('dragleave', function (e) { dropZone.style.borderColor = 'var(--border)'; });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--border)';
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          var content = evt.target.result;
+          ta.value = content;
+          preview(content);
+        };
+        reader.readAsText(file);
+      }
+    });
+
     var m = V.modal({
-      title: '批量导入课表',
+      title: '批量导入课表（支持教务网页与日历）',
       width: '620px',
       autofocus: true,
       body: [
+        dropZone,
         el('p', {
           class: 'ocr-hint',
-          text: '支持 Tab（Excel 直接复制）、逗号或空格分隔。会自动跳过表头，' +
-                '认出课程名、星期、节次即可导入，老师和地点认不出会留空，导入后还能逐门改。'
+          text: '或在下方直接粘贴教务网页源码（HTML）、日历文本（ICS）或 Excel/Tab 文本，系统将智能自适应解析。'
         }),
         ta,
         el('div', { id: 'cpBatchPreview', style: { marginTop: '10px' } })
@@ -616,6 +843,176 @@
     }
   };
 
+
+  /* ==========================================================
+   * 考试周备考看板 (Exam Week & Revision Kanban)
+   * ========================================================== */
+  function renderExamBoard(root) {
+    var sem = Store.currentSemester();
+    var exams = Store.courseExams();
+    var allTasks = Store.tasks || [];
+
+    var boardWrap = el('div', { class: 'cp-exam-board' });
+
+    // 1. 顶部备考 Hero 概览
+    var todayStr = DateUtil.format(new Date());
+    var upcomingExams = exams.filter(function (c) { return c.exam && c.exam.date >= todayStr; });
+    var nextEx = upcomingExams[0];
+
+    var heroCard = el('div', {
+      style: {
+        background: 'linear-gradient(135deg, var(--primary) 0%, #4338ca 100%)',
+        color: '#fff',
+        padding: '18px 20px',
+        borderRadius: '12px',
+        marginBottom: '16px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }
+    }, [
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+        el('div', {}, [
+          el('div', { style: { fontSize: '12px', opacity: 0.85, letterSpacing: '1px' }, text: 'EXAM SPRINT KANBAN' }),
+          el('div', { style: { fontSize: '20px', fontWeight: 'bold', margin: '4px 0' }, text: '🎯 考试周备考冲刺看板' }),
+          el('div', { style: { fontSize: '13px', opacity: 0.9 }, text: nextEx
+            ? ('下一门考试：' + nextEx.name + ' · ' + nextEx.exam.date + (nextEx.exam.start ? (' ' + nextEx.exam.start) : '') + (nextEx.location ? (' · ' + nextEx.location) : ''))
+            : '本学期暂无未完成的考试科目，继续保持！'
+          })
+        ]),
+        el('button', {
+          class: 'btn',
+          style: { background: '#ffffff', color: 'var(--primary)', fontWeight: 'bold' },
+          onclick: function () {
+            if (global.TaskDialog) {
+              TaskDialog.open(null, { tags: ['复习'] });
+            }
+          }
+        }, ['+ 新增复习待办'])
+      ])
+    ]);
+    boardWrap.appendChild(heroCard);
+
+    if (!exams.length) {
+      boardWrap.appendChild(el('div', {
+        class: 'card', style: { padding: '32px 20px', textAlign: 'center' }
+      }, [
+        el('div', { style: { fontSize: '36px', marginBottom: '10px' } }, ['📖']),
+        el('div', { style: { fontSize: '16px', fontWeight: 'bold', marginBottom: '6px' } }, ['暂无考试科目']),
+        el('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' } }, ['点击课表中的课程，编辑并填写「考试日期与考场」，即可在这里自动生成专属复习看板。']),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () { view.tab = 'table'; view.render(); }
+        }, ['返回课表设置考试'])
+      ]));
+      root.appendChild(boardWrap);
+      return;
+    }
+
+    // 2. 各门考试科目卡片与复习泳道
+    exams.forEach(function (c) {
+      var ex = c.exam || {};
+      var exTasks = allTasks.filter(function (t) { return t.courseId === c.id; });
+      var doneCount = exTasks.filter(function (t) { return t.status === 'done'; }).length;
+      var totalCount = exTasks.length;
+      var pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+      var daysLeft = '';
+      if (ex.date) {
+        var diff = Math.ceil((DateUtil.parse(ex.date) - DateUtil.parse(todayStr)) / 86400000);
+        if (diff > 0) daysLeft = '还有 ' + diff + ' 天';
+        else if (diff === 0) daysLeft = '今天考试！';
+        else daysLeft = '已考完';
+      }
+
+      var exCard = el('div', { class: 'card cp-exam-course-card', style: { padding: '16px', marginBottom: '16px' } });
+
+      var head = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' } }, [
+        el('div', {}, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            el('span', { style: { width: '12px', height: '12px', borderRadius: '50%', background: c.color || 'var(--primary)' } }),
+            el('b', { style: { fontSize: '16px' }, text: c.name }),
+            daysLeft ? el('span', { class: 'badge', style: { background: daysLeft.indexOf('天') >= 0 ? 'var(--amber)' : (daysLeft.indexOf('今天') >= 0 ? 'var(--red)' : 'var(--text-muted)'), color: '#fff' }, text: daysLeft }) : null
+          ]),
+          el('div', { style: { fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '4px' } }, [
+            '📅 考试时间：' + (ex.date || '未定') + (ex.start ? (' ' + ex.start + (ex.end ? ('-' + ex.end) : '')) : '') +
+            (c.location ? (' · 考场：' + c.location) : '')
+          ])
+        ]),
+        el('div', { style: { textAlign: 'right' } }, [
+          el('div', { style: { fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)' }, text: doneCount + '/' + totalCount + ' 复习完成 (' + pct + '%)' }),
+          el('button', {
+            class: 'btn btn-sm', style: { marginTop: '4px' },
+            onclick: function () {
+              if (global.TaskDialog) {
+                TaskDialog.open(null, { courseId: c.id, tags: ['复习'] });
+              }
+            }
+          }, ['+ 添加任务'])
+        ])
+      ]);
+      exCard.appendChild(head);
+
+      var lanesGrid = el('div', {
+        class: 'cp-exam-lanes',
+        style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }
+      });
+
+      var LANES = [
+        { id: 'todo', name: '📌 待复习考点', filter: function (t) { return t.status !== 'done' && (!t.examStage || t.examStage === 'review'); } },
+        { id: 'doing', name: '⚡ 攻坚刷题模考', filter: function (t) { return t.status !== 'done' && (t.examStage === 'drill' || t.examStage === 'sprint'); } },
+        { id: 'done', name: '✅ 已攻克掌握', filter: function (t) { return t.status === 'done' || t.examStage === 'done'; } }
+      ];
+
+      LANES.forEach(function (lane) {
+        var laneCol = el('div', {
+          style: { background: 'var(--bg-weak)', borderRadius: '8px', padding: '10px', minHeight: '110px' }
+        });
+        laneCol.appendChild(el('div', {
+          style: { fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', color: 'var(--text-2)' }
+        }, [
+          el('span', {}, [lane.name]),
+          el('span', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, [String(exTasks.filter(lane.filter).length)])
+        ]));
+
+        var laneTasks = exTasks.filter(lane.filter);
+        if (!laneTasks.length) {
+          laneCol.appendChild(el('div', { style: { fontSize: '11.5px', color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }, text: '暂无任务' }));
+        } else {
+          laneTasks.forEach(function (t) {
+            var isDone = t.status === 'done';
+            var taskCard = el('div', {
+              class: 'card',
+              style: {
+                padding: '8px 10px', marginBottom: '6px', fontSize: '12.5px',
+                borderLeft: '3px solid ' + (c.color || 'var(--primary)'),
+                textDecoration: isDone ? 'line-through' : 'none',
+                opacity: isDone ? 0.6 : 1
+              }
+            }, [
+              el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+                el('input', {
+                  type: 'checkbox', checked: isDone,
+                  onchange: function () {
+                    Store.updateTask(t.id, { status: this.checked ? 'done' : 'todo', doneAt: this.checked ? new Date().toISOString() : '' });
+                    view.render();
+                  }
+                }),
+                el('span', { style: { flex: 1, cursor: 'pointer' }, onclick: function () { if (global.TaskDialog) TaskDialog.open(t.id); } }, [t.title])
+              ])
+            ]);
+            laneCol.appendChild(taskCard);
+          });
+        }
+
+        lanesGrid.appendChild(laneCol);
+      });
+
+      exCard.appendChild(lanesGrid);
+      boardWrap.appendChild(exCard);
+    });
+
+    root.appendChild(boardWrap);
+  }
+
   var view = {
     id: 'schedule',
     name: '课程表',
@@ -718,7 +1115,8 @@
       var weekNo = this.week;
       var totalWeeks = Store.semester.weeks;
       var weekStart = Store.weekStartDate(weekNo);
-      var weekEnd = DateUtil.addDays(weekStart, 6);
+      var dayCount = Store.settings.showWeekend === false ? 5 : 7;
+      var weekEnd = DateUtil.addDays(weekStart, dayCount - 1);
       var inTerm = weekNo >= 1 && weekNo <= totalWeeks;
 
       /* ---- 周切换条 ---- */
@@ -737,6 +1135,15 @@
         el('div', { class: 'week-meta' }, [
           el('span', { class: 'chip ' + (weekNo === Store.currentWeek() ? 'chip-primary' : ''),
             text: weekNo === Store.currentWeek() ? '本周' : '非本周' }),
+          el('button', {
+            class: 'btn btn-sm',
+            title: Store.settings.showWeekend ? '收起周六、周日两列' : '展开周六、周日两列',
+            onclick: function () {
+              var on = !Store.settings.showWeekend;
+              Store.updateSettings({ showWeekend: on });
+              UI.toast(on ? '已显示周末' : '已隐藏周末');
+            }
+          }, [Store.settings.showWeekend ? '隐藏周末' : '显示周末']),
           el('button', {
             class: 'btn btn-sm', onclick: function () { self.goWeek(Store.currentWeek()); }
           }, ['回到本周'])
@@ -803,7 +1210,7 @@
       var thead = el('thead', { class: 'tt-head' });
       var trh = el('tr');
       trh.appendChild(el('th', { class: 'col-time' }));
-      for (var d = 1; d <= 7; d++) {
+      for (var d = 1; d <= dayCount; d++) {
         var date = Store.dateOf(weekNo, d);
         var isToday = DateUtil.toStr(date) === todayStr;
         trh.appendChild(el('th', { class: isToday ? 'today' : '' }, [
@@ -838,7 +1245,7 @@
         if (newGroup) timeCell.insertBefore(el('span', { class: 'grp-tag', text: grp }), timeCell.firstChild);
         tr.appendChild(timeCell);
 
-        for (var dc = 1; dc <= 7; dc++) {
+        for (var dc = 1; dc <= dayCount; dc++) {
           var inst = renderAt[dc + '|' + ri];
           if (inst && inst.type === 'covered') continue;
 
@@ -900,7 +1307,7 @@
         tbody.appendChild(tr);
       });
 
-      var table = el('table', { class: 'tt' }, [thead, tbody]);
+      var table = el('table', { class: 'tt' + (dayCount < 7 ? ' no-weekend' : '') }, [thead, tbody]);
 
       /* ---- 空状态 ---- */
       if (!Store.courses.length) {
@@ -1013,7 +1420,8 @@
         weekType: c ? c.weekType : 'all',
         note: c ? c.note : '',
         credit: c ? (c.credit || 0) : 0,
-        exam: c ? c.exam : null
+        exam: c ? c.exam : null,
+        rotations: c && Array.isArray(c.rotations) ? JSON.parse(JSON.stringify(c.rotations)) : []
       };
 
       // 现有全部时段（编辑时用来回填 / 保留未编辑的部分）
@@ -1375,6 +1783,7 @@
           exam: examDate ? { date: examDate, start: fExamStart.value || '', end: fExamEnd.value || '' } : null,
           weekType: data.weekType,
           note: fNote.value.trim(),
+          rotations: data.rotations || [],
           startWeek: wk.startWeek,
           endWeek: wk.endWeek
         };

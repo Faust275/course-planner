@@ -358,7 +358,9 @@
   function collect(weekNo) {
     var days = [];
     var todayStr = DateUtil.toStr(DateUtil.today());
-    for (var d = 1; d <= 7; d++) {
+    // 与课表页保持一致：关掉周末时导出的图也只画 5 天
+    var dayCount = Store.settings.showWeekend === false ? 5 : 7;
+    for (var d = 1; d <= dayCount; d++) {
       var date = Store.dateOf(weekNo, d);
       days.push({
         label: Store.DAY_NAMES[d - 1],

@@ -20,6 +20,7 @@
 
   var SUB_META = {
     periods: { name: '课程时间', desc: '设置每天几节课、每节课的起止时间' },
+    schedule: { name: '课表显示', desc: '是否在课表里显示周六、周日两列' },
     semester: { name: '学期与周次', desc: '学期列表、起止日期与周数' },
     look: { name: '外观', desc: '主题配色与背景图片' },
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
@@ -182,6 +183,7 @@
 
             if (SUB === 'pet') { this.renderPet(root); return; }
 
+            if (SUB === 'energy') { renderEnergyPage(root); return; }
             if (SUB === 'subtask') { renderSubtaskPage(root); return; }
 
             if (SUB === 'look') {
@@ -223,23 +225,77 @@
 
         /* --- 机制主题皮肤开关 --- */
         var skinOn = st.themeSkin !== false;
+        var subThemeBox = el('div', { style: { marginTop: '12px', display: skinOn ? 'block' : 'none' } });
+
+        function renderSubTheme() {
+          subThemeBox.innerHTML = '';
+          var curMode = (Store.state.pomodoro && Store.state.pomodoro.mode) || 'forest';
+          if (curMode === 'gacha') {
+            var curArk = Store.state.settings.arkTheme || 'terminal';
+            var arkRow = el('div', { class: 'seg-row', style: { marginTop: '4px' } });
+            Object.keys(Theme.ARK_THEMES || {}).forEach(function (k) {
+              var a = Theme.ARK_THEMES[k];
+              var btn = el('button', {
+                class: 'seg-btn' + (curArk === k ? ' on' : ''),
+                type: 'button',
+                onclick: function () {
+                  Theme.setArkTheme(k);
+                  renderSubTheme();
+                  UI.toast('明日方舟主题：' + a.name);
+                }
+              }, [a.name]);
+              arkRow.appendChild(btn);
+            });
+            subThemeBox.appendChild(el('div', { class: 'switch-text', style: { marginBottom: '4px' } }, [
+              el('b', { text: '明日方舟主题风格' }),
+              el('span', { text: '经典罗德岛终端（参考图2）或 集成战略水墨秘符（参考图1）' })
+            ]));
+            subThemeBox.appendChild(arkRow);
+          } else {
+            var curNat = Store.state.settings.natureTheme || 'pine';
+            var natRow = el('div', { class: 'seg-row', style: { marginTop: '4px' } });
+            Object.keys(Theme.NATURE_THEMES || {}).forEach(function (k) {
+              var n = Theme.NATURE_THEMES[k];
+              var btn = el('button', {
+                class: 'seg-btn' + (curNat === k ? ' on' : ''),
+                type: 'button',
+                onclick: function () {
+                  Theme.setNatureTheme(k);
+                  renderSubTheme();
+                  UI.toast('自然主题：' + n.name);
+                }
+              }, [n.name]);
+              natRow.appendChild(btn);
+            });
+            subThemeBox.appendChild(el('div', { class: 'switch-text', style: { marginBottom: '4px' } }, [
+              el('b', { text: '自然意象主题风格（纯粹自然·深浅双模）' }),
+              el('span', { text: '晨雾松林、极光苍穹、暮霞熔金或山岚青黛，完全独立于游戏元素' })
+            ]));
+            subThemeBox.appendChild(natRow);
+          }
+        }
+        renderSubTheme();
+
         var skinSw = el('button', {
           class: 'switch' + (skinOn ? ' on' : ''),
           type: 'button',
           onclick: function () {
             skinOn = !skinOn;
             skinSw.classList.toggle('cp-on', skinOn);
+            subThemeBox.style.display = skinOn ? 'block' : 'none';
             Theme.setThemeSkin(skinOn);
+            renderSubTheme();
             UI.toast(skinOn ? '已开启机制主题皮肤' : '已关闭机制主题皮肤');
           }
         }, [el('i')]);
         lookCard.appendChild(el('div', { class: 'switch-row', style: { marginTop: '2px' } }, [
           el('div', { class: 'switch-text' }, [
             el('b', { text: '机制主题皮肤' }),
-            el('span', { text: '开启后自动跟随奖励机制：森林=自然生机、抽卡=工厂硬核；主色仍可自定义覆盖' })
+            el('span', { text: '开启后自动跟随奖励机制：森林=自然生机、抽卡=方舟战术；主色仍可自定义覆盖' })
           ]),
           skinSw
         ]));
+        lookCard.appendChild(subThemeBox);
 
         /* --- 明暗模式 --- */
         var modeVal = st.themeMode || 'auto';
@@ -467,6 +523,38 @@
         root.appendChild(periodCard);
 
             }
+
+      if (SUB === 'schedule') {
+  /* ===================== 课表显示 ===================== */
+        var schCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        schCard.appendChild(el('div', { class: 'section-title' }, ['课表显示']));
+        schCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+          text: '只决定课表画几列，不会删除或隐藏周末的课程数据。关掉后，周末的课仍会出现在今日、月历和课程列表里。'
+        }));
+        var wOn = Store.settings.showWeekend !== false;
+        var wSw = el('button', {
+          class: 'switch' + (wOn ? ' on' : ''),
+          onclick: function () {
+            wOn = !wOn;
+            wSw.classList.toggle('cp-on', wOn);
+            Store.updateSettings({ showWeekend: wOn });
+            UI.toast(wOn ? '课表已显示周末' : '课表已隐藏周末');
+          }
+        }, [el('i')]);
+        schCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [
+            el('b', { text: '展示周六、周日' }),
+            el('span', { text: '关掉后只显示周一到周五，表格更紧凑' })
+          ]),
+          wSw
+        ]));
+        schCard.appendChild(el('p', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '8px 0 0', lineHeight: '1.7' },
+          text: '课表页右上角的「隐藏周末 / 显示周末」也能快速切换，两处是同一个开关。'
+        }));
+        root.appendChild(schCard);
+      }
 
       if (SUB === 'reward') {
   /* ===================== 奖励机制 ===================== */
@@ -1518,6 +1606,7 @@
   var SUBS = [
     /* 基础设置 */
     { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5', group: 'basic' },
+    { key: 'schedule', name: '课表显示', desc: '是否显示周六、周日两列', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
     { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
     { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899', group: 'basic' },
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6', group: 'basic' },
@@ -1527,6 +1616,7 @@
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6', group: 'module' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6', group: 'module' },
     /* 记录与统计 */
+    { key: 'energy', name: '精力高峰与作息', desc: '自定义高效时段，智能匹配待办', icon: V.icons.star, color: '#f59e0b', group: 'record' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9', group: 'record' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'record' },
     { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'record' },
@@ -2985,7 +3075,94 @@
    * 前三项互相影响（能形成「勾了 A 就等于勾了 B」的闭环），
    * 所以每一项都写明「当前组合下会发生什么」，并对冲突组合给出警告。
    * ========================================================== */
-  function renderSubtaskPage(root) {
+  
+  /* ==========================================================
+   * 二级页：生理精力与作息动态匹配
+   * ========================================================== */
+  function renderEnergyPage(root) {
+    var eg = (Store.state.settings && Store.state.settings.energy) || {
+      custom: false,
+      peaks: [
+        { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+        { start: '15:00', end: '17:30', name: '午后高效期' },
+        { start: '19:30', end: '21:30', name: '晚间静心期' }
+      ]
+    };
+
+    var curState = Store.currentEnergyState ? Store.currentEnergyState() : { isPeak: false, icon: '🌤️', label: '平稳期', advice: '精力平稳' };
+
+    var card = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['生理精力与作息动态匹配']));
+    card.appendChild(el('p', {
+      style: { fontSize: '13px', color: 'var(--text-3)', marginBottom: '14px', lineHeight: '1.7' },
+      text: '根据你的作息节律评估大脑运转效能。待办任务可标记为「⚡ 深度专注 / ☕ 轻松杂务」，系统将在黄金时段推荐高能耗任务，在疲惫时段建议休息或处理杂务。'
+    }));
+
+    var statusCard = el('div', {
+      style: {
+        padding: '12px 14px', borderRadius: '8px', marginBottom: '16px',
+        background: curState.isPeak ? 'var(--primary-weak)' : 'var(--bg-weak)',
+        border: '1px solid ' + (curState.isPeak ? 'var(--primary)' : 'var(--border)')
+      }
+    }, [
+      el('div', { style: { fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' } }, [curState.icon + ' 当前状态：' + curState.label]),
+      el('div', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: curState.advice })
+    ]);
+    card.appendChild(statusCard);
+
+    var toggleRow = el('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderTop: '1px solid var(--border)' }
+    }, [
+      el('div', {}, [
+        el('b', { text: '自定义精力高峰时段' }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: '关闭时默认使用早/中/晚三段大学标准黄金作息' })
+      ]),
+      V.toggle(eg.custom, function (val) {
+        eg.custom = val;
+        Store.updateSettings({ energy: eg });
+        view.render();
+      })
+    ]);
+    card.appendChild(toggleRow);
+
+    if (eg.custom) {
+      var peakList = el('div', { style: { marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } });
+      eg.peaks.forEach(function (p, idx) {
+        var row = el('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-weak)', padding: '8px 12px', borderRadius: '8px' }
+        }, [
+          el('input', {
+            type: 'text', value: p.name, style: { width: '130px', height: '32px' },
+            onchange: function () {
+              p.name = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          }),
+          el('input', {
+            type: 'time', value: p.start, style: { width: '90px', height: '32px' },
+            onchange: function () {
+              p.start = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          }),
+          el('span', { text: '至' }),
+          el('input', {
+            type: 'time', value: p.end, style: { width: '90px', height: '32px' },
+            onchange: function () {
+              p.end = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          })
+        ]);
+        peakList.appendChild(row);
+      });
+      card.appendChild(peakList);
+    }
+
+    root.appendChild(card);
+  }
+
+function renderSubtaskPage(root) {
     var cur = Store.subtaskOpts();
 
     function save(patch) {
@@ -3125,6 +3302,11 @@
     }));
 
     var opts = [
+      {
+        k: 'academic', name: '纯粹学术', icon: V.icons.star || V.icons.clock, color: '#2563eb',
+        desc: '非游戏化无干扰：专注于工时累计与里程碑，隐藏商城与虚拟代币',
+        bal: '纯粹专注'
+      },
       {
         k: 'forest', name: '森林', icon: V.icons.tree || V.icons.idea, color: '#4c8c4a',
         desc: '用积分种树、浇水，看着森林一天天长起来',

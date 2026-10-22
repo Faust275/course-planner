@@ -27,7 +27,14 @@ const out = await p.evaluate(() => {
   S.updateTask(w.id, { status: 'done' });
   const wNext = S.state.tasks.find(t => t.repeatFrom === w.id);
 
-  // 2) 过期锚定：截止日放在 30 天前，完成时下一期应为 今天+1
+  // 1b) 晚完成不漂移：4 天前那期拖到今天完成，下一期仍应是「原日期 +7 天」
+  const past4 = D.toStr(D.addDays(D.today(), -4));
+  const w2 = S.addTask({ title: '周会', dueDate: past4, status: 'todo',
+                         repeat: { type: 'weekly', interval: 1, until: '' } });
+  S.updateTask(w2.id, { status: 'done' });
+  const w2Next = S.state.tasks.find(t => t.repeatFrom === w2.id);
+
+  // 2) 过期锚定：截止日放在 30 天前，完成时下一期应为 今天+1（daily 节奏下两者一致）
   const past = D.toStr(D.addDays(D.today(), -30));
   const d = S.addTask({ title: '日报', dueDate: past, status: 'todo',
                         repeat: { type: 'daily', interval: 1, until: '' } });
@@ -50,6 +57,8 @@ const out = await p.evaluate(() => {
   return {
     weeklyNext: wNext ? wNext.dueDate : null,
     weeklyWant: D.toStr(D.addDays(D.parse(future), 7)),
+    weeklyLateNext: w2Next ? w2Next.dueDate : null,
+    weeklyLateWant: D.toStr(D.addDays(D.parse(past4), 7)),
     dailyNext: dNext ? dNext.dueDate : null,
     dailyWant: D.toStr(D.addDays(D.today(), 1)),
     monthlyNext1: mNext1 ? mNext1.dueDate : null,
@@ -68,6 +77,7 @@ const badge = await p.evaluate(() => {
 
 const checks = [
   ['周重复生成下一期', out.weeklyNext === out.weeklyWant],
+  ['晚完成仍落在原星期（不漂移）', out.weeklyLateNext === out.weeklyLateWant],
   ['过期锚定：下一期=今天+1', out.dailyNext === out.dailyWant],
   ['月重复第一次生成', !!out.monthlyNext1],
   ['月重复超过 until 停止', out.monthlyNext2 === 'stopped'],

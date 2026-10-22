@@ -66,6 +66,8 @@ const findConflictsSrc = extractFnFrom('findConflicts', conflictAnchor);
 // 6) 日历导出 .ics（remind.js 里的纯函数）
 const duStart = sliceFrom('var DateUtil = {');
 const DateUtilSrc = 'var DateUtil = ' + extractBalanced(html, html.indexOf('{', duStart)) + ';';
+// DateUtil.weekdayCN 依赖这个模块级常量，单独从产物里取，避免测试里再抄一份
+const DAY_NAMESSrc = (html.match(/var DAY_NAMES = \[[^\]]*\];/) || ['var DAY_NAMES = [];'])[0];
 const icsAnchor = sliceFrom('function icsEscape(');
 const icsEscapeSrc = extractFnFrom('icsEscape', icsAnchor);
 const icsFoldSrc = extractFnFrom('icsFold', icsAnchor);
@@ -91,6 +93,13 @@ const groupResultsSrc = extractFnFrom('groupResults', searchAnchor);
 const nextDueDateSrc = extractFn('nextDueDate');
 const repeatExpiredSrc = extractFn('repeatExpired');
 const sanitizeRepeatSrc = extractFn('sanitizeRepeat');
+const repeatSummarySrc = extractFn('repeatSummary');
+const repeatShortSrc = extractFn('repeatShort');
+const firstOccurrenceSrc = extractFn('firstOccurrence');
+const nthWeekdayOfMonthSrc = extractFn('nthWeekdayOfMonth');
+const wdCNSrc = extractFn('wdCN');
+const orderWeekdaysSrc = extractFn('orderWeekdays');
+const nextWeeklyMultiSrc = extractFn('nextWeeklyMulti');
 
 // 9) 农历模块（lunar.js，整体 IIFE，直接求值到独立 window 上）
 const lunarIiFE = (() => {
@@ -217,6 +226,7 @@ const childIdsSrc = extractFnFrom('childIds', SUBTASK_ANCHOR);
 
 // 在隔离作用域里求值并导出
 const mod = `var TimeUtil = ${TimeUtilSrc};
+  ${DAY_NAMESSrc}
   ${DateUtilSrc}
   var BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
   ${DAY_CNSrc}
@@ -253,6 +263,13 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
   ${nextDueDateSrc}
   ${repeatExpiredSrc}
   ${sanitizeRepeatSrc}
+  ${repeatSummarySrc}
+  ${repeatShortSrc}
+  ${firstOccurrenceSrc}
+  ${nthWeekdayOfMonthSrc}
+  ${wdCNSrc}
+  ${orderWeekdaysSrc}
+  ${nextWeeklyMultiSrc}
   ${clampDayOfMonthSrc}
   ${clampFeb29Src}
   ${annivNextSrc}
@@ -325,7 +342,8 @@ const mod = `var TimeUtil = ${TimeUtilSrc};
                      inWeekOf, weekOverlap, timeOverlap, findConflicts,
                      icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
                      hitsIn, describe, snippet, searchAll, groupResults,
-                     nextDueDate, repeatExpired, sanitizeRepeat,
+                     nextDueDate, repeatExpired, sanitizeRepeat, repeatSummary, repeatShort,
+                     firstOccurrence, nthWeekdayOfMonth,
                      annivNext, wrapText, measure, hexToRgb, tint,
                      subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
                      krProgress, goalProgress, goalExpired, goalActive, goalReviewDue, goalReviewText, goalDays,
@@ -341,7 +359,8 @@ const { TimeUtil, DateUtil, expandRange, mergeTotal,
         inWeekOf, weekOverlap, timeOverlap, findConflicts,
         icsEscape, icsFold, icsDT, icsStamp, slotOccurrences, icsTrigger, buildICS,
         hitsIn, describe, snippet, searchAll, groupResults,
-        nextDueDate, repeatExpired, sanitizeRepeat,
+        nextDueDate, repeatExpired, sanitizeRepeat, repeatSummary, repeatShort,
+        firstOccurrence, nthWeekdayOfMonth,
         annivNext, wrapText, measure, hexToRgb, tint,
         subOpts, isChild, childrenOf, subtaskProgress, childIds, SUBTASK_DEFAULTS,
         RANGES, LEDGER_RANGES, rangeDates, compareRange, perDay, eachDate,
@@ -954,7 +973,7 @@ console.log('groupResults（按类型分组）');
 }
 
 console.log('nextDueDate（重复任务）');
-// 传 todayStr = dueDate，验证「从原日期后推」的纯逻辑（不过滤过期）
+// 规则：以原定日期为锚点，只推进到第一个晚于今天的期（跳过错过的期，节奏不漂移）
 eq('无 repeat 返回 null', nextDueDate('2026-01-01', { type: 'none' }, '2026-01-01'), null);
 eq('日：+1 天', nextDueDate('2026-01-01', { type: 'daily', interval: 1 }, '2026-01-01'), '2026-01-02');
 eq('日：每 3 天', nextDueDate('2026-01-01', { type: 'daily', interval: 3 }, '2026-01-01'), '2026-01-04');
@@ -968,6 +987,29 @@ eq('年：2024-02-29 + 1 -> 2025-02-28', nextDueDate('2024-02-29', { type: 'year
 eq('年：2025-03-01 + 4 -> 2029-03-01', nextDueDate('2025-03-01', { type: 'yearly', interval: 4 }, '2025-03-01'), '2029-03-01');
 eq('过期基准：从今天起算', nextDueDate('2000-01-01', { type: 'daily', interval: 1 }, '2026-10-21'), '2026-10-22');
 eq('未过期基准：按原日期后推', nextDueDate('2026-12-25', { type: 'daily', interval: 1 }, '2026-10-21'), '2026-12-26');
+// 第二档：晚完成不改变节奏，只跳过已经错过的期
+eq('周：晚完成仍落在原星期', nextDueDate('2026-10-23', { type: 'weekly', interval: 1 }, '2026-10-27'), '2026-10-30');
+eq('周：每 2 周跳过错过的期', nextDueDate('2026-10-05', { type: 'weekly', interval: 2 }, '2026-10-20'), '2026-11-02');
+eq('日：每 3 天保持节拍', nextDueDate('2026-10-01', { type: 'daily', interval: 3 }, '2026-10-11'), '2026-10-13');
+eq('月：月末不漂移', nextDueDate('2026-01-31', { type: 'monthly', interval: 1 }, '2026-02-05'), '2026-02-28');
+eq('月：跳过整月后回到 31 号', nextDueDate('2026-01-31', { type: 'monthly', interval: 1 }, '2026-03-01'), '2026-03-31');
+eq('年：闰日不漂移', nextDueDate('2024-02-29', { type: 'yearly', interval: 1 }, '2025-03-01'), '2026-02-28');
+
+console.log('repeatSummary / repeatShort（人话说明）');
+eq('不重复返回空', repeatSummary({ type: 'none' }, '2026-10-23'), '');
+eq('每周五：带周几与起始日', repeatSummary({ type: 'weekly', interval: 1 }, '2026-10-23'),
+  '每周五一次，从 10 月 23 日（周五）开始，没有结束日期。');
+eq('每 2 周的周一', repeatSummary({ type: 'weekly', interval: 2 }, '2026-10-19'),
+  '每 2 周的周一一次，从 10 月 19 日（周一）开始，没有结束日期。');
+eq('每月 23 日 + 结束日', repeatSummary({ type: 'monthly', interval: 1, until: '2026-12-31' }, '2026-10-23'),
+  '每月 23 日一次，从 10 月 23 日（周五）开始，到 12 月 31 日为止。');
+eq('没有日期会提醒', repeatSummary({ type: 'weekly' }, ''),
+  '每周一次；还没选日期，完成后不会生成下一期。');
+eq('短标签：每天', repeatShort({ type: 'daily', interval: 1 }, '2026-10-23'), '每天');
+eq('短标签：每 3 天', repeatShort({ type: 'daily', interval: 3 }, '2026-10-23'), '每 3 天');
+eq('短标签：每周五', repeatShort({ type: 'weekly', interval: 1 }, '2026-10-23'), '每周五');
+eq('短标签：每月 31 日', repeatShort({ type: 'monthly', interval: 1 }, '2026-01-31'), '每月 31 日');
+eq('短标签：每年 10 月 23 日', repeatShort({ type: 'yearly', interval: 1 }, '2026-10-23'), '每年 10 月 23 日');
 
 console.log('repeatExpired');
 eq('无 until 不过期', repeatExpired({ type: 'daily' }, '2099-01-01'), false);
@@ -981,6 +1023,42 @@ eq('非法 type -> 不重复', sanitizeRepeat({ type: 'bogus' }), { type: 'none'
 eq('正常 weekly', sanitizeRepeat({ type: 'weekly', interval: 2 }), { type: 'weekly', interval: 2 });
 eq('interval 非法 -> 1', sanitizeRepeat({ type: 'daily', interval: 0 }), { type: 'daily', interval: 1 });
 eq('until 非法被丢弃', sanitizeRepeat({ type: 'monthly', until: 'abc' }), { type: 'monthly', interval: 1 });
+eq('weekdays 去重+取模+排序', sanitizeRepeat({ type: 'weekly', weekdays: [0, 0, 7, 3] }), { type: 'weekly', interval: 1, weekdays: [0, 3] });
+eq('weekdays 为空回退不重复星期', sanitizeRepeat({ type: 'weekly', weekdays: [] }), { type: 'weekly', interval: 1 });
+eq('month pos 默认第1个', sanitizeRepeat({ type: 'monthly', monthRule: 'pos', wd: 3 }), { type: 'monthly', interval: 1, monthRule: 'pos', wd: 3, pos: 1 });
+eq('month pos 越界 clamp 到 4', sanitizeRepeat({ type: 'monthly', monthRule: 'pos', pos: 9, wd: 3 }), { type: 'monthly', interval: 1, monthRule: 'pos', wd: 3, pos: 4 });
+eq('month pos 末位 pos=-1', sanitizeRepeat({ type: 'monthly', monthRule: 'pos', pos: -1, wd: 5 }), { type: 'monthly', interval: 1, monthRule: 'pos', wd: 5, pos: -1 });
+eq('month lastday 透传', sanitizeRepeat({ type: 'monthly', monthRule: 'lastday' }), { type: 'monthly', interval: 1, monthRule: 'lastday' });
+eq('month 无规则按几号', sanitizeRepeat({ type: 'monthly' }), { type: 'monthly', interval: 1 });
+
+console.log('nthWeekdayOfMonth');
+eq('11 月第 2 个周三', DateUtil.toStr(nthWeekdayOfMonth(2026, 10, 2, 3)), '2026-11-11');
+eq('10 月最后一个周五', DateUtil.toStr(nthWeekdayOfMonth(2026, 9, -1, 5)), '2026-10-30');
+eq('不存在的第 5 个周一', nthWeekdayOfMonth(2026, 1, 5, 1), null);
+
+console.log('firstOccurrence（首期对齐到真正生效日）');
+eq('周多选：首期是开始日之后的第一个选中星期（周五）', firstOccurrence('2026-10-15', { type: 'weekly', weekdays: [1, 3, 5] }), '2026-10-16');
+eq('月位置：首期是下月第 2 个周三', firstOccurrence('2026-10-15', { type: 'monthly', monthRule: 'pos', pos: 2, wd: 3 }), '2026-11-11');
+eq('月末：首期是当月最后一天', firstOccurrence('2026-10-15', { type: 'monthly', monthRule: 'lastday' }), '2026-10-31');
+eq('旧规则原样返回日期', firstOccurrence('2026-10-15', { type: 'monthly' }), '2026-10-15');
+
+console.log('nextDueDate（自定义周期：多选星期 + 月位置）');
+eq('周多选：下一期是本周三', nextDueDate('2026-10-19', { type: 'weekly', interval: 1, weekdays: [1, 3, 5] }, '2026-10-19'), '2026-10-21');
+eq('周多选+每2周：下一期在下个块的周一', nextDueDate('2026-10-19', { type: 'weekly', interval: 2, weekdays: [1] }, '2026-10-19'), '2026-11-02');
+eq('月位置：下一期是下月第 2 个周三', nextDueDate('2026-10-15', { type: 'monthly', interval: 1, monthRule: 'pos', pos: 2, wd: 3 }, '2026-10-15'), '2026-11-11');
+eq('月位置末位：下一期是当月最后一个周五', nextDueDate('2026-10-15', { type: 'monthly', interval: 1, monthRule: 'pos', pos: -1, wd: 5 }, '2026-10-15'), '2026-10-30');
+eq('月末最后一天：下一期是当月末', nextDueDate('2026-10-15', { type: 'monthly', interval: 1, monthRule: 'lastday' }, '2026-10-15'), '2026-10-31');
+eq('月位置每2月：首期是锚点当月末', nextDueDate('2026-10-15', { type: 'monthly', interval: 2, monthRule: 'lastday' }, '2026-10-15'), '2026-10-31');
+eq('多选星期晚完成不漂移', nextDueDate('2026-10-19', { type: 'weekly', interval: 1, weekdays: [1, 3, 5] }, '2026-10-27'), '2026-10-28');
+
+console.log('repeatSummary / repeatShort（自定义周期）');
+eq('周多选摘要', repeatSummary({ type: 'weekly', interval: 1, weekdays: [1, 3, 5] }, '2026-10-19').startsWith('每周周一、周三、周五一次'), true);
+eq('周多选短标签', repeatShort({ type: 'weekly', interval: 1, weekdays: [1, 3, 5] }, '2026-10-19'), '周一·周三·周五');
+eq('月位置摘要', repeatSummary({ type: 'monthly', interval: 1, monthRule: 'pos', pos: 2, wd: 3 }, '2026-10-15').indexOf('每月第 2 个周三一次') >= 0, true);
+eq('月位置短标签', repeatShort({ type: 'monthly', interval: 1, monthRule: 'pos', pos: 2, wd: 3 }, '2026-10-15'), '每月第2周三');
+eq('月末摘要', repeatSummary({ type: 'monthly', interval: 1, monthRule: 'lastday' }, '2026-10-15').indexOf('每月最后一天一次') >= 0, true);
+eq('月末短标签', repeatShort({ type: 'monthly', interval: 1, monthRule: 'lastday' }, '2026-10-15'), '每月末');
+eq('月位置末位短标签', repeatShort({ type: 'monthly', interval: 1, monthRule: 'pos', pos: -1, wd: 5 }, '2026-10-15'), '每月末周五');
 
 console.log('农历数据自检');
 eq('selfTest 全过', Lunar.selfTest().bad, []);
@@ -1704,6 +1782,488 @@ console.log('统计：今年档（自然年口径）');
   eq('year 参照从去年 1 月 1 日起', cr.from, (Y - 1) + '-01-01');
   eq('month 档不受影响', rangeDates('month').key, 'month');
   eq('term 档仍不做对比', compareRange('term', rangeDates('term')), null);
+}
+
+
+/* ==========================================================
+ * TaskNLP: 自然语言待办快速录入测试
+ * ========================================================== */
+const nlpSrc = readFileSync(new URL('../assets/js/task-nlp.js', import.meta.url), 'utf8');
+new Function(nlpSrc)();
+const TaskNLP = globalThis.TaskNLP;
+
+console.log('\nTaskNLP 自然语言待办解析');
+{
+  const fixedNow = new Date(2026, 9, 22, 10, 0, 0); // 2026-10-22 (周四)
+  const courses = [{ id: 'c_math', name: '高等数学' }, { id: 'c_phy', name: '大学物理' }];
+
+  // 1. 相对日期 + 具体时间 + 课程 + 标签 + 优先级
+  const r1 = TaskNLP.parse('明天下午3点半交高数作业 #作业 !重要', { courses, baseDate: fixedNow });
+  eq('NLP: 标题提取干净', r1.title, '交高数作业');
+  eq('NLP: 相对日期明天', r1.dueDate, '2026-10-23');
+  eq('NLP: 时间下午3点半', r1.dueTime, '15:30');
+  eq('NLP: 优先级重要', r1.priority, 'high');
+  eq('NLP: 标记重要为真', r1.important, true);
+  eq('NLP: 提取标签 #作业', r1.tags, ['作业']);
+  eq('NLP: 隐式匹配高数课程', r1.courseId, 'c_math');
+
+  // 2. 显式课程 @大物 + 后天晚上8点
+  const r2 = TaskNLP.parse('后天晚上8点实验预习 @大学物理 #实验', { courses, baseDate: fixedNow });
+  eq('NLP: 后天日期', r2.dueDate, '2026-10-24');
+  eq('NLP: 晚上8点时间', r2.dueTime, '20:00');
+  eq('NLP: 显式匹配大物课程', r2.courseId, 'c_phy');
+  eq('NLP: 标签 #实验', r2.tags, ['实验']);
+
+  // 3. 星期解析 (下周三)
+  const r3 = TaskNLP.parse('下周三上午10点期中复习', { courses, baseDate: fixedNow });
+  eq('NLP: 下周三日期', r3.dueDate, '2026-10-28');
+  eq('NLP: 上午10点', r3.dueTime, '10:00');
+  eq('NLP: 标题保留期中复习', r3.title, '期中复习');
+
+  // 4. 绝对日期 (11月5日 14:00)
+  const r4 = TaskNLP.parse('11月5日 14:00 提交大作业', { courses, baseDate: fixedNow });
+  eq('NLP: 绝对日期 11-05', r4.dueDate, '2026-11-05');
+  eq('NLP: 24小时制时间 14:00', r4.dueTime, '14:00');
+
+  // 5. 纯文本无时间词不误伤
+  const r5 = TaskNLP.parse('去超市买苹果和牛奶', { courses, baseDate: fixedNow });
+  eq('NLP: 纯文本原样保留', r5.title, '去超市买苹果和牛奶');
+  eq('NLP: 无日期', r5.hasDate, false);
+  eq('NLP: 无时间', r5.hasTime, false);
+}
+
+/* ==========================================================
+ * UI: 类名安全处理与前缀解耦
+ * ========================================================== */
+const uiSrc = readFileSync(new URL('../assets/js/ui.js', import.meta.url), 'utf8');
+const uiWin = { document: { createElement: () => ({ setAttribute: () => {}, style: {} }), getElementById: () => null } };
+new Function('window', 'global', uiSrc)(uiWin, uiWin);
+const { cn, cls, addClass, removeClass, toggleClass, hasClass } = uiWin.UI;
+
+console.log('\nUI: 类名安全处理与前缀解耦');
+{
+  eq('UI.cls 裸类名补 cp- 前缀', cls('card'), 'cp-card');
+  eq('UI.cls 已有 cp- 不重复加', cls('cp-btn'), 'cp-btn');
+  eq('UI.cls pet- 前缀保留', cls('pet-walk'), 'pet-walk');
+  eq('UI.cn 多参数与条件判断', cn('card', true && 'active', false && 'hidden'), 'cp-card cp-active');
+  eq('UI.cn 数组参数支持', cn(['btn', 'btn-primary']), 'cp-btn cp-btn-primary');
+  eq('UI.cn 对象条件判断', cn({ 'btn-danger': true, 'is-loading': false }), 'cp-btn-danger');
+
+  // DOM node class 操作
+  const mockNode = {
+    className: '',
+    classList: {
+      _classes: new Set(),
+      add: function(c) { this._classes.add(c); mockNode.className = Array.from(this._classes).join(' '); },
+      remove: function(c) { this._classes.delete(c); mockNode.className = Array.from(this._classes).join(' '); },
+      toggle: function(c, force) {
+        if (force === true) { this._classes.add(c); return true; }
+        if (force === false) { this._classes.delete(c); return false; }
+        if (this._classes.has(c)) { this._classes.delete(c); return false; }
+        this._classes.add(c); return true;
+      },
+      contains: function(c) { return this._classes.has(c); }
+    }
+  };
+
+  addClass(mockNode, 'active');
+  eq('addClass 自动补 cp- 前缀', hasClass(mockNode, 'active'), true);
+  eq('hasClass 同时兼容裸名和前缀名', hasClass(mockNode, 'cp-active'), true);
+  removeClass(mockNode, 'active');
+  eq('removeClass 成功移除', hasClass(mockNode, 'active'), false);
+  toggleClass(mockNode, 'on', true);
+  eq('toggleClass 强制开启生效', hasClass(mockNode, 'on'), true);
+  toggleClass(mockNode, 'on', false);
+  eq('toggleClass 强制关闭生效', hasClass(mockNode, 'on'), false);
+}
+
+/* ==========================================================
+ * Store: 强 Schema 校验与数据恢复防崩溃
+ * ========================================================== */
+const validateSchemaFn = extractFn('validateSchema');
+const defStateFn = extractFn('defaultState');
+const subOptsFn = extractFn('subOpts');
+const mergeShopFn = extractFn('mergeShop');
+const validFn = new Function('defaultState', 'subOpts', 'mergeShop', 'uid', 'DateUtil', 'return ' + validateSchemaFn)(
+  new Function('uid', 'DateUtil', 'defaultPeriods', 'return ' + defStateFn)(
+    (p) => 'uid_' + p,
+    DateUtil,
+    () => [{ id: 'p1', name: '第1节', start: '08:00', end: '08:45' }]
+  ),
+  subOpts,
+  new Function('return ' + mergeShopFn)(),
+  (p) => 'uid_' + p,
+  DateUtil
+);
+
+console.log('\nStore: 强 Schema 校验与数据恢复防崩溃');
+{
+  // 1. null / 损坏输入安全兜底
+  const s0 = validFn(null);
+  eq('validateSchema(null) 得到默认结构', typeof s0, 'object');
+  eq('validateSchema(null) 有完整 periods', Array.isArray(s0.periods), true);
+  eq('validateSchema(null) 有完整 settings', typeof s0.settings, 'object');
+
+  // 2. 缺失 shop 的旧备份安全补齐（防止 TypeError: reading tickets of undefined）
+  const s1 = validFn({ version: 2, courses: [], tasks: [] });
+  eq('缺失 shop 自动补齐 tickets', typeof s1.shop.tickets, 'object');
+  eq('缺失 shop 自动提供 fish', typeof s1.shop.tickets.fish, 'number');
+  eq('缺失 shop 自动提供 validDays', typeof s1.shop.validDays, 'object');
+  eq('缺失 shop 自动提供 streak', typeof s1.shop.streak, 'object');
+
+  // 3. 脏数据清洗（非数组强制归一为数组，防止迭代器崩溃）
+  const s2 = validFn({ courses: 'invalid', tasks: null, pomodoro: { points: 'bad' } });
+  eq('非数组 courses 恢复为数组', Array.isArray(s2.courses), true);
+  eq('null tasks 恢复为数组', Array.isArray(s2.tasks), true);
+  eq('非法 points 恢复为 0', s2.pomodoro.points, 0);
+  eq('pomodoro.gacha.pools 自动保护', typeof s2.pomodoro.gacha.pools.standard, 'object');
+}
+
+/* ==========================================================
+ * Ocr: parseWeeks 识别拓展
+ * ========================================================== */
+const ocrSrc = readFileSync(new URL('../assets/js/ocr.js', import.meta.url), 'utf8');
+const ocrWin = {};
+new Function('window', 'global', ocrSrc)(ocrWin, ocrWin);
+const Ocr = ocrWin.Ocr;
+
+console.log('\nOcr: parseWeeks 识别拓展');
+{
+  const ow1 = Ocr.parseWeeks('1-16周(单)', 20);
+  eq('OCR单周解析', ow1.weekType, 'odd');
+  eq('OCR单周起始周', ow1.startWeek, 1);
+  eq('OCR单周结束周', ow1.endWeek, 16);
+
+  const ow2 = Ocr.parseWeeks('3-18周(双)', 20);
+  eq('OCR双周解析', ow2.weekType, 'even');
+  eq('OCR双周起始周', ow2.startWeek, 3);
+  eq('OCR双周结束周', ow2.endWeek, 18);
+}
+
+
+
+/* ==========================================================
+ * 新特性单测：白噪音、学术模式、实验课轮转、精力节律与白皮书
+ * ========================================================== */
+
+const mockLS = {
+  _data: {},
+  getItem(k) { return this._data[k] || null; },
+  setItem(k, v) { this._data[k] = String(v); },
+  removeItem(k) { delete this._data[k]; }
+};
+
+async function initTestStore() {
+  const storeCode = readFileSync(new URL('../assets/js/store.js', import.meta.url), 'utf8');
+  const akOpsCode = readFileSync(new URL('../assets/js/ak_ops.js', import.meta.url), 'utf8');
+  const g = { DateUtil: DateUtil };
+  new Function('window', 'global', akOpsCode)(g, g);
+  new Function('window', 'global', 'localStorage', storeCode)(g, g, mockLS);
+  await g.Store.init();
+  return g.Store;
+}
+function _dead() {
+  const storeCode = readFileSync(new URL('../assets/js/store.js', import.meta.url), 'utf8');
+  const g = { DateUtil: DateUtil };
+  new Function('window', 'global', 'localStorage', storeCode)(g, g, mockLS);
+  g.Store.init();
+  return g.Store;
+}
+
+// 1. 白噪音引擎纯逻辑测试
+console.log('\nWhiteNoise: 原生离线白噪音状态机');
+{
+  const wnCode = readFileSync(new URL('../assets/js/white-noise.js', import.meta.url), 'utf8');
+  const g = {};
+  new Function('window', 'global', wnCode)(g, g);
+  const WN = g.WhiteNoise;
+  eq('SOUNDS 包含 rain 声音', typeof WN.SOUNDS.rain, 'object');
+  eq('SOUNDS 包含 pink 声音', typeof WN.SOUNDS.pink, 'object');
+  eq('SOUNDS 包含 brown 声音', typeof WN.SOUNDS.brown, 'object');
+  eq('SOUNDS 包含 white 声音', typeof WN.SOUNDS.white, 'object');
+
+  const st = WN.state();
+  eq('初始状态不播放', st.playing, false);
+  eq('音量默认 0.5', st.volume, 0.5);
+
+  WN.setVolume(1.5);
+  eq('setVolume 上限夹紧到 1', WN.state().volume, 1);
+  WN.setVolume(-0.5);
+  eq('setVolume 下限夹紧到 0', WN.state().volume, 0);
+
+  WN.setType('brown');
+  eq('setType 设置有效类型', WN.state().type, 'brown');
+  WN.setType('invalid_sound');
+  eq('setType 忽略无效类型', WN.state().type, 'brown');
+}
+
+// 2. 纯粹学术专注模式测试
+console.log('\nStore: 纯粹学术模式 (Academic Focus Mode)');
+{
+  const S = await initTestStore();
+  eq('默认 isAcademicMode 为 false', S.isAcademicMode(), false);
+
+  const res = S.setRewardMode('academic');
+  eq('setRewardMode(academic) 返回 academic', res, 'academic');
+  eq('isAcademicMode 生效为 true', S.isAcademicMode(), true);
+
+  S.setRewardMode('forest');
+  eq('切回 forest 后 isAcademicMode 为 false', S.isAcademicMode(), false);
+}
+
+// 3. 实验课与多地点轮转测试
+console.log('\nStore: 实验课与多地点轮转 (Lab Rotations)');
+{
+  const S = await initTestStore();
+  const c = {
+    name: '大学物理实验',
+    location: '物理楼 101',
+    rotations: [
+      { startWeek: 1, endWeek: 4, location: '理教 201', topic: '光学基础' },
+      { startWeek: 5, endWeek: 8, location: '工训 302', topic: '激光干涉' }
+    ]
+  };
+  eq('第 2 周轮转教室为理教 201', S.courseLocationOnWeek(c, 2), '理教 201');
+  eq('第 2 周实验课题为光学基础', S.courseTopicOnWeek(c, 2), '光学基础');
+  eq('第 6 周轮转教室为工训 302', S.courseLocationOnWeek(c, 6), '工训 302');
+  eq('第 6 周实验课题为激光干涉', S.courseTopicOnWeek(c, 6), '激光干涉');
+  eq('第 10 周未命中轮转退回默认教室', S.courseLocationOnWeek(c, 10), '物理楼 101');
+  eq('第 10 周课题为空串', S.courseTopicOnWeek(c, 10), '');
+
+  const c2 = {
+    id: 'c_lab',
+    name: '物理实验',
+    location: '默认教室',
+    rotations: [
+      { startWeek: 1, endWeek: 4, location: '理教 201', topic: '迈克尔逊' }
+    ],
+    slots: [{ day: 1, periodId: 'p1' }]
+  };
+  const slots = S.expandCourse(c2, 2);
+  eq('expandCourse 展开数量为 1', slots.length, 1);
+  eq('expandCourse 注入轮转地点', slots[0].location, '理教 201');
+  eq('expandCourse 注入实验课题', slots[0].topic, '迈克尔逊');
+}
+
+// 4. 生理精力与作息动态匹配测试
+console.log('\nStore: 生理精力与作息动态匹配 (Energy & Circadian)');
+{
+  const S = await initTestStore();
+
+  const peaks = S.getEnergyPeaks();
+  eq('默认提供 3 段黄金作息', peaks.length, 3);
+  eq('晨间黄金期从 09:00 开始', peaks[0].start, '09:00');
+
+  const st1 = S.currentEnergyState('10:00');
+  eq('10:00 判定为精力黄金期', st1.isPeak, true);
+  eq('10:00 精力等级为 high', st1.level, 'high');
+
+  const st2 = S.currentEnergyState('13:30');
+  eq('13:30 判定非高峰期', st2.isPeak, false);
+  eq('13:30 精力等级为 low', st2.level, 'low');
+
+  const st3 = S.currentEnergyState('23:30');
+  eq('23:30 判定为夜间休整期', st3.level, 'rest');
+
+  const st4 = S.currentEnergyState('16:00');
+  eq('16:00 命中午后高效期', st4.isPeak, true);
+}
+
+// 5. 学业生活白皮书数据聚合测试
+console.log('\nWhitePaper: 学业生活全景白皮书');
+{
+  const wpCode = readFileSync(new URL('../assets/js/white-paper.js', import.meta.url), 'utf8');
+  const S = await initTestStore();
+  const g = {
+    DateUtil: DateUtil,
+    Store: S,
+    UI: { el: () => ({ appendChild: () => {} }) }
+  };
+  new Function('window', 'global', wpCode)(g, g);
+  const data = g.WhitePaper.compileData();
+  eq('白皮书包含学期名称', typeof data.semesterName, 'string');
+  eq('白皮书包含 GPA', typeof data.gpa, 'string');
+  eq('白皮书包含专注工时', typeof data.focusHours, 'string');
+  eq('白皮书包含睡眠时长', typeof data.avgSleepHours, 'string');
+  eq('白皮书包含待办完成率', typeof data.taskRate, 'number');
+}
+
+
+// 6. 抽卡心愿单与轮换预报测试
+console.log('\nGacha: 心愿单与轮换到货预报 (Wishlist Forecast)');
+{
+  const S = await initTestStore();
+  eq('初始心愿单为空', S.getWishlist().length, 0);
+
+  S.toggleWishlist('银灰');
+  eq('加入银灰后心愿单数量为 1', S.getWishlist().length, 1);
+  eq('isWishlisted(银灰) 为 true', S.isWishlisted('银灰'), true);
+
+  const forecast = S.wishlistForecast();
+  eq('心愿单预报包含 1 个对象', forecast.length, 1);
+  eq('预报对象名称正确', forecast[0].name, '银灰');
+  eq('预报计算星级为 6', forecast[0].star, 6);
+  eq('预报包含所属池名称', typeof forecast[0].poolName, 'string');
+  eq('预报包含备考玉进度', typeof forecast[0].readyPct, 'number');
+
+  S.toggleWishlist('银灰');
+  eq('再次切换后移除心愿单', S.isWishlisted('银灰'), false);
+}
+
+// 7. 教务 ICS 日历导入解析测试
+console.log('\nScheduleImport: 教务系统 ICS 日历解析');
+{
+  const schedCode = readFileSync(new URL('../assets/js/views/schedule.js', import.meta.url), 'utf8');
+  const g = {
+    UI: { el: () => ({ appendChild: () => {} }) },
+    Store: { periods: [{ start: '08:00', end: '09:40' }] }
+  };
+  // Extract parseIcsCourseTable
+  const icsMatch = schedCode.match(/function parseIcsCourseTable\(text\)\s*\{([\s\S]*?)\n  \}/);
+  const parseICS = new Function('text', 'Store', icsMatch[0] + '; return parseIcsCourseTable(text);');
+
+  const testICS = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:高等数学[1-16周]
+LOCATION:教学楼A101
+DESCRIPTION:张教授
+DTSTART:20260901T080000
+DTEND:20260901T094000
+RRULE:FREQ=WEEKLY;COUNT=16;BYDAY=MO
+END:VEVENT
+END:VCALENDAR`;
+
+  const res = parseICS(testICS, g.Store);
+  eq('ICS 解析出 1 门课', res.rows.length, 1);
+  eq('ICS 课名提取正确', res.rows[0].name, '高等数学');
+  eq('ICS 地点提取正确', res.rows[0].location, '教学楼A101');
+  eq('ICS 教师提取正确', res.rows[0].teacher, '张教授');
+  eq('ICS 星期匹配周一', res.rows[0].day, 1);
+  eq('ICS 起始周 1', res.rows[0].weeks.start, 1);
+  eq('ICS 结束周 16', res.rows[0].weeks.end, 16);
+}
+
+// 8. 教务 HTML DOM 结构抽取测试
+// 8. 教务网页源码 HTML 解析
+console.log('\nScheduleImport: 教务网页源码 HTML 解析');
+{
+  const schedCode = readFileSync(new URL('../assets/js/views/schedule.js', import.meta.url), 'utf8');
+  const dayCnCode = 'var DAY_CN = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 7, "天": 7 };\n';
+  const parseSection = schedCode.slice(schedCode.indexOf('function parseDay'), schedCode.indexOf('function parseCourseTable'));
+
+  const mockDOMParser = function () {
+    return {
+      parseFromString: function () {
+        return {
+          querySelectorAll: function (selector) {
+            if (selector === 'table') {
+              return [{
+                textContent: '星期一 星期二 星期三',
+                querySelectorAll: function (subSel) {
+                  if (subSel === 'tr') {
+                    return [
+                      {
+                        querySelectorAll: function () {
+                          return [
+                            { textContent: '节次' },
+                            { textContent: '星期一' },
+                            { textContent: '星期二' }
+                          ];
+                        }
+                      },
+                      {
+                        querySelectorAll: function () {
+                          return [
+                            { textContent: '第1-2节', getAttribute: () => '1' },
+                            { textContent: ['大学物理', '李老师', '理教201', '1-16周'].join('\n'), getAttribute: () => '2' },
+                            { textContent: '', getAttribute: () => '1' }
+                          ];
+                        }
+                      }
+                    ];
+                  }
+                  return [];
+                }
+              }];
+            }
+            return [];
+          }
+        };
+      }
+    };
+  };
+
+  const parseHTML = new Function('DOMParser',
+    dayCnCode + parseSection + '; return parseHtmlCourseTable("<table>");'
+  );
+
+  const res = parseHTML(mockDOMParser);
+  eq('HTML 解析出课程', res.rows.length, 1);
+  eq('HTML 课名正确', res.rows[0].name.indexOf('大学物理') >= 0, true);
+  eq('HTML 地点识别为理教201', res.rows[0].location, '理教201');
+  eq('HTML 教师识别为李老师', res.rows[0].teacher, '李老师');
+  eq('HTML 星期匹配为周一', res.rows[0].day, 1);
+}
+
+
+// 9. 自然意象主题与明日方舟主题体系测试
+console.log('\nTheme: 自然意象主题（解耦）与明日方舟主题体系');
+{
+  const themeCode = readFileSync(new URL('../assets/js/theme.js', import.meta.url), 'utf8');
+  const paletteCode = readFileSync(new URL('../assets/js/palette.js', import.meta.url), 'utf8');
+  const rootEl = {
+    dataset: {},
+    style: { setProperty: () => {} },
+    setAttribute: function (k, v) { this[k] = v; },
+    removeAttribute: function (k) { delete this[k]; }
+  };
+  const g = {
+    Palette: { THEME_PRESETS: [] },
+    Store: {
+      state: { settings: { themeSkin: true, themeSkinAuto: true, natureTheme: 'pine', arkTheme: 'terminal', themeMode: 'light' }, pomodoro: { mode: 'forest' } },
+      updateSettings: function (p) { Object.assign(this.state.settings, p); }
+    },
+    document: {
+      documentElement: rootEl,
+      querySelector: () => null,
+      getElementById: () => null
+    },
+    window: { matchMedia: () => ({ matches: false }) }
+  };
+  new Function('global', paletteCode)(g);
+  new Function('window', 'global', 'Palette', 'Store', 'document', themeCode)(g.window, g, g.Palette, g.Store, g.document);
+
+  const T = g.window.Theme || g.Theme;
+  eq('自然主题包含晨雾松林', !!T.NATURE_THEMES.pine, true);
+  eq('自然主题包含极光苍穹', !!T.NATURE_THEMES.aurora, true);
+  eq('自然主题包含暮霞熔金', !!T.NATURE_THEMES.sunset, true);
+  eq('自然主题包含山岚青黛', !!T.NATURE_THEMES.slate, true);
+  eq('方舟主题包含经典终端', !!T.ARK_THEMES.terminal, true);
+  eq('方舟主题包含集成战略水墨', !!T.ARK_THEMES.roguelike, true);
+
+  // Apply nature theme
+  T.apply();
+  eq('种树模式套用 data-mech=tree', rootEl['data-mech'], 'tree');
+  eq('种树模式套用 data-nature-theme=pine', rootEl['data-nature-theme'], 'pine');
+  eq('种树模式不继承 data-ark-theme', rootEl['data-ark-theme'], undefined);
+
+  // Switch nature theme
+  T.setNatureTheme('aurora');
+  eq('切换后 natureTheme 为 aurora', g.Store.state.settings.natureTheme, 'aurora');
+  eq('切换后 data-nature-theme=aurora', rootEl['data-nature-theme'], 'aurora');
+
+  // Switch to Gacha
+  g.Store.state.pomodoro.mode = 'gacha';
+  T.apply();
+  eq('抽卡模式套用 data-mech=factory', rootEl['data-mech'], 'factory');
+  eq('抽卡模式套用 data-ark-theme=terminal', rootEl['data-ark-theme'], 'terminal');
+  eq('抽卡模式不继承 data-nature-theme', rootEl['data-nature-theme'], undefined);
+
+  // Switch ark theme to roguelike
+  T.setArkTheme('roguelike');
+  eq('切换后 arkTheme 为 roguelike', g.Store.state.settings.arkTheme, 'roguelike');
+  eq('切换后 data-ark-theme=roguelike', rootEl['data-ark-theme'], 'roguelike');
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

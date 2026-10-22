@@ -50,7 +50,9 @@ course-planner-web/
 ├── verify_conflict.mjs       课表时间冲突检测验证
 ├── verify_ics.mjs            上课提醒：.ics 导出内容 + 页面内提醒触发
 ├── verify_search.mjs         全局搜索：结果分组、关键词高亮、跳转定位
-├── verify_repeat.mjs         重复任务：展开生成、过期锚定、until 截止
+├── verify_repeat.mjs         重复任务：展开生成、保持节奏、until 截止
+├── verify_repeat_ui.mjs      重复任务文案：日期标签、人话摘要、无日期拦截
+├── verify_weekend.mjs        课表周末显示：5/7 列、设置同步、数据不受影响
 ├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
 ├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
 ├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径

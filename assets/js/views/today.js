@@ -70,11 +70,11 @@
       }, [
         el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' } }, [
           el('div', { style: { flex: '1', minWidth: '180px' } }, [
-            el('div', { style: { fontSize: '12.5px', opacity: '.82', marginBottom: '4px' },
+            el('div', { class: 'hero-sub', style: { fontSize: '12.5px', opacity: '.82', marginBottom: '4px' },
               text: greet + '，今天也要好好上课' }),
-            el('div', { style: { fontSize: '24px', fontWeight: '700', letterSpacing: '.4px', lineHeight: '1.25' },
+            el('div', { class: 'hero-title', style: { fontSize: '24px', fontWeight: '700', letterSpacing: '.4px', lineHeight: '1.25' },
               text: (today.getMonth() + 1) + ' 月 ' + today.getDate() + ' 日 · ' + Store.DAY_NAMES[dow - 1] }),
-            el('div', { style: { fontSize: '12.5px', opacity: '.86', marginTop: '4px' },
+            el('div', { class: 'hero-desc', style: { fontSize: '12.5px', opacity: '.86', marginTop: '4px' },
               text: !inTerm ? '学期外 · 假期愉快' : (courses.length ? ('第 ' + weekNo + ' 周 · 今天 ' + courses.length + ' 节课') : ('第 ' + weekNo + ' 周 · 今天没有课')) })
           ]),
           el('div', { class: 'hero-stats', style: { display: 'flex', gap: '18px', textAlign: 'center' } }, [
@@ -85,6 +85,48 @@
         ])
       ]);
       root.appendChild(hero);
+
+      /* ---------- 🎯 心愿干员到货备考动态 ---------- */
+      (function () {
+        if (!Store.pomodoro || Store.pomodoro.mode !== 'gacha' || !Store.wishlistForecast) return;
+        var forecasts = Store.wishlistForecast();
+        if (!forecasts.length) return;
+        var near = forecasts.filter(function (f) { return f.isCurrent || (f.daysLeft > 0 && f.daysLeft <= 7); });
+        if (!near.length) return;
+        var f0 = near[0];
+        var text = f0.isCurrent
+          ? ('【' + f0.name + '】正在「' + f0.poolName + '」当期 UP 寻访中！当前备考合成玉进度 ' + f0.readyPct + '%。')
+          : ('【' + f0.name + '】将在 ' + f0.daysLeft + ' 天后进入「' + f0.poolName + '」UP！当前备考合成玉进度 ' + f0.readyPct + '%。');
+
+        root.appendChild(el('div', {
+          class: 'card cp-wishlist-banner',
+          style: {
+            background: 'linear-gradient(135deg, #0f766e 0%, #115e59 100%)',
+            color: '#fff',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
+            el('span', { style: { fontSize: '20px' } }, ['🎯']),
+            el('div', {}, [
+              el('div', { style: { fontWeight: 'bold', fontSize: '14px' }, text: '心愿干员到货预告' }),
+              el('div', { style: { fontSize: '12px', opacity: 0.9, marginTop: '2px' }, text: text + ' 今日完成专注与作业即可加速攒玉！' })
+            ])
+          ]),
+          el('button', {
+            class: 'btn btn-sm',
+            style: { background: '#fff', color: '#0f766e', fontWeight: 'bold', minWidth: '70px' },
+            onclick: function () { App.go('gacha'); }
+          }, ['去寻访 ›'])
+        ]));
+      })();
+
 
       /* ---------- 倒数纪念日 ---------- */
       (function () {

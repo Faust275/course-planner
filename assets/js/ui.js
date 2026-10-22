@@ -6,6 +6,73 @@
 (function (global) {
   'use strict';
 
+  /* ---------- 类名安全处理与前缀解耦助手 ---------- */
+  function prefixCls(c) {
+    if (!c || typeof c !== 'string') return '';
+    return /^(cp-|gp-|pet-)/.test(c) ? c : 'cp-' + c;
+  }
+
+  function cn() {
+    var out = [];
+    for (var i = 0; i < arguments.length; i++) {
+      var a = arguments[i];
+      if (!a) continue;
+      if (typeof a === 'string' || typeof a === 'number') {
+        String(a).split(/\s+/).forEach(function (token) {
+          if (token) out.push(prefixCls(token));
+        });
+      } else if (Array.isArray(a)) {
+        a.forEach(function (item) {
+          if (item) {
+            String(item).split(/\s+/).forEach(function (token) {
+              if (token) out.push(prefixCls(token));
+            });
+          }
+        });
+      } else if (typeof a === 'object') {
+        Object.keys(a).forEach(function (k) {
+          if (a[k]) {
+            k.split(/\s+/).forEach(function (token) {
+              if (token) out.push(prefixCls(token));
+            });
+          }
+        });
+      }
+    }
+    return out.join(' ');
+  }
+
+  function addClass(node, className) {
+    if (!node || !className) return node;
+    String(className).split(/\s+/).forEach(function (c) {
+      if (c) node.classList.add(prefixCls(c));
+    });
+    return node;
+  }
+
+  function removeClass(node, className) {
+    if (!node || !className) return node;
+    String(className).split(/\s+/).forEach(function (c) {
+      if (c) {
+        node.classList.remove(prefixCls(c));
+        node.classList.remove(c);
+      }
+    });
+    return node;
+  }
+
+  function toggleClass(node, className, force) {
+    if (!node || !className) return false;
+    var cls = prefixCls(className.trim());
+    return node.classList.toggle(cls, force);
+  }
+
+  function hasClass(node, className) {
+    if (!node || !className) return false;
+    var cls = prefixCls(className.trim());
+    return node.classList.contains(cls) || node.classList.contains(className);
+  }
+
   /* ---------- DOM 助手 ---------- */
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -13,7 +80,7 @@
       Object.keys(attrs).forEach(function (k) {
         var v = attrs[k];
         if (v == null || v === false) return;
-        if (k === 'class') node.className = String(v).split(/\s+/).filter(Boolean).map(function(c){return /^(cp-|gp-|pet-)/.test(c)?c:'cp-'+c;}).join(' ');
+        if (k === 'class' || k === 'className') node.className = cn(v);
         else if (k === 'html') node.innerHTML = v;
         else if (k === 'text') node.textContent = v;
         else if (k === 'style' && typeof v === 'object') {
@@ -769,6 +836,7 @@
 
   global.UI = {
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
+    cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,

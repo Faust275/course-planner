@@ -58,23 +58,41 @@
       root.innerHTML = '';
       var pm = Store.pomodoro;
 
-      /* ================= 积分概览 ================= */
+      var isAcademic = Store.isAcademicMode && Store.isAcademicMode();
       var isGacha = pm.mode === 'gacha';
-      root.appendChild(el('div', { class: 'task-summary' }, [
-        isGacha
-          ? V.statCard(pm.jade, '合成玉', 'var(--primary)', 'is-big')
-          : V.statCard(pm.points, '可用积分', 'var(--primary)', 'is-big'),
-        V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
-        isGacha
-          ? V.statCard(Store.gachaStats().owned, '已获得干员', 'var(--amber)')
-          : V.statCard(pm.trees.length, '我的森林（棵）', 'var(--amber)'),
-        V.statCard(pm.earned, '累计获得', 'var(--text-2)')
-      ]));
+
+      /* ================= 概览卡片 ================= */
+      if (isAcademic) {
+        var totalH = Math.round((pm.focusMinutes || 0) / 60 * 10) / 10;
+        root.appendChild(el('div', { class: 'task-summary' }, [
+          V.statCard(totalH, '深度专注（小时）', 'var(--primary)', 'is-big'),
+          V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
+          V.statCard((pm.sessions || []).length, '专注次数', 'var(--amber)')
+        ]));
+      } else {
+        root.appendChild(el('div', { class: 'task-summary' }, [
+          isGacha
+            ? V.statCard(pm.jade, '合成玉', 'var(--primary)', 'is-big')
+            : V.statCard(pm.points, '可用积分', 'var(--primary)', 'is-big'),
+          V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
+          isGacha
+            ? V.statCard(Store.gachaStats().owned, '已获得干员', 'var(--amber)')
+            : V.statCard(pm.trees.length, '我的森林（棵）', 'var(--amber)'),
+          V.statCard(pm.earned, '累计获得', 'var(--text-2)')
+        ]));
+      }
 
       /* ================= 计时器 ================= */
       root.appendChild(this.timerCard());
 
-      /* ================= 专注统计 ================= */
+      /* ================= 🎧 白噪音伴音 ================= */
+      var wnCard = whiteNoiseCard();
+      if (wnCard) root.appendChild(wnCard);
+
+      /* ================= 专注里程碑 / 统计 ================= */
+      if (isAcademic) {
+        root.appendChild(academicMilestoneCard(pm));
+      }
       root.appendChild(statsCard());
 
       /* ================= 规则 ================= */
@@ -237,6 +255,106 @@
    * 组件
    * ========================================================== */
   /** 专注时长统计：今日 / 本周 / 累计 + 近 7 天柱状图 */
+  /* ---------- 🎧 白噪音伴音控制器 ---------- */
+  function whiteNoiseCard() {
+    if (!global.WhiteNoise) return null;
+    var wn = global.WhiteNoise;
+    var st = wn.state();
+
+    var card = el('div', { class: 'card cp-wn-card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    var titleRow = el('div', { class: 'section-title', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } }, [
+      el('span', {}, ['🎧 专注伴音 · 原生白噪音']),
+      el('button', {
+        class: 'btn btn-sm ' + (st.playing ? 'btn-danger' : 'btn-primary'),
+        style: { padding: '4px 12px' },
+        onclick: function () {
+          wn.toggle();
+          view.render();
+        }
+      }, [st.playing ? '⏸️ 停止伴音' : '▶️ 开启伴音'])
+    ]);
+    card.appendChild(titleRow);
+
+    // 声音选择标签
+    var chipRow = el('div', { class: 'cp-wn-chips', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } });
+    Object.keys(wn.SOUNDS).forEach(function (k) {
+      var snd = wn.SOUNDS[k];
+      var active = st.type === k;
+      var chip = el('button', {
+        class: 'btn btn-sm ' + (active ? 'btn-primary' : ''),
+        style: { borderRadius: '16px', padding: '4px 10px', fontSize: '13px' },
+        onclick: function () {
+          wn.setType(k);
+          if (!st.playing) wn.play(k);
+          view.render();
+        }
+      }, [snd.icon + ' ' + snd.name]);
+      chipRow.appendChild(chip);
+    });
+    card.appendChild(chipRow);
+
+    // 音量调节
+    var volRow = el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
+      el('span', { style: { fontSize: '13px', color: 'var(--text-muted)' }, text: '音量' }),
+      el('input', {
+        type: 'range', min: '0', max: '100', value: String(Math.round(st.volume * 100)),
+        style: { flex: 1 },
+        oninput: function () {
+          wn.setVolume(this.value / 100);
+        }
+      }),
+      el('span', { style: { fontSize: '12px', minWidth: '32px', textAlign: 'right', color: 'var(--text-muted)' }, text: Math.round(st.volume * 100) + '%' })
+    ]);
+    card.appendChild(volRow);
+
+    return card;
+  }
+
+  /* ---------- 🎓 纯粹学术模式里程碑 ---------- */
+  function academicMilestoneCard(pm) {
+    var card = el('div', { class: 'card cp-academic-card', style: { padding: '16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title', style: { marginBottom: '12px' } }, ['🎓 深度专注学业里程碑']));
+
+    var totalHours = Math.round((pm.focusMinutes || 0) / 60 * 10) / 10;
+    var MILESTONES = [
+      { h: 10, name: '初涉学海', desc: '累计深度专注达到 10 小时', icon: '🌱' },
+      { h: 30, name: '静水流深', desc: '累计深度专注达到 30 小时', icon: '🌿' },
+      { h: 60, name: '专精覃思', desc: '累计深度专注达到 60 小时', icon: '🌳' },
+      { h: 100, name: '百炼成钢', desc: '累计深度专注达到 100 小时', icon: '🏆' },
+      { h: 200, name: '登堂入室', desc: '累计深度专注达到 200 小时', icon: '👑' }
+    ];
+
+    var list = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
+    MILESTONES.forEach(function (m) {
+      var reached = totalHours >= m.h;
+      var pct = Math.min(100, Math.round(totalHours / m.h * 100));
+      var row = el('div', {
+        class: 'cp-milestone-row',
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: reached ? 'var(--bg-weak)' : 'var(--bg)',
+          border: '1px solid ' + (reached ? 'var(--primary)' : 'var(--border)'),
+          opacity: reached ? 1 : 0.8
+        }
+      }, [
+        el('div', { style: { fontSize: '24px', marginRight: '12px' } }, [m.icon]),
+        el('div', { style: { flex: 1 } }, [
+          el('div', { style: { fontWeight: 'bold', fontSize: '14px' } }, [
+            m.name,
+            reached ? el('span', { class: 'badge', style: { marginLeft: '8px', background: 'var(--green)', color: '#fff' } }, ['已达成']) : null
+          ]),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, [m.desc + ' · 当前 ' + totalHours + '/' + m.h + 'h (' + pct + '%)'])
+        ])
+      ]);
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
   function statsCard() {
     var st = Store.focusStats();
     var days = Store.focusByDay(7);
@@ -441,6 +559,7 @@
   function pause() {
     T.running = false;
     stopTick();
+    if (global.WhiteNoise) WhiteNoise.stop();
     Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();

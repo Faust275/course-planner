@@ -456,6 +456,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cp-grid-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
 
 .cp-tt { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; table-layout: fixed; }
+/* 隐藏周末后只剩 6 列，宽度收一点，避免每列被拉得过宽 */
+.cp-tt.cp-no-weekend { min-width: 640px; }
 .cp-tt th, .cp-tt td { padding: 0; }
 
 .cp-tt-head th {
@@ -3731,15 +3733,13 @@ mark.cp-hit {
 .cp-tb-type i { width: 10px; height: 10px; border-radius: 3px; }
 
 /* ==========================================================
- * 机制主题皮肤：种树（自然有生机） / 抽卡（工厂·硬核）
+ * 机制主题皮肤：种树（纯粹自然意象·解耦） / 抽卡（明日方舟战术终端）
  * 由 <html data-mech="tree|factory"> 切换；强调色可被用户手动选色覆盖
  * ========================================================== */
 
 /* 装饰层：固定铺满、不挡操作，按机制显隐对应元素 */
 .cp-deco { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .cp-deco > * { position: absolute; opacity: 0; transition: opacity .45s var(--ease-out); }
-/* 装饰层位于背景（.cp-app-bg z-index:0）之上、应用内容（.cp-app z-index:1）之下，
-   透明度必须由这里统一控制（原先写在 SVG inline style 里会永久可见，且盖住内容） */
 html[data-mech="tree"] .cp-deco .deco-tree,
 html[data-mech="factory"] .cp-deco .deco-factory { opacity: 1; }
 html[data-mech="tree"] .cp-deco .deco-tree.deco-a { opacity: .5; }
@@ -3748,70 +3748,337 @@ html[data-mech="tree"] .cp-deco .deco-tree.deco-c { opacity: .4; }
 html[data-mech="factory"] .cp-deco .deco-factory.deco-a { opacity: .5; }
 html[data-mech="factory"] .cp-deco .deco-factory.deco-b { opacity: .32; }
 
-/* ---------- 种树：自然有生机 ---------- */
+/* ==========================================================
+ * 一、种树专属：纯粹自然生态主题（完全解耦，不继承任何方舟元素）
+ * ========================================================== */
 html[data-mech="tree"] {
-  --bg: #eef6ec;
-  --surface: #ffffff;
-  --surface-2: #f3f9f1;
-  --line: #e1ece0;
-  --line-strong: #cfe0cc;
-  --radius: 20px;
-  --radius-lg: 26px;
-  --shadow-sm: 0 1px 3px rgba(31, 74, 33, .06);
-  --shadow: 0 6px 20px rgba(31, 74, 33, .08);
-  --shadow-lg: 0 20px 50px rgba(31, 74, 33, .14);
+  --font-display: var(--font);
+  --font-mono: var(--font);
+  --radius: 16px;
+  --radius-lg: 22px;
 }
-html[data-mech="tree"] .card,
-html[data-mech="tree"] .cp-card { border-radius: var(--radius-lg); }
-
-/* ---------- 抽卡：工厂·硬核（对标明日方舟浅色终端）---------- */
-html[data-mech="factory"] {
-  --bg: #eef1f4;
-  --surface: #ffffff;
-  --surface-2: #f6f8fa;
-  --line: #c7ced6;
-  --line-strong: #101418;
-  --radius: 4px;
-  --radius-lg: 6px;
-  --shadow-sm: 2px 2px 0 #101418;
-  --shadow: 4px 4px 0 #101418;
-  --shadow-lg: 6px 6px 0 #101418;
+html[data-mech="tree"] .section-title,
+html[data-mech="tree"] .hero-title,
+html[data-mech="tree"] .cp-brand strong,
+html[data-mech="tree"] .modal-title,
+html[data-mech="tree"] .cp-stat-title,
+html[data-mech="tree"] .cp-card-title,
+html[data-mech="tree"] .cp-exam-title {
+  font-family: var(--font) !important;
+  font-weight: 600;
+  letter-spacing: normal;
 }
-/* 蓝图网点底纹 */
-html[data-mech="factory"] body {
-  background-image: radial-gradient(rgba(16, 20, 24, .10) 1px, transparent 1.4px);
-  background-size: 14px 14px;
-}
-/* 卡片：方舟主菜单板块——磨砂白切角面板 + 顶部强调线 + 网点水印
-   （排除 cp-hero：那是主视觉卡，原本是主题色渐变底 + 白字，覆盖成白底会导致白字隐形） */
-html[data-mech="factory"] .card:not(.cp-hero),
-html[data-mech="factory"] .cp-card:not(.cp-hero) {
-  border: 1px solid rgba(16, 20, 24, .55);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .93), rgba(255, 255, 255, .85));
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  box-shadow: none;
-  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px));
+html[data-mech="tree"] .card:not(.cp-hero),
+html[data-mech="tree"] .cp-card:not(.cp-hero) {
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: relative;
+  overflow: hidden;
 }
-/* 顶部强调短线（对应主菜单板块的橙色横线；hero 保留自身渐变，不加短线下划线） */
-html[data-mech="factory"] .card:not(.cp-hero)::before,
-html[data-mech="factory"] .cp-card:not(.cp-hero)::before {
-  content: ''; position: absolute; left: 0; top: 0; width: 36px; height: 3px;
-  background: var(--primary); pointer-events: none; z-index: 1;
+/* 移除方舟的橙色短条 */
+html[data-mech="tree"] .card:not(.cp-hero)::before,
+html[data-mech="tree"] .cp-card:not(.cp-hero)::before {
+  display: none !important;
 }
-/* 右下淡网点水印（对应板块上的淡色图标水印） */
-html[data-mech="factory"] .card:not(.cp-hero)::after,
-html[data-mech="factory"] .cp-card:not(.cp-hero)::after {
-  content: ''; position: absolute; right: 0; bottom: 0; width: 58px; height: 58px;
-  background-image: radial-gradient(rgba(16, 20, 24, .17) 1px, transparent 1.35px);
-  background-size: 7px 7px;
-  -webkit-mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
-  mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
+/* 柔和年轮微暗纹 */
+html[data-mech="tree"] .card:not(.cp-hero)::after,
+html[data-mech="tree"] .cp-card:not(.cp-hero)::after {
+  content: ''; position: absolute; right: 14px; bottom: 10px; width: 44px; height: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232e7d32' opacity='0.035'%3E%3Cpath d='M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-4a4 4 0 1 1 0-8 4 4 0 0 1 0 8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
   pointer-events: none;
 }
-/* 主按钮前加部署箭头 */
-html[data-mech="factory"] .btn-primary::before { content: '► '; font-family: var(--font-mono, monospace); }
+
+/* 1. 晨雾松林 (Pine Mist - 默认) */
+html[data-mode="light"][data-mech="tree"],
+html[data-mode="light"][data-mech="tree"][data-nature-theme="pine"] {
+  --bg: #f2f6f2;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(243, 248, 243, 0.88);
+  --line: rgba(46, 125, 50, 0.08);
+  --line-strong: rgba(46, 125, 50, 0.16);
+  --shadow: 0 6px 22px rgba(31, 74, 33, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"],
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="pine"] {
+  --bg: #0f1712;
+  --surface: rgba(20, 31, 23, 0.92);
+  --surface-2: rgba(26, 40, 30, 0.88);
+  --line: rgba(129, 199, 132, 0.10);
+  --line-strong: rgba(129, 199, 132, 0.18);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+
+/* 2. 极光苍穹 (Aurora) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="aurora"] {
+  --bg: #edf5f7;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(239, 248, 250, 0.88);
+  --line: rgba(8, 145, 178, 0.09);
+  --line-strong: rgba(8, 145, 178, 0.18);
+  --shadow: 0 6px 22px rgba(8, 145, 178, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="aurora"] {
+  --bg: #0b151e;
+  --surface: rgba(16, 28, 38, 0.92);
+  --surface-2: rgba(22, 38, 51, 0.88);
+  --line: rgba(16, 185, 129, 0.12);
+  --line-strong: rgba(16, 185, 129, 0.22);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* 3. 暮霞熔金 (Sunset) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="sunset"] {
+  --bg: #f9f4f1;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(253, 246, 242, 0.88);
+  --line: rgba(234, 88, 12, 0.08);
+  --line-strong: rgba(234, 88, 12, 0.16);
+  --shadow: 0 6px 22px rgba(234, 88, 12, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="sunset"] {
+  --bg: #1c1417;
+  --surface: rgba(38, 26, 30, 0.92);
+  --surface-2: rgba(50, 34, 39, 0.88);
+  --line: rgba(245, 158, 11, 0.12);
+  --line-strong: rgba(245, 158, 11, 0.22);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* 4. 山岚青黛 (Slate Mountain) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="slate"] {
+  --bg: #f3f4f6;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(246, 247, 249, 0.88);
+  --line: rgba(71, 85, 105, 0.08);
+  --line-strong: rgba(71, 85, 105, 0.16);
+  --shadow: 0 6px 22px rgba(71, 85, 105, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="slate"] {
+  --bg: #10141a;
+  --surface: rgba(24, 30, 40, 0.92);
+  --surface-2: rgba(32, 40, 53, 0.88);
+  --line: rgba(148, 163, 184, 0.10);
+  --line-strong: rgba(148, 163, 184, 0.20);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================
+ * 二、抽卡专属：明日方舟战术终端主题（全域高对比宋体 + 取消所有板块圆角 + 半透明磨砂）
+ * ========================================================== */
+html[data-mech="factory"] {
+  --font-display: "Source Han Serif SC", "Source Han Serif CN", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", "FZNewShuSong-Z10S", serif;
+  --font-mono: "DIN Alternate", "DIN", "Bender", "SF Pro Display", "Roboto Mono", "Consolas", monospace;
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+
+/* 全域文字覆盖：该主题下所有呈现出来的文字均统一使用方舟宋体字系 */
+html[data-mech="factory"],
+html[data-mech="factory"] * {
+  font-family: var(--font-display) !important;
+}
+
+/* 仅特定的机械数字、倒计时与时间戳使用 DIN 等宽工科数字 */
+html[data-mech="factory"] .cp-hero-stats div div:first-child,
+html[data-mech="factory"] .cp-stat-num,
+html[data-mech="factory"] .cp-time,
+html[data-mech="factory"] .cp-countdown,
+html[data-mech="factory"] .cp-pomo-time {
+  font-family: var(--font-mono) !important;
+  font-weight: 700 !important;
+}
+
+/* 取消所有板块与元素的圆角：纯正直角机能模块 */
+html[data-mech="factory"],
+html[data-mech="factory"] * {
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+html[data-mech="factory"] .card,
+html[data-mech="factory"] .cp-card,
+html[data-mech="factory"] .cp-hero,
+html[data-mech="factory"] .btn,
+html[data-mech="factory"] .cp-btn,
+html[data-mech="factory"] .cp-daily-card,
+html[data-mech="factory"] .cp-sum-card,
+html[data-mech="factory"] .cp-modal,
+html[data-mech="factory"] .cp-input,
+html[data-mech="factory"] .input,
+html[data-mech="factory"] .cp-select,
+html[data-mech="factory"] .cp-textarea,
+html[data-mech="factory"] .cp-nav-item,
+html[data-mech="factory"] .cp-tab-item,
+html[data-mech="factory"] .cp-seg-btn,
+html[data-mech="factory"] .cp-tag-chip,
+html[data-mech="factory"] .cp-brand-logo,
+html[data-mech="factory"] .cp-badge,
+html[data-mech="factory"] .cp-batch-dropzone,
+html[data-mech="factory"] .cp-tcell,
+html[data-mech="factory"] .cp-kanban-task,
+html[data-mech="factory"] .cp-empty,
+html[data-mech="factory"] .cp-empty-btn,
+html[data-mech="factory"] button,
+html[data-mech="factory"] select,
+html[data-mech="factory"] input,
+html[data-mech="factory"] textarea {
+  border-radius: 0 !important;
+}
+
+/* 顶部问候卡：罗德岛战术中控终端外观（深色半透明磨砂 + 战术高光边带 + 直角） */
+html[data-mech="factory"] .cp-card.cp-hero {
+  background: linear-gradient(135deg, rgba(20, 24, 32, 0.94) 0%, rgba(32, 39, 50, 0.90) 100%) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-left: 6px solid var(--primary) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22) !important;
+  color: #ffffff !important;
+  border-radius: 0 !important;
+}
+html[data-mech="factory"] .cp-card.cp-hero .cp-hero-title {
+  color: #ffffff !important;
+  font-family: var(--font-display) !important;
+  letter-spacing: .8px;
+}
+html[data-mech="factory"] .cp-card.cp-hero .cp-hero-stats div div:first-child {
+  color: #ffffff !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* 卡片磨砂半透明质感，直角，保留 100% 原始排版 */
+html[data-mech="factory"] .card:not(.cp-hero),
+html[data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mech="factory"] .cp-daily-card,
+html[data-mech="factory"] .cp-sum-card {
+  border-radius: 0 !important;
+  clip-path: none !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* 顶部标志性罗德岛小橙条饰（如截图任务橙条） */
+html[data-mech="factory"] .card:not(.cp-hero)::before,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::before {
+  content: ''; position: absolute; left: 18px; top: 0; width: 36px; height: 3.5px;
+  background: #ff7d00; border-radius: 0;
+  pointer-events: none; z-index: 2;
+}
+
+/* 卡片右下角淡战车暗纹水印 */
+html[data-mech="factory"] .card:not(.cp-hero)::after,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::after {
+  content: ''; position: absolute; right: 14px; bottom: 10px; width: 44px; height: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23101418' opacity='0.045'%3E%3Cpath d='M19 22H5v-2h1V10H5V8l2-4h2v2h2V4h2v2h2V4h2l2 4v2h-1v10h1v2zM8 10v8h8v-8H8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
+
+/* 浅色终端模式：环境光晕底色 + 晶莹剔透半透毛玻璃卡片 */
+html[data-mode="light"][data-mech="factory"] {
+  --bg: #edf1f6;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(246, 248, 252, 0.76);
+  --line: rgba(16, 20, 24, 0.08);
+  --line-strong: rgba(16, 20, 24, 0.16);
+  --text: #181d24;
+  --text-1: #181d24;
+  --text-2: #525a66;
+  --text-3: #8a94a2;
+}
+html[data-mode="light"][data-mech="factory"] body {
+  background-color: #edf1f6;
+  background-image:
+    radial-gradient(at 10% 15%, rgba(0, 153, 216, 0.12) 0px, transparent 40%),
+    radial-gradient(at 90% 85%, rgba(245, 158, 11, 0.10) 0px, transparent 45%),
+    radial-gradient(at 50% 50%, rgba(255, 255, 255, 0.6) 0px, transparent 60%),
+    linear-gradient(rgba(16, 20, 24, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 20, 24, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px, 24px 24px;
+  background-attachment: fixed;
+}
+html[data-mode="light"][data-mech="factory"] .card:not(.cp-hero),
+html[data-mode="light"][data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mode="light"][data-mech="factory"] .cp-daily-card,
+html[data-mode="light"][data-mech="factory"] .cp-sum-card,
+html[data-mode="light"][data-mech="factory"] .cp-sidebar {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), 0 8px 30px rgba(16, 24, 40, 0.06) !important;
+}
+
+/* 深色终端模式：深邃夜间终端环境底 + 碳灰半透磨砂卡片（参考图2） */
+html[data-mode="dark"][data-mech="factory"] {
+  --bg: #111419;
+  --surface: rgba(26, 31, 38, 0.76);
+  --surface-2: rgba(35, 41, 50, 0.76);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.15);
+  --text: #ffffff;
+  --text-1: #ffffff;
+  --text-2: #9ea8b6;
+  --text-3: #6b7787;
+}
+html[data-mode="dark"][data-mech="factory"] body {
+  background-color: #111419;
+  background-image:
+    radial-gradient(at 15% 15%, rgba(0, 162, 216, 0.15) 0px, transparent 45%),
+    radial-gradient(at 85% 75%, rgba(245, 158, 11, 0.10) 0px, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+  background-attachment: fixed;
+}
+html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero),
+html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mode="dark"][data-mech="factory"] .cp-daily-card,
+html[data-mode="dark"][data-mech="factory"] .cp-sum-card,
+html[data-mode="dark"][data-mech="factory"] .cp-sidebar {
+  background: rgba(26, 31, 38, 0.76) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 36px rgba(0, 0, 0, 0.5) !important;
+}
+html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero)::after,
+html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero)::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff' opacity='0.05'%3E%3Cpath d='M19 22H5v-2h1V10H5V8l2-4h2v2h2V4h2v2h2V4h2l2 4v2h-1v10h1v2zM8 10v8h8v-8H8z'/%3E%3C/svg%3E");
+}
+
+/* 肉鸽限定子主题（参考图1 集成战略水墨秘符） */
+html[data-mech="factory"][data-ark-theme="roguelike"] .card:not(.cp-hero)::before,
+html[data-mech="factory"][data-ark-theme="roguelike"] .cp-card:not(.cp-hero)::before {
+  background: linear-gradient(90deg, #d32f2f 0%, #0284c7 100%);
+  width: 44px;
+}
+html[data-mode="dark"][data-mech="factory"][data-ark-theme="roguelike"] {
+  --bg: #161312;
+  --surface: rgba(36, 31, 29, 0.82);
+  --surface-2: rgba(48, 41, 38, 0.82);
+  --line: rgba(211, 47, 47, 0.18);
+  --line-strong: rgba(211, 47, 47, 0.32);
+}
+html[data-mode="dark"][data-mech="factory"][data-ark-theme="roguelike"] body {
+  background-color: #161312;
+  background-image:
+    radial-gradient(at 15% 15%, rgba(211, 47, 47, 0.18) 0px, transparent 45%),
+    radial-gradient(at 85% 75%, rgba(2, 132, 199, 0.14) 0px, transparent 50%),
+    linear-gradient(rgba(211, 47, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(211, 47, 47, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+  background-attachment: fixed;
+}
+html[data-mech="factory"][data-ark-theme="roguelike"] .card:not(.cp-hero)::after,
+html[data-mech="factory"][data-ark-theme="roguelike"] .cp-card:not(.cp-hero)::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23d32f2f' opacity='0.08' d='M19 22H12V4h2v2h2V4h2l2 4v2h-1v10h1v2zM12 10v8h4v-8h-4z'/%3E%3Cpath fill='%230284c7' opacity='0.08' d='M12 22H5v-2h1V10H5V8l2-4h2v2h2v16zM8 10v8h4v-8H8z'/%3E%3C/svg%3E");
+  width: 52px;
+  height: 52px;
+}
 
 /* ============ 林地 / 树种图鉴 / 枯萎（专注即种树） ============ */
 .cp-grove-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
@@ -3897,55 +4164,6 @@ html[data-mode="dark"][data-mech="tree"] {
   --shadow-lg: 0 20px 50px rgba(0, 0, 0, .6);
 }
 
-/* —— 抽卡 · 深色：基建终端（黑砖 + 荧光绿 + 网格 + 扫描线）—— */
-html[data-mode="dark"][data-mech="factory"] {
-  --bg: #0a0c0f;
-  --surface: #14171b;
-  --surface-2: #191d22;
-  --line: #2a2f36;
-  --line-strong: #3a414d;
-  --text: #e8ecf0;
-  --text-1: #e8ecf0;
-  --text-2: #8792a0;
-  --text-3: #6b7585;
-  --shadow-sm: 0 0 0 1px #2a2f36;
-  --shadow: 0 0 0 1px #2a2f36, 0 8px 22px rgba(0, 0, 0, .6);
-  --shadow-lg: 0 0 0 1px #2a2f36, 0 18px 48px rgba(0, 0, 0, .7);
-}
-html[data-mode="dark"][data-mech="factory"] body {
-  background-image:
-    linear-gradient(rgba(184, 230, 83, .045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(184, 230, 83, .045) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, .02) 1px, transparent 1px);
-  background-size: 30px 30px, 30px 30px, 6px 6px;
-}
-html[data-mode="dark"][data-mech="factory"] .cp-deco::after {
-  content: ''; position: absolute; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(184, 230, 83, .35), transparent);
-  animation: cpScan 6s linear infinite;
-}
-/* 深色板块：黑砖切角面板（对齐基建界面的暗色板块） */
-html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero),
-html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero) {
-  border-color: #3a414d;
-  background: linear-gradient(180deg, rgba(30, 34, 40, .94), rgba(22, 26, 31, .9));
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-html[data-mode="dark"][data-mech="factory"] .card::after,
-html[data-mode="dark"][data-mech="factory"] .cp-card::after {
-  background-image: radial-gradient(rgba(184, 230, 83, .14) 1px, transparent 1.35px);
-}
-/* 浅色下扫描线增强：青色高亮带 + 白色高光核，否则白天几乎不可见 */
-html[data-mode="light"][data-mech="factory"] .cp-deco::after {
-  content: ''; position: absolute; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, transparent, rgba(31, 159, 184, .5) 30%,
-              rgba(255, 255, 255, .95) 50%, rgba(31, 159, 184, .5) 70%, transparent);
-  box-shadow: 0 0 10px rgba(31, 159, 184, .45);
-  animation: cpScan 7s linear infinite;
-}
-@keyframes cpScan { 0% { top: -2px; } 100% { top: 100%; } }
-
 /* —— 萤火虫（仅深色森林）—— */
 .deco-fireflies { position: absolute; inset: 0; }
 .deco-fireflies span {
@@ -4027,6 +4245,51 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cp-gc-prev-title { font-size: 11px; color: var(--text-3); }
 .cp-gc-prev-row { display: flex; gap: 8px; font-size: 11.5px; color: var(--text-2); }
 .cp-gc-prev-day { color: var(--text-3); min-width: 34px; }
+
+/* ---- 自然语言快速添加条与智能解析预览 ---- */
+.cp-quick-task-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 10px; margin-bottom: 12px;
+  background: var(--surface); border: 1.5px dashed var(--line);
+  border-radius: 10px; transition: all .2s;
+}
+.cp-quick-task-bar:focus-within {
+  border-color: var(--primary);
+  border-style: solid;
+  box-shadow: 0 0 0 3px var(--primary-weak);
+}
+.cp-quick-task-bar svg { flex: 0 0 16px; color: var(--text-3); }
+.cp-quick-task-bar input {
+  flex: 1; height: 34px; border: none; outline: none;
+  background: transparent; font-size: 13px; color: var(--text);
+}
+.cp-nlp-preview {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 10px; margin-top: 6px; background: var(--surface-2);
+  border-radius: 8px; border: 1px solid var(--line); font-size: 11.5px;
+}
+
+/* ---- 优化图片识别课表网格与高亮 ---- */
+.cp-ocr-cell.cp-has-content {
+  background: var(--primary-weak, rgba(79, 70, 229, .08));
+  font-weight: 550;
+  border-radius: 4px;
+}
+.cp-ocr-dup-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; background: var(--amber-weak, #fef3c7);
+  color: var(--amber, #b45309); margin-left: 6px;
+}
+.cp-ocr-search-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.cp-ocr-search-bar input {
+  flex: 1; height: 32px; border: none; outline: none;
+  background: transparent; font-size: 12.5px; color: var(--text);
+}
 
 </style>
 <script>
@@ -5435,12 +5698,15 @@ window.AK_OPS = [
       // —— 日程 / 象限 ——
       settings: {
         trackMeal: true, trackSleep: true, statsOn: true,   // statsOn：是否开启「统计」功能（待办的统计分页 + 今日卡片）
+        showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         theme: 'indigo', customColor: '#4f46e5',
         themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
         themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
         themeMode: 'auto',        // 明暗：auto（跟随系统）/ light / dark
+        natureTheme: 'pine',      // 自然主题预设：pine(晨雾松林) | aurora(极光苍穹) | sunset(暮霞熔金) | slate(山岚青黛)
+        arkTheme: 'terminal',     // 明日方舟预设：terminal(经典终端) | roguelike(集成战略水墨)
         quiz: { right: 0, wrong: 0 },
         nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
@@ -5469,6 +5735,15 @@ window.AK_OPS = [
         asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' },
         ocr: { prefer: 'auto', provider: '', apiKey: '', endpoint: '', model: '' },
         background: { dataUrl: '', mask: 0.5 },
+        // 生理节律与精力高峰偏好（详见「设置 → 精力高峰」）
+        energy: {
+          custom: false,
+          peaks: [
+            { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+            { start: '15:00', end: '17:30', name: '午后高效期' },
+            { start: '19:30', end: '21:30', name: '晚间静心期' }
+          ]
+        },
         // 子任务行为（详见「设置 → 子任务」）。前三项会互相影响，设置页有互斥提示
         subtask: {
           autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
@@ -5507,7 +5782,7 @@ window.AK_OPS = [
         jade: 0,            // 合成玉（抽卡）
         mode: 'forest',     // 当前奖励机制：forest | gacha
         gacha: { pity6: 0, total: 0, ops: [], log: [], dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0,
-                 limited: { target: '', count: 0 } },
+                 limited: { target: '', count: 0 }, wishlist: [] },
         earned: 0,          // 累计获得
         pointLog: [],       // 积分流水：[{date, n, src}]，src ∈ focus/task/plan/goal/ach/sleep/meal/activity
         focusMinutes: 0,    // 累计专注分钟
@@ -5527,6 +5802,7 @@ window.AK_OPS = [
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
+      sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
       shop: {                   // 商城：月卡 / 潜能兑换 / 限定专区
@@ -5560,6 +5836,104 @@ window.AK_OPS = [
       fishLog: Array.isArray(s.fishLog) ? s.fishLog : [],
       log: Array.isArray(s.log) ? s.log : []
     };
+  }
+
+  /**
+   * 强 Schema 校验与迁移器 (Declarative Schema Validator & Sanitizer)
+   * 对外部导入、旧备份、本地存储读入的数据进行深层结构检验与默认值修复，
+   * 杜绝因缺失属性导致的空指针崩溃（TypeError: reading 'x' of undefined）。
+   * @param {Object} raw - 输入的数据对象
+   * @returns {Object} 符合规范的完整 state 对象
+   */
+  function validateSchema(raw) {
+    var def = defaultState();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return def;
+    }
+
+    var out = Object.assign({}, def, raw);
+
+    // 1. 数组类型安全收敛
+    var arrayKeys = [
+      'courses', 'tasks', 'plans', 'goals', 'ledger', 'notes',
+      'diaries', 'events', 'activities', 'meals', 'sleeps',
+      'courseExceptions', 'periods', 'semesters'
+    ];
+    arrayKeys.forEach(function (k) {
+      if (!Array.isArray(out[k])) out[k] = Array.isArray(def[k]) ? def[k].slice() : [];
+    });
+
+    // 2. 学期与节次校验
+    if (!out.semesters.length) out.semesters = def.semesters.slice();
+    if (!out.periods.length) out.periods = def.periods.slice();
+    if (!out.currentSemesterId || !out.semesters.some(function (s) { return s.id === out.currentSemesterId; })) {
+      out.currentSemesterId = out.semesters[0].id;
+    }
+
+    // 3. Settings 深度校验与收敛
+    var s = (out.settings && typeof out.settings === 'object' && !Array.isArray(out.settings)) ? out.settings : {};
+    out.settings = Object.assign({}, def.settings, s);
+    out.settings.subtask = subOpts(out.settings);
+    out.settings.statsWidgets = Object.assign({}, def.settings.statsWidgets, s.statsWidgets || {});
+    out.settings.health = Object.assign({}, def.settings.health, s.health || {});
+    out.settings.ui = Object.assign({}, def.settings.ui, s.ui || {});
+    out.settings.goals = Object.assign({}, def.settings.goals, s.goals || {});
+    out.settings.diary = Object.assign({}, def.settings.diary, s.diary || {});
+    out.settings.diet = Object.assign({}, def.settings.diet, s.diet || {});
+    out.settings.gpa = Object.assign({}, def.settings.gpa, s.gpa || {});
+    out.settings.tagMeta = (s.tagMeta && typeof s.tagMeta === 'object') ? s.tagMeta : {};
+    out.settings.nav = Object.assign({}, def.settings.nav, s.nav || {});
+    if (!Array.isArray(out.settings.navOrder)) out.settings.navOrder = [];
+    if (['auto', 'light', 'dark'].indexOf(out.settings.themeMode) < 0) out.settings.themeMode = 'auto';
+    if (typeof out.settings.themeSkin !== 'boolean') out.settings.themeSkin = true;
+    if (typeof out.settings.themeSkinAuto !== 'boolean') out.settings.themeSkinAuto = true;
+    if (!out.settings.natureTheme) out.settings.natureTheme = 'pine';
+    if (!out.settings.arkTheme) out.settings.arkTheme = 'terminal';
+    if (typeof out.settings.showWeekend !== 'boolean') out.settings.showWeekend = true;
+    if (typeof out.settings.statsOn !== 'boolean') out.settings.statsOn = true;
+
+    // 4. Pomodoro 深度校验
+    var pm = (out.pomodoro && typeof out.pomodoro === 'object' && !Array.isArray(out.pomodoro)) ? out.pomodoro : {};
+    out.pomodoro = Object.assign({}, def.pomodoro, pm);
+    out.pomodoro.points = Math.max(0, Number(pm.points) || 0);
+    out.pomodoro.jade = Math.max(0, Number(pm.jade) || 0);
+    out.pomodoro.mode = (pm.mode === 'gacha' && out.settings.devArknights) ? 'gacha' : 'forest';
+    out.pomodoro.trees = Array.isArray(pm.trees) ? pm.trees : [];
+    out.pomodoro.pointLog = Array.isArray(pm.pointLog) ? pm.pointLog : [];
+    out.pomodoro.sessions = Array.isArray(pm.sessions) ? pm.sessions : [];
+    out.pomodoro.timer = Object.assign({}, def.pomodoro.timer, pm.timer || {});
+
+    // Gacha 状态校验
+    var gc = (pm.gacha && typeof pm.gacha === 'object') ? pm.gacha : {};
+    out.pomodoro.gacha = Object.assign({}, def.pomodoro.gacha, gc);
+    out.pomodoro.gacha.ops = Array.isArray(gc.ops) ? gc.ops : [];
+    out.pomodoro.gacha.log = Array.isArray(gc.log) ? gc.log : [];
+    out.pomodoro.gacha.pools = (gc.pools && typeof gc.pools === 'object') ? gc.pools : {};
+    ['standard', 'classic'].forEach(function (pid) {
+      var p = out.pomodoro.gacha.pools[pid];
+      if (!p || typeof p !== 'object') p = out.pomodoro.gacha.pools[pid] = {};
+      p.pity6 = Math.max(0, Number(p.pity6) || 0);
+      p.total = Math.max(0, Number(p.total) || 0);
+      p.spark = Math.max(0, Number(p.spark) || 0);
+      p.guaranteed = !!p.guaranteed;
+    });
+    out.pomodoro.gacha.limited = Object.assign({}, def.pomodoro.gacha.limited, gc.limited || {});
+
+    // 5. Shop 深度校验（核心防崩溃区）
+    out.shop = mergeShop(def.shop, out.shop);
+
+    // 6. 成就与使用统计
+    var ach = (out.achievements && typeof out.achievements === 'object') ? out.achievements : {};
+    out.achievements = { done: (ach.done && typeof ach.done === 'object') ? ach.done : {} };
+    out.usage = (out.usage && typeof out.usage === 'object') ? out.usage : {};
+    out.taskSeq = (out.taskSeq && typeof out.taskSeq === 'object') ? out.taskSeq : {};
+
+    // 7. 睡眠临时会话校验
+    if (out.sleepSession && (!out.sleepSession.date || !out.sleepSession.start || typeof out.sleepSession.at !== 'number')) {
+      out.sleepSession = null;
+    }
+
+    return out;
   }
 
   /** 时间工具：HH:MM <-> 分钟 */
@@ -6404,24 +6778,175 @@ window.AK_OPS = [
   /**
    * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
    * - repeat.type: none | daily | weekly | monthly | yearly
-   * - 基准日若已过期，从今天起算，避免一直在远古日期往后推
-   * - monthly/yearly 的 day 超出目标月时夹到当月最后一天（闰年 2/29 -> 2/28）
+   * - **始终以原定日期为锚点往前推进**，跳过已经错过的期：
+   *   10/23（周五）那期拖到 10/27 才完成，下一期仍是 10/30，而不是 11/3。
+   *   这样「每周五」不会因为晚完成漂成「每周一」。
+   * - 只推进到「第一个晚于今天」的期，不会一次性补出多条欠账
+   * - monthly/yearly 每次加法都从锚点算起，月末夹到当月最后一天（1/31 -> 2/28 -> 3/31）
+   * @returns YYYY-MM-DD 字符串；无下一期返回 null
+   */
+  /** getDay() 编号(0=周日..6=周六) -> 中文星期（周一..周日） */
+  function wdCN(w) {
+    var idx = ((w % 7) + 7) % 7;
+    return DAY_NAMES[(idx + 6) % 7];
+  }
+
+  /** 星期数组按「周一..周日」排序，便于人话展示 */
+  function orderWeekdays(arr) {
+    var order = [1, 2, 3, 4, 5, 6, 0];
+    return order.filter(function (w) { return arr.indexOf(w) !== -1; });
+  }
+
+  /**
+   * 取某年某月的第 pos 个星期 wd（pos>0：第 1..4 个；pos=-1：最后一个）。
+   * 该月不存在该位置的星期（如某月只有 4 个周一却要第 5 个）返回 null。
+   */
+  function nthWeekdayOfMonth(year, monthIdx, pos, wd) {
+    if (wd == null) return null;
+    var first = new Date(year, monthIdx, 1);
+    var firstDow = first.getDay();
+    var diff = (((wd % 7) + 7) % 7) - firstDow;
+    if (diff < 0) diff += 7;
+    var firstMatch = new Date(year, monthIdx, 1 + diff);
+    if (pos > 0) {
+      var d = DateUtil.addDays(firstMatch, (pos - 1) * 7);
+      if (d.getMonth() !== monthIdx) return null;     // 越月说明该月没有第 pos 个（如第 5 个周一）
+      return d;
+    }
+    // 最后一个：先推 4 周，再回退到仍在当月内的那个
+    var last = DateUtil.addDays(firstMatch, 28);
+    while (last.getMonth() !== monthIdx) last = DateUtil.addDays(last, -7);
+    return last;
+  }
+
+  /** 周重复·多选星期：每周/每 N 周的指定星期各出现一次，返回晚于 today 的第一天 */
+  function nextWeeklyMulti(anchor, weekdays, iv, today) {
+    var origin = DateUtil.weekStart(anchor);   // 锚点所在周一，作为 N 周块的起点
+    var blockLen = 7 * iv;
+    var best = null;
+    weekdays.forEach(function (w) {
+      var off = (((w % 7) + 6) % 7);           // 周一=0 … 周日=6（相对 origin 的偏移）
+      var firstInBlock = DateUtil.addDays(origin, off);
+      var delta = DateUtil.diffDays(firstInBlock, today); // >0 表示 firstInBlock 晚于 today
+      var k = delta >= 0 ? 0 : (Math.floor(-delta / blockLen) + 1);
+      var cand = DateUtil.addDays(firstInBlock, k * blockLen);
+      while (DateUtil.diffDays(cand, today) <= 0) cand = DateUtil.addDays(cand, blockLen);
+      if (best === null || DateUtil.diffDays(cand, best) < 0) best = cand;
+    });
+    return best ? DateUtil.toStr(best) : null;
+  }
+
+  /**
+   * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
+   * - repeat.type: none | daily | weekly | monthly | yearly
+   * - **始终以原定日期为锚点往前推进**，跳过已经错过的期：
+   *   10/23（周五）那期拖到 10/27 才完成，下一期仍是 10/30，而不是 11/3。
+   *   这样「每周五」不会因为晚完成漂成「每周一」。
+   * - 只推进到「第一个晚于今天」的期，不会一次性补出多条欠账
+   * - monthly/yearly 每次加法都从锚点算起，月末夹到当月最后一天（1/31 -> 2/28 -> 3/31）
+   * - weekly.weekdays（多选星期）/ monthly.monthRule('pos'|'lastday') 为第三档新增的自定义周期
    * @returns YYYY-MM-DD 字符串；无下一期返回 null
    */
   function nextDueDate(dueDateStr, repeat, todayStr) {
     if (!repeat || repeat.type === 'none') return null;
+    var anchor = DateUtil.parse(dueDateStr);
+    if (!anchor) return null;
     var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
-    var ref = DateUtil.parse(dueDateStr);
-    if (!ref) return null;
-    if (DateUtil.diffDays(ref, today) < 0) ref = today;       // 已过期的基准，从今天算
+    if (!today) return null;
     var iv = Math.max(1, (repeat.interval | 0) || 1);
-    var nxt;
-    if (repeat.type === 'daily') nxt = DateUtil.addDays(ref, iv);
-    else if (repeat.type === 'weekly') nxt = DateUtil.addDays(ref, 7 * iv);
-    else if (repeat.type === 'monthly') nxt = DateUtil.addMonths(ref, iv);
-    else if (repeat.type === 'yearly') nxt = DateUtil.addYears(ref, iv);
-    else return null;
-    return DateUtil.toStr(nxt);
+
+    // 日：每 iv 天一个，等差 O(1)
+    if (repeat.type === 'daily') {
+      var k = Math.floor(DateUtil.diffDays(today, anchor) / iv) + 1;
+      if (k < 1) k = 1;
+      return DateUtil.toStr(DateUtil.addDays(anchor, k * iv));
+    }
+
+    // 周：多选星期走专属逻辑；否则沿用「每 iv 周」的等差（周几由锚点日期决定）
+    if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        return nextWeeklyMulti(anchor, repeat.weekdays, iv, today);
+      }
+      var wk = Math.floor(DateUtil.diffDays(today, anchor) / (7 * iv)) + 1;
+      if (wk < 1) wk = 1;
+      return DateUtil.toStr(DateUtil.addDays(anchor, wk * 7 * iv));
+    }
+
+    if (repeat.type === 'monthly') {
+      // 月末最后一天（j=0 即锚点当月：若晚于今天就直接用它，不跳过当月）
+      if (repeat.monthRule === 'lastday') {
+        for (var i = 0; i <= 3000; i++) {
+          var lm = DateUtil.addMonths(anchor, iv * i);
+          var last = new Date(lm.getFullYear(), lm.getMonth() + 1, 0);
+          if (DateUtil.diffDays(last, today) > 0) return DateUtil.toStr(last);
+        }
+        return null;
+      }
+      // 第 pos 个星期 wd（pos=-1 = 最后一个）
+      if (repeat.monthRule === 'pos') {
+        for (var j = 0; j <= 3000; j++) {
+          var pm = DateUtil.addMonths(anchor, iv * j);
+          var pd = nthWeekdayOfMonth(pm.getFullYear(), pm.getMonth(), repeat.pos, repeat.wd);
+          if (pd && DateUtil.diffDays(pd, today) > 0) return DateUtil.toStr(pd);
+        }
+        return null;
+      }
+      // 默认：每月固定 day 号（沿用锚点日期的日，月末/闰年夹紧）
+      for (var m = 0; m <= 3000; m++) {
+        var cand = DateUtil.addMonths(anchor, iv * m);
+        if (DateUtil.diffDays(cand, today) > 0) return DateUtil.toStr(cand);
+      }
+      return null;
+    }
+
+    // 年：每 iv 年（闰年 2/29 夹到 2/28）
+    if (repeat.type === 'yearly') {
+      for (var y = 1; y <= 3000; y++) {
+        var cy = DateUtil.addYears(anchor, iv * y);
+        if (DateUtil.diffDays(cy, today) > 0) return DateUtil.toStr(cy);
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * 由「开始日期 + repeat 规则」算出第一期的实际日期（>= 开始日期）。
+   * 用于新建/编辑时把截止日期对齐到规则真正生效的那一天；
+   * 旧规则（无 weekdays/monthRule）原样返回开始日期。
+   * @returns YYYY-MM-DD 字符串
+   */
+  function firstOccurrence(startStr, repeat) {
+    var start = DateUtil.parse(startStr);
+    if (!start || !repeat || repeat.type === 'none') return startStr;
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+
+    if (repeat.type === 'weekly' && repeat.weekdays && repeat.weekdays.length) {
+      for (var i = 0; i <= 400; i++) {
+        var d = DateUtil.addDays(start, i);
+        if (repeat.weekdays.indexOf(d.getDay()) !== -1) return DateUtil.toStr(d);
+      }
+      return startStr;
+    }
+    if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') {
+        for (var a = 0; a <= 400; a++) {
+          var lm = DateUtil.addMonths(start, iv * a);
+          var last = new Date(lm.getFullYear(), lm.getMonth() + 1, 0);
+          if (DateUtil.diffDays(last, start) >= 0) return DateUtil.toStr(last);
+        }
+        return startStr;
+      }
+      if (repeat.monthRule === 'pos') {
+        for (var b = 0; b <= 400; b++) {
+          var pm = DateUtil.addMonths(start, iv * b);
+          var pd = nthWeekdayOfMonth(pm.getFullYear(), pm.getMonth(), repeat.pos, repeat.wd);
+          if (pd && DateUtil.diffDays(pd, start) >= 0) return DateUtil.toStr(pd);
+        }
+        return startStr;
+      }
+    }
+    return startStr;
   }
 
   /** until 是含当天的最末一次；超过 until 即到期 */
@@ -6437,7 +6962,119 @@ window.AK_OPS = [
     if (!types[raw.type]) return { type: 'none' };
     var r = { type: raw.type, interval: Math.max(1, (raw.interval | 0) || 1) };
     if (raw.until && /^\d{4}-\d{2}-\d{2}$/.test(raw.until)) r.until = raw.until;
+    if (raw.type === 'weekly') {
+      // 多选星期：去重、取合法 0..6、排序；为空则回退「按首期日期的星期」（旧行为）
+      if (raw.weekdays && Array.isArray(raw.weekdays) && raw.weekdays.length) {
+        var seen = {}, wds = [];
+        raw.weekdays.forEach(function (x) {
+          var w = (((x % 7) + 7) % 7);
+          if (!seen[w]) { seen[w] = 1; wds.push(w); }
+        });
+        if (wds.length) r.weekdays = wds.sort(function (a, b) { return a - b; });
+      }
+    }
+    if (raw.type === 'monthly') {
+      if (raw.monthRule === 'pos' && raw.wd != null) {
+        r.monthRule = 'pos';
+        r.wd = (((raw.wd % 7) + 7) % 7);
+        r.pos = (raw.pos === -1) ? -1 : Math.max(1, Math.min(4, (raw.pos | 0) || 1));
+      } else if (raw.monthRule === 'lastday') {
+        r.monthRule = 'lastday';
+      }
+    }
     return r;
+  }
+
+  /**
+   * 重复规则的人话摘要（纯展示，不参与计算）。
+   * 例：每周五一次，从 10 月 23 日（周五）开始，没有结束日期。
+   * @param {object} repeat { type, interval, until }
+   * @param {string} dueDate 第一期的日期 YYYY-MM-DD
+   */
+  function repeatSummary(repeat, dueDate) {
+    if (!repeat || !repeat.type || repeat.type === 'none') return '';
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var d = DateUtil.parse(dueDate);
+    var rule;
+    if (repeat.type === 'daily') {
+      rule = iv > 1 ? '每 ' + iv + ' 天一次' : '每天一次';
+    } else if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        if (repeat.weekdays.length === 1) {
+          // 单星期：沿用简洁写法（每周四一次），与旧「每周」体验一致
+          var single = wdCN(repeat.weekdays[0]).slice(1);
+          rule = (iv > 1 ? '每 ' + iv + ' 周的' : '每周') + single + '一次';
+        } else {
+          var wds = orderWeekdays(repeat.weekdays).map(wdCN);
+          rule = (iv > 1 ? '每 ' + iv + ' 周的' : '每周') + wds.join('、') + '一次';
+        }
+      } else {
+        var wd = d ? DateUtil.weekdayCN(d) : '';
+        rule = iv > 1
+          ? '每 ' + iv + ' 周的' + wd + '一次'
+          : '每周' + (wd ? wd.slice(1) : '') + '一次';   // 周五 -> 每周五
+      }
+    } else if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') {
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') + '最后一天一次';
+      } else if (repeat.monthRule === 'pos') {
+        var posTxt = repeat.pos === -1 ? '最后一个' : '第 ' + repeat.pos + ' 个';
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') + posTxt + wdCN(repeat.wd) + '一次';
+      } else {
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') +
+               (d ? ' ' + d.getDate() + ' 日' : '') + '一次';
+      }
+    } else if (repeat.type === 'yearly') {
+      rule = (iv > 1 ? '每 ' + iv + ' 年的' : '每年') +
+             (d ? ' ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日' : '') + '一次';
+    } else {
+      return '';
+    }
+    if (!d) return rule + '；还没选日期，完成后不会生成下一期。';
+
+    var out = rule + '，从 ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() +
+              ' 日（' + DateUtil.weekdayCN(d) + '）开始';
+    if (repeat.until) {
+      var u = DateUtil.parse(repeat.until);
+      out += u ? '，到 ' + (u.getMonth() + 1) + ' 月 ' + u.getDate() + ' 日为止' : '';
+    } else {
+      out += '，没有结束日期';
+    }
+    return out + '。';
+  }
+
+  /** 列表 chip 用的极简规则：每天 / 每周五 / 每 2 周·周一·周三·周五 / 每月第2周三 / 每月末 */
+  function repeatShort(repeat, dueDate) {
+    if (!repeat || !repeat.type || repeat.type === 'none') return '';
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var d = DateUtil.parse(dueDate);
+    if (repeat.type === 'daily') return iv > 1 ? '每 ' + iv + ' 天' : '每天';
+    if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        if (repeat.weekdays.length === 1) {
+          var s = wdCN(repeat.weekdays[0]).slice(1);
+          return (iv > 1 ? '每' + iv + '周·' : '每周') + s;
+        }
+        var ws = orderWeekdays(repeat.weekdays).map(wdCN).join('·');
+        return (iv > 1 ? '每' + iv + '周·' : '') + ws;
+      }
+      var wd2 = d ? DateUtil.weekdayCN(d) : '';
+      return iv > 1 ? '每 ' + iv + ' 周的' + wd2 : '每周' + (wd2 ? wd2.slice(1) : '');
+    }
+    if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') return '每月末';
+      if (repeat.monthRule === 'pos') {
+        if (repeat.pos === -1) return '每月末' + wdCN(repeat.wd);
+        return '每月第' + repeat.pos + wdCN(repeat.wd);
+      }
+      return (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') +
+             (d ? ' ' + d.getDate() + ' 日' : '');
+    }
+    if (repeat.type === 'yearly') {
+      return (iv > 1 ? '每 ' + iv + ' 年的' : '每年') +
+             (d ? ' ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日' : '');
+    }
+    return '';
   }
 
   /** 由当前实例生成下一个实例（保留 repeat 使链条继续）；无下一期返回 null */
@@ -6954,6 +7591,7 @@ window.AK_OPS = [
     get activities() { return state.activities; },
     get meals() { return state.meals; },
     get sleeps() { return state.sleeps; },
+    get sleepSession() { return state.sleepSession || null; },
 
     init: async function () {
       // 检测 localStorage 是否可用（iframe / 隐私模式可能被禁用）
@@ -6985,6 +7623,7 @@ window.AK_OPS = [
 
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
+      state = validateSchema(state);
       var ds = defaultState();
       if (!state) state = ds;
       if (!state.settings) state.settings = ds.settings;
@@ -6993,6 +7632,7 @@ window.AK_OPS = [
       }
       if (state.settings.trackMeal == null) state.settings.trackMeal = true;
       if (state.settings.trackSleep == null) state.settings.trackSleep = true;
+      if (state.settings.showWeekend == null) state.settings.showWeekend = true;
       if (state.settings.statsOn == null) state.settings.statsOn = true;
       state.settings.statsWidgets = Object.assign(
         { time: true, curve: true, sources: true, spend: true, course: true }, state.settings.statsWidgets || {});
@@ -7005,6 +7645,8 @@ window.AK_OPS = [
       if (typeof state.settings.themeSkin !== 'boolean') state.settings.themeSkin = true;
       if (typeof state.settings.themeSkinAuto !== 'boolean') state.settings.themeSkinAuto = true;
       if (['auto', 'light', 'dark'].indexOf(state.settings.themeMode) < 0) state.settings.themeMode = 'auto';
+      if (!state.settings.natureTheme) state.settings.natureTheme = 'pine';
+      if (!state.settings.arkTheme) state.settings.arkTheme = 'terminal';
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
       if (typeof state.settings.devArknights !== 'boolean') state.settings.devArknights = false;
       if (!state.settings.devArknights && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
@@ -7104,6 +7746,11 @@ window.AK_OPS = [
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
+      // 进行中的睡眠计时：字段不全就丢弃，避免半截状态一直转下去
+      if (state.sleepSession && (!state.sleepSession.date || !state.sleepSession.start ||
+          typeof state.sleepSession.at !== 'number')) {
+        state.sleepSession = null;
+      }
       if (!state.courses) state.courses = [];
       if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
@@ -7560,7 +8207,17 @@ window.AK_OPS = [
         startWeek: data.startWeek == null ? 1 : data.startWeek,
         endWeek: data.endWeek == null ? this.currentSemester().weeks : data.endWeek,
         weekType: data.weekType || 'all',
-        note: (data.note || '').trim()
+        note: (data.note || '').trim(),
+        rotations: Array.isArray(data.rotations) ? data.rotations.filter(function (r) {
+          return r && (r.location || r.topic);
+        }).map(function (r) {
+          return {
+            startWeek: parseInt(r.startWeek, 10) || 1,
+            endWeek: parseInt(r.endWeek, 10) || 16,
+            location: (r.location || '').trim(),
+            topic: (r.topic || '').trim()
+          };
+        }) : []
       };
       state.courses.push(c);
       this.bumpUsage('course');
@@ -7600,6 +8257,18 @@ window.AK_OPS = [
         c.startTime = m0.startTime;
         c.endTime = m0.endTime;
         if (data.location == null && m0.location) c.location = m0.location;
+      }
+      if (Array.isArray(data.rotations)) {
+        c.rotations = data.rotations.filter(function (r) {
+          return r && (r.location || r.topic);
+        }).map(function (r) {
+          return {
+            startWeek: parseInt(r.startWeek, 10) || 1,
+            endWeek: parseInt(r.endWeek, 10) || 16,
+            location: (r.location || '').trim(),
+            topic: (r.topic || '').trim()
+          };
+        });
       }
       this.emit();
       return c;
@@ -8000,8 +8669,34 @@ window.AK_OPS = [
       }];
     },
 
-    /** 把一门课按 slots 展开为「伪记录」：courseId 指向父课程，其余字段取各时段 */
-    expandCourse: function (c) {
+        /** 根据周次获取课程的多地点轮转教室 */
+    courseLocationOnWeek: function (c, week) {
+      if (!c) return '';
+      if (Array.isArray(c.rotations) && c.rotations.length && typeof week === 'number') {
+        for (var i = 0; i < c.rotations.length; i++) {
+          var r = c.rotations[i];
+          if (week >= r.startWeek && week <= r.endWeek) {
+            return r.location || c.location || '';
+          }
+        }
+      }
+      return c.location || '';
+    },
+
+    /** 根据周次获取实验课程课题名 */
+    courseTopicOnWeek: function (c, week) {
+      if (!c || !Array.isArray(c.rotations) || !c.rotations.length || typeof week !== 'number') return '';
+      for (var i = 0; i < c.rotations.length; i++) {
+        var r = c.rotations[i];
+        if (week >= r.startWeek && week <= r.endWeek) {
+          return r.topic || '';
+        }
+      }
+      return '';
+    },
+    /** 把一门课按 slots 展开为「伪记录」：courseId 指向父课程，其余字段取各时段（可按周次动态计算轮转教室） */
+    expandCourse: function (c, week) {
+      var self = this;
       if (!c) return [];
       return this.courseSlots(c).map(function (s) {
         var p = {};
@@ -8014,6 +8709,12 @@ window.AK_OPS = [
         p.startTime = s.timeMode === 'custom' ? (s.startTime || '') : '';
         p.endTime = s.timeMode === 'custom' ? (s.endTime || '') : '';
         p.location = s.location || c.location || '';
+        if (typeof week === 'number') {
+          var rotLoc = self.courseLocationOnWeek(c, week);
+          if (rotLoc) p.location = rotLoc;
+          var topic = self.courseTopicOnWeek(c, week);
+          if (topic) p.topic = topic;
+        }
         return p;
       });
     },
@@ -8050,6 +8751,16 @@ window.AK_OPS = [
 
 
     /* ===== 作业 / 待办 CRUD ===== */
+    /** 重复规则的人话摘要（弹窗提示、chip 的 title 共用） */
+    repeatSummary: function (repeat, dueDate) { return repeatSummary(repeat, dueDate); },
+    /** 由「开始日期 + 规则」算出第一期的实际日期（对齐到规则真正生效的那天） */
+    firstOccurrence: function (startStr, repeat) { return firstOccurrence(startStr, repeat); },
+    /** 规范化 repeat 字段（白名单 + 越界 clamp），供 UI 复用 */
+    sanitizeRepeat: function (raw) { return sanitizeRepeat(raw); },
+
+    /** 重复规则的极简标签（列表 chip 用） */
+    repeatShort: function (repeat, dueDate) { return repeatShort(repeat, dueDate); },
+
     addTask: function (data) {
       var t = {
         id: uid('t'),
@@ -8064,6 +8775,8 @@ window.AK_OPS = [
         note: (data.note || '').trim(),
         repeat: sanitizeRepeat(data.repeat),
         parentId: this.validParentId(data.parentId),
+        energy: data.energy || 'medium',
+        examStage: data.examStage || '',
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
@@ -8097,6 +8810,10 @@ window.AK_OPS = [
       // 父子关系单独校验：不允许挂到子任务下面（只做一层）
       if (Object.prototype.hasOwnProperty.call(data, 'parentId')) {
         t.parentId = this.validParentId(data.parentId, id);
+      }
+      // 重复规则单独规范化，避免脏数据（weekdays/pos 越界、多余字段）
+      if (Object.prototype.hasOwnProperty.call(data, 'repeat')) {
+        t.repeat = sanitizeRepeat(t.repeat);
       }
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
@@ -8743,6 +9460,55 @@ window.AK_OPS = [
       return sleepByNight(state.sleeps, dateStr, next);
     },
 
+    /* ===== 睡眠计时：点一下开始，再点一下结束 ===== */
+    /**
+     * 开始一次睡眠计时，以「现在」为入睡时刻，记录挂在入睡那天。
+     * 已经在计时时重复点击不会重置，避免手抖把时长清零。
+     */
+    startSleep: function () {
+      if (state.sleepSession) return state.sleepSession;
+      var now = new Date();
+      state.sleepSession = {
+        date: DateUtil.toStr(now),
+        start: DateUtil.pad(now.getHours()) + ':' + DateUtil.pad(now.getMinutes()),
+        at: now.getTime()
+      };
+      this.emit();
+      return state.sleepSession;
+    },
+
+    /**
+     * 结束睡眠计时并写入一条睡眠记录（结束时刻为「现在」）。
+     * @returns {{minutes:number, record:object|null, tooShort?:boolean, tooLong?:boolean}|null}
+     */
+    endSleep: function (data) {
+      var s = state.sleepSession;
+      if (!s) return null;
+      var now = new Date();
+      var mins = Math.round((now.getTime() - s.at) / 60000);
+      state.sleepSession = null;
+
+      if (mins < 1) { this.emit(); return { minutes: mins, record: null, tooShort: true }; }
+      // 超过 24 小时基本是忘了点结束。时钟时间差会绕回同一天，硬记会得到错误时长
+      if (mins >= 1440) { this.emit(); return { minutes: mins, record: null, tooLong: true }; }
+
+      var r = this.addSleep({
+        date: s.date,
+        start: s.start,
+        end: DateUtil.pad(now.getHours()) + ':' + DateUtil.pad(now.getMinutes()),
+        quality: (data && data.quality) || 'normal',
+        note: (data && data.note) || ''
+      });
+      return { minutes: mins, record: r };
+    },
+
+    /** 放弃这次计时，不产生记录 */
+    cancelSleep: function () {
+      if (!state.sleepSession) return;
+      state.sleepSession = null;
+      this.emit();
+    },
+
   /* ===== 番茄钟 / 积分 / 养树 ===== */
 
     /**
@@ -8834,13 +9600,109 @@ window.AK_OPS = [
       return on;
     },
 
-    /** 切换奖励机制（余额各自保留，总量不变）；抽卡未开启时拒绝切到 gacha */
+    /** 是否处于非游戏化纯粹学术专注模式 */
+    isAcademicMode: function () {
+      return !!(state && state.pomodoro && state.pomodoro.mode === 'academic');
+    },
+
+    /** 切换奖励机制（academic 纯学术 | forest 森林种树 | gacha 抽卡寻访） */
     setRewardMode: function (mode) {
       if (mode === 'gacha' && !this.gachaEnabled()) return state.pomodoro.mode;
       var pm = state.pomodoro;
-      pm.mode = (mode === 'gacha') ? 'gacha' : 'forest';
+      if (mode === 'academic' || mode === 'gacha' || mode === 'forest') {
+        pm.mode = mode;
+      } else {
+        pm.mode = 'forest';
+      }
+      this.save();
       this.emit();
+      if (typeof App !== 'undefined' && App.rebuildNav) App.rebuildNav();
       return pm.mode;
+    },
+
+    /** 获取生理精力高峰时段（优先自定义，默认早/中/晚三段） */
+    getEnergyPeaks: function () {
+      var eg = state.settings && state.settings.energy;
+      if (eg && eg.custom && Array.isArray(eg.peaks) && eg.peaks.length) {
+        return eg.peaks;
+      }
+      return [
+        { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+        { start: '15:00', end: '17:30', name: '午后高效期' },
+        { start: '19:30', end: '21:30', name: '晚间静心期' }
+      ];
+    },
+
+    /** 获取当前时刻的生理精力评估与建议 */
+    currentEnergyState: function (nowStr) {
+      if (!nowStr) {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2, '0');
+        var m = String(now.getMinutes()).padStart(2, '0');
+        nowStr = h + ':' + m;
+      }
+      var peaks = this.getEnergyPeaks();
+      for (var i = 0; i < peaks.length; i++) {
+        var p = peaks[i];
+        if (nowStr >= p.start && nowStr <= p.end) {
+          return {
+            isPeak: true,
+            level: 'high',
+            peakName: p.name,
+            icon: '⚡',
+            label: '精力黄金期 · ' + p.name,
+            advice: '大脑运转高效，建议优先处理高难度待办与深度学习。'
+          };
+        }
+      }
+      if (nowStr >= '13:00' && nowStr <= '14:30') {
+        return {
+          isPeak: false,
+          level: 'low',
+          peakName: '午后低谷期',
+          icon: '☕',
+          label: '生理低谷期 · 午后困倦',
+          advice: '处于自然节律低谷，适合小憩片刻、轻松散步或低能耗杂务。'
+        };
+      }
+      if (nowStr >= '23:00' || nowStr <= '05:30') {
+        return {
+          isPeak: false,
+          level: 'rest',
+          peakName: '夜间休整期',
+          icon: '🌙',
+          label: '夜间休整期 · 宜休息',
+          advice: '夜深了，大脑需要代谢修复，建议尽快就寝养精蓄锐。'
+        };
+      }
+      return {
+        isPeak: false,
+        level: 'medium',
+        peakName: '平稳期',
+        icon: '🌤️',
+        label: '常规平稳期 · 精力稳定',
+        advice: '精力处于平稳水平，适合常规作业、复习与计划打卡。'
+      };
+    },
+
+    /** 获取当前学期所有登记了考试的课程列表（按考试日期升序） */
+    courseExams: function (semId) {
+      var sid = semId || state.currentSemesterId;
+      return state.courses.filter(function (c) {
+        return (!c.semesterId || c.semesterId === sid) && c.exam && c.exam.date;
+      }).sort(function (a, b) {
+        var ta = (a.exam.date || '') + ' ' + (a.exam.start || '');
+        var tb = (b.exam.date || '') + ' ' + (b.exam.start || '');
+        return ta < tb ? -1 : (ta > tb ? 1 : 0);
+      });
+    },
+
+    /** 获取关联到指定课程的所有待办任务（复习备考任务） */
+    examTasks: function (courseId) {
+      if (!courseId) return [];
+      return state.tasks.filter(function (t) {
+        return t.courseId === courseId;
+      });
     },
 
     /** 扣森林积分：只动积分池，不与合成玉互通 */
@@ -9056,7 +9918,7 @@ window.AK_OPS = [
     opByName: function (name) {
       var all = global.AK_OPS || [];
       for (var i = 0; i < all.length; i++) {
-        if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3], limited: !!all[i][6] };
+        if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3], limited: !!all[i][6], tag: all[i][7] };
       }
       return null;
     },
@@ -9521,6 +10383,99 @@ window.AK_OPS = [
     },
 
     /** 井可兑换范围：含当期在内、最近 sparkHistory 期的全部 UP（5★ / 6★） */
+
+    /** 获取心愿单干员列表 */
+    getWishlist: function () {
+      var g = state.pomodoro && state.pomodoro.gacha;
+      return (g && Array.isArray(g.wishlist)) ? g.wishlist : [];
+    },
+
+    /** 切换心愿单（最多同时追踪 2 名心愿干员） */
+    toggleWishlist: function (name) {
+      if (!name) return false;
+      var g = state.pomodoro.gacha;
+      if (!Array.isArray(g.wishlist)) g.wishlist = [];
+      var idx = g.wishlist.indexOf(name);
+      if (idx >= 0) {
+        g.wishlist.splice(idx, 1);
+      } else {
+        if (g.wishlist.length >= 2) g.wishlist.shift();
+        g.wishlist.push(name);
+      }
+      this.save();
+      this.emit();
+      return true;
+    },
+
+    /** 是否在心愿单中 */
+    isWishlisted: function (name) {
+      var g = state.pomodoro && state.pomodoro.gacha;
+      return !!(g && Array.isArray(g.wishlist) && g.wishlist.indexOf(name) >= 0);
+    },
+
+    /** 计算心愿单未来轮换到货预报 */
+    wishlistForecast: function () {
+      var self = this;
+      var g = (state.pomodoro && state.pomodoro.gacha) || {};
+      var list = Array.isArray(g.wishlist) ? g.wishlist : [];
+      if (!list.length) return [];
+      var curDay = this.gachaDayIndex();
+      var out = [];
+
+      list.forEach(function (name) {
+        var rec = self.opByName(name);
+        if (!rec) return;
+        var poolId = (rec.tag === 'classic') ? 'classic' : 'standard';
+        var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+        var curRot = self.gachaRotIndex(poolId);
+        var star = rec.r;
+
+        var curUps = self.gachaUpOf(poolId, star, curRot);
+        var isCurrent = curUps.indexOf(name) >= 0;
+        var foundRot = isCurrent ? curRot : -1;
+
+        if (!isCurrent) {
+          for (var i = 1; i <= 60; i++) {
+            var upList = self.gachaUpOf(poolId, star, curRot + i);
+            if (upList.indexOf(name) >= 0) {
+              foundRot = curRot + i;
+              break;
+            }
+          }
+        }
+
+        var daysLeft = 0;
+        if (foundRot >= 0) {
+          if (isCurrent) {
+            var dayInPeriod = ((curDay % pool.rotDays) + pool.rotDays) % pool.rotDays;
+            daysLeft = pool.rotDays - dayInPeriod;
+          } else {
+            var targetDay = foundRot * pool.rotDays;
+            daysLeft = targetDay - curDay;
+          }
+        }
+
+        var targetJade = pool.spark * 600;
+        var curJade = (state.pomodoro && state.pomodoro.jade) || 0;
+        var readyPct = Math.min(100, Math.round((curJade / targetJade) * 100));
+
+        out.push({
+          name: name,
+          star: star,
+          img: rec[3],
+          poolId: poolId,
+          poolName: pool.name,
+          isCurrent: isCurrent,
+          daysLeft: daysLeft,
+          readyPct: readyPct,
+          curJade: curJade,
+          targetJade: targetJade
+        });
+      });
+
+      return out;
+    },
+
     gachaSparkPool: function (poolId) {
       var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
       var cur = this.gachaRotIndex(poolId);
@@ -11172,9 +12127,14 @@ window.AK_OPS = [
      */
     exportJSON: function (scope) {
       var s = scope || 'full';
-      if (s === 'full') return JSON.stringify(state, null, 2);
+      if (s === 'full') {
+        var full = JSON.parse(JSON.stringify(state));
+        delete full.sleepSession;   // 进行中的计时是临时状态，不写进备份
+        return JSON.stringify(full, null, 2);
+      }
 
       var out = JSON.parse(JSON.stringify(state));
+      delete out.sleepSession;
 
       // 两档都不带自定义图片：图片 base64 会撑爆同步码，且换设备本就要重选图
       if (out.settings) {
@@ -11250,6 +12210,7 @@ window.AK_OPS = [
       next.activities = obj.activities || [];
       next.meals = obj.meals || [];
       next.sleeps = obj.sleeps || [];
+      next.sleepSession = null;   // 别人的计时不该跟着同步过来
       next.usage = obj.usage || {};
       next.shop = mergeShop(ds.shop, obj.shop);
       // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
@@ -11320,10 +12281,374 @@ window.AK_OPS = [
   global.childrenOf = childrenOf;
   global.subtaskProgress = subtaskProgress;
   global.childIds = childIds;
+  Store.validateSchema = validateSchema;
+  global.validateSchema = validateSchema;
   global.Store = Store;
 })(window);
 
 
+
+</script>
+<script>
+/* ==========================================================
+ * 自然语言待办快速解析器 (Task Natural Language Parser)
+ * 纯函数模块：从自然语言文本中提取日期、时间、优先级、标签与关联课程，
+ * 并清洗出规范的任务标题。
+ * 示例：
+ *   "明天下午3点交高数作业 #作业 !重要"
+ *   -> { title: "交高数作业", dueDate: "2026-10-23", dueTime: "15:00",
+ *        priority: "high", important: true, tags: ["作业"],
+ *        courseId: "...", courseName: "高等数学" }
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var CN_NUM = {
+    '零': 0, '〇': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4,
+    '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10
+  };
+
+  /** 中文数字转阿拉伯数字 (1-99) */
+  function cnToNum(str) {
+    str = String(str || '').trim();
+    if (/^\d+$/.test(str)) return parseInt(str, 10);
+    if (str === '十') return 10;
+    if (str.indexOf('十') >= 0) {
+      var parts = str.split('十');
+      var a = parts[0] ? (CN_NUM[parts[0]] != null ? CN_NUM[parts[0]] : NaN) : 1;
+      var b = parts[1] ? (CN_NUM[parts[1]] != null ? CN_NUM[parts[1]] : NaN) : 0;
+      if (isNaN(a) || isNaN(b)) return NaN;
+      return a * 10 + b;
+    }
+    var n = CN_NUM[str];
+    return n == null ? NaN : n;
+  }
+
+  function pad2(n) {
+    var v = Number(n) || 0;
+    return (v < 10 ? '0' : '') + v;
+  }
+
+  function toDateStr(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function addDays(d, n) {
+    var copy = new Date(d.getTime());
+    copy.setDate(copy.getDate() + n);
+    return copy;
+  }
+
+  /**
+   * 常见高校基础课程别名映射表（用于智能模糊匹配）
+   */
+  var COURSE_ALIASES = {
+    '高数': ['高等数学', '微积分'],
+    '大物': ['大学物理', '普通物理'],
+    '大英': ['大学英语', '英语'],
+    '线代': ['线性代数'],
+    '概统': ['概率论与数理统计', '概率论', '数理统计'],
+    '马原': ['马克思主义基本原理'],
+    '毛概': ['毛泽东思想和中国特色社会主义理论体系概论'],
+    '思修': ['思想道德与法治', '思想道德修养与法律基础'],
+    '近纲': ['中国近现代史纲要', '近代史'],
+    '军理': ['军事理论'],
+    '体育': ['大学体育', '体育课'],
+    '计网': ['计算机网络'],
+    '计组': ['计算机组成原理'],
+    '操作系统': ['OS'],
+    '数据结构': ['DS']
+  };
+
+  /**
+   * 解析自然语言待办文本
+   * @param {string} text - 用户输入的文本
+   * @param {Object} [options] - 选项
+   * @param {Array} [options.courses] - 可选的已有课程列表 [{id, name}]
+   * @param {Date} [options.baseDate] - 基准日期，默认当前时间
+   * @returns {Object} 解析结果
+   */
+  function parseQuickTask(text, options) {
+    options = options || {};
+    var raw = String(text || '').trim();
+    var res = {
+      raw: raw,
+      title: raw,
+      dueDate: '',
+      dueTime: '',
+      priority: 'normal',
+      important: false,
+      tags: [],
+      courseId: '',
+      courseName: '',
+      hasDate: false,
+      hasTime: false
+    };
+
+    if (!raw) return res;
+
+    var base = options.baseDate ? new Date(options.baseDate.getTime()) : new Date();
+    // 归一化基准时间为当天 00:00:00
+    var today = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    var workText = ' ' + raw + ' ';
+    var removedRanges = [];
+
+    function markRemoved(start, end) {
+      removedRanges.push([start, end]);
+    }
+
+    /* ================= 1. 优先级提取 ================= */
+    // !重要 / !高 / !high / !! / ★ / 【重要】
+    var priHighPat = /(?:[!！]{1,2}(?:重要|高|high|紧急|urgent)|[!！]{2}|★|【(?:重要|紧急|高优)】)/i;
+    var mh = priHighPat.exec(workText);
+    if (mh) {
+      res.priority = 'high';
+      res.important = true;
+      workText = workText.replace(mh[0], ' ');
+    } else {
+      var priLowPat = /(?:[!！](?:低|low|轻微|次要)|【(?:低优|次要)】)/i;
+      var ml = priLowPat.exec(workText);
+      if (ml) {
+        res.priority = 'low';
+        workText = workText.replace(ml[0], ' ');
+      }
+    }
+
+    /* ================= 2. 标签提取 (#xxx) ================= */
+    var tagPat = /#([^\s#]+)/g;
+    var tagMatch;
+    var tags = [];
+    while ((tagMatch = tagPat.exec(workText)) !== null) {
+      var tagStr = tagMatch[1].trim();
+      if (tagStr && tags.indexOf(tagStr) === -1) {
+        tags.push(tagStr);
+      }
+    }
+    if (tags.length) {
+      res.tags = tags;
+      workText = workText.replace(tagPat, ' ');
+    }
+
+    /* ================= 3. 显式课程绑定 (@xxx) ================= */
+    var courses = options.courses || [];
+    var coursePat = /@([^\s@]+)/;
+    var cm = coursePat.exec(workText);
+    if (cm) {
+      var cQuery = cm[1].trim().toLowerCase();
+      var foundCourse = null;
+      for (var ci = 0; ci < courses.length; ci++) {
+        var cName = (courses[ci].name || '').toLowerCase();
+        if (cName === cQuery || cName.indexOf(cQuery) >= 0 || cQuery.indexOf(cName) >= 0) {
+          foundCourse = courses[ci];
+          break;
+        }
+      }
+      if (foundCourse) {
+        res.courseId = foundCourse.id;
+        res.courseName = foundCourse.name;
+      } else {
+        res.courseName = cm[1].trim();
+      }
+      workText = workText.replace(cm[0], ' ');
+    }
+
+    /* ================= 4. 时间提取 (Time) ================= */
+    // 形式 A: 下午3点半 / 晚上8点 / 早上8:30 / 15:30 / 9点20
+    var timePat = /(上午|早上|早晨|下午|中午|晚上|傍晚|夜里|凌晨)?\s*([0-9]{1,2}|[零〇一二两三四五六七八九十]{1,3})\s*(?:[点時时]|[:：])\s*(半|[0-9]{1,2}\s*分?|[零〇一二两三四五六七八九十]{1,3}\s*分?)?/i;
+    var mt = timePat.exec(workText);
+    if (mt) {
+      var hRaw = mt[2];
+      var h = /^\d+$/.test(hRaw) ? parseInt(hRaw, 10) : cnToNum(hRaw);
+      var m = 0;
+      if (mt[3]) {
+        var mStr = mt[3].trim();
+        if (mStr === '半') {
+          m = 30;
+        } else {
+          var mm = mStr.replace(/分/g, '').trim();
+          m = /^\d+$/.test(mm) ? parseInt(mm, 10) : cnToNum(mm);
+        }
+      }
+      var ampm = mt[1] || '';
+      if (!isNaN(h)) {
+        if (/下午|傍晚|晚上|夜里/.test(ampm)) {
+          if (h < 12) h += 12;
+        } else if (ampm === '中午') {
+          if (h < 11) h += 12;
+        } else if (/凌晨/.test(ampm)) {
+          if (h === 12) h = 0;
+        } else if (!ampm && h >= 1 && h <= 6) {
+          // 未指明且数字在 1-6 之间，一般默认为下午（如下午3点）
+          h += 12;
+        }
+        h = Math.max(0, Math.min(23, h));
+        m = isNaN(m) ? 0 : Math.max(0, Math.min(59, m));
+        res.dueTime = pad2(h) + ':' + pad2(m);
+        res.hasTime = true;
+        workText = workText.replace(mt[0], ' ');
+      }
+    }
+
+    // 形式 B: 模糊时间段（只说了“早上/下午/今晚”未指定具体点数）
+    if (!res.dueTime) {
+      if (/(晚上|傍晚|夜里|今晚)/.test(workText)) {
+        res.dueTime = '20:00';
+        res.hasTime = true;
+        workText = workText.replace(/(晚上|傍晚|夜里|今晚)/, ' ');
+      } else if (/(下午)/.test(workText)) {
+        res.dueTime = '15:00';
+        res.hasTime = true;
+        workText = workText.replace(/(下午)/, ' ');
+      } else if (/(中午)/.test(workText)) {
+        res.dueTime = '12:00';
+        res.hasTime = true;
+        workText = workText.replace(/(中午)/, ' ');
+      } else if (/(早上|早晨|上午)/.test(workText)) {
+        res.dueTime = '09:00';
+        res.hasTime = true;
+        workText = workText.replace(/(早上|早晨|上午)/, ' ');
+      }
+    }
+
+    /* ================= 5. 日期提取 (Date) ================= */
+    // 形式 A: 相对日期（今天/明天/后天/大后天/N天后）
+    var relList = [
+      [/大大后天/, 4],
+      [/大后天/, 3],
+      [/后天/, 2],
+      [/明天|明日|明儿/, 1],
+      [/今天|今日/, 0]
+    ];
+    for (var ri = 0; ri < relList.length; ri++) {
+      var rReg = relList[ri][0];
+      if (rReg.test(workText)) {
+        res.dueDate = toDateStr(addDays(today, relList[ri][1]));
+        res.hasDate = true;
+        workText = workText.replace(rReg, ' ');
+        break;
+      }
+    }
+
+    // 形式 B: N天后 / 过N天
+    if (!res.dueDate) {
+      var daysAfterPat = /(\d+|[一二两三四五六七八九十]+)\s*天[之以]?后|过\s*(\d+|[一二两三四五六七八九十]+)\s*天/;
+      var mda = daysAfterPat.exec(workText);
+      if (mda) {
+        var numStr = mda[1] || mda[2];
+        var nDays = /^\d+$/.test(numStr) ? parseInt(numStr, 10) : cnToNum(numStr);
+        if (!isNaN(nDays) && nDays > 0) {
+          res.dueDate = toDateStr(addDays(today, nDays));
+          res.hasDate = true;
+          workText = workText.replace(mda[0], ' ');
+        }
+      }
+    }
+
+    // 形式 C: 星期（下下周五 / 下周三 / 本周六 / 周日 / 星期二）
+    if (!res.dueDate) {
+      var weekPat = /(下下周|下周|本周|这周|周|星期|礼拜)\s*([一二三四五六日天1-7])/;
+      var wm = weekPat.exec(workText);
+      if (wm) {
+        var dayMap = {
+          '一': 1, '1': 1, '二': 2, '2': 2, '三': 3, '3': 3, '四': 4, '4': 4,
+          '五': 5, '5': 5, '六': 6, '6': 6, '日': 7, '天': 7, '7': 7
+        };
+        var wantDow = dayMap[wm[2]];
+        if (wantDow) {
+          var prefix = wm[1];
+          var currentDow = today.getDay() === 0 ? 7 : today.getDay(); // 1..7 (周一..周日)
+          var diff = wantDow - currentDow;
+
+          if (prefix === '下下周') {
+            diff += 14;
+          } else if (prefix === '下周') {
+            diff += 7;
+          } else if (prefix === '本周' || prefix === '这周') {
+            // 本周指定日
+          } else {
+            // 裸周几，如“周五”：若已过则顺延到下周对应日
+            if (diff <= 0) diff += 7;
+          }
+          res.dueDate = toDateStr(addDays(today, diff));
+          res.hasDate = true;
+          workText = workText.replace(wm[0], ' ');
+        }
+      }
+    }
+
+    // 形式 D: 绝对日期 (如 2026-10-25 / 10月25日 / 10/25 / 10.25)
+    if (!res.dueDate) {
+      var absYearPat = /(\d{4})[年\-\/\.]\s*(\d{1,2})[月\-\/\.]\s*(\d{1,2})[日号]?/;
+      var my = absYearPat.exec(workText);
+      if (my) {
+        res.dueDate = my[1] + '-' + pad2(my[2]) + '-' + pad2(my[3]);
+        res.hasDate = true;
+        workText = workText.replace(my[0], ' ');
+      } else {
+        var absMonthPat = /(\d{1,2})[月\-\/\.]\s*(\d{1,2})[日号]?/;
+        var mm = absMonthPat.exec(workText);
+        if (mm) {
+          var mMonth = parseInt(mm[1], 10);
+          var mDay = parseInt(mm[2], 10);
+          if (mMonth >= 1 && mMonth <= 12 && mDay >= 1 && mDay <= 31) {
+            res.dueDate = today.getFullYear() + '-' + pad2(mMonth) + '-' + pad2(mDay);
+            res.hasDate = true;
+            workText = workText.replace(mm[0], ' ');
+          }
+        }
+      }
+    }
+
+    /* ================= 6. 隐式课程关联检测 ================= */
+    if (!res.courseId && courses.length) {
+      for (var k = 0; k < courses.length; k++) {
+        var c = courses[k];
+        var cFullName = (c.name || '').trim();
+        if (cFullName && workText.indexOf(cFullName) >= 0) {
+          res.courseId = c.id;
+          res.courseName = cFullName;
+          break;
+        }
+      }
+      // 别名匹配（如“高数”匹配“高等数学”）
+      if (!res.courseId) {
+        var aliasKeys = Object.keys(COURSE_ALIASES);
+        for (var ak = 0; ak < aliasKeys.length; ak++) {
+          var alias = aliasKeys[ak];
+          if (workText.indexOf(alias) >= 0) {
+            var targets = COURSE_ALIASES[alias];
+            for (var cj = 0; cj < courses.length; cj++) {
+              var cnItem = courses[cj].name || '';
+              var matched = targets.some(function (t) { return cnItem.indexOf(t) >= 0; });
+              if (matched) {
+                res.courseId = courses[cj].id;
+                res.courseName = courses[cj].name;
+                break;
+              }
+            }
+            if (res.courseId) break;
+          }
+        }
+      }
+    }
+
+    /* ================= 7. 标题清洗 ================= */
+    // 去除残留的多余介词如“在、于、前、交、之前”与首尾符号
+    var cleanTitle = workText
+      .replace(/^[\s,，;；:：\-—–_]+|[\s,，;；:：\-—–_]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    // 如果清洗后完全为空，则保留原文本
+    res.title = cleanTitle || raw;
+    return res;
+  }
+
+  global.TaskNLP = {
+    parse: parseQuickTask,
+    cnToNum: cnToNum
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
 <script>
@@ -11335,6 +12660,73 @@ window.AK_OPS = [
 (function (global) {
   'use strict';
 
+  /* ---------- 类名安全处理与前缀解耦助手 ---------- */
+  function prefixCls(c) {
+    if (!c || typeof c !== 'string') return '';
+    return /^(cp-|gp-|pet-)/.test(c) ? c : 'cp-' + c;
+  }
+
+  function cn() {
+    var out = [];
+    for (var i = 0; i < arguments.length; i++) {
+      var a = arguments[i];
+      if (!a) continue;
+      if (typeof a === 'string' || typeof a === 'number') {
+        String(a).split(/\s+/).forEach(function (token) {
+          if (token) out.push(prefixCls(token));
+        });
+      } else if (Array.isArray(a)) {
+        a.forEach(function (item) {
+          if (item) {
+            String(item).split(/\s+/).forEach(function (token) {
+              if (token) out.push(prefixCls(token));
+            });
+          }
+        });
+      } else if (typeof a === 'object') {
+        Object.keys(a).forEach(function (k) {
+          if (a[k]) {
+            k.split(/\s+/).forEach(function (token) {
+              if (token) out.push(prefixCls(token));
+            });
+          }
+        });
+      }
+    }
+    return out.join(' ');
+  }
+
+  function addClass(node, className) {
+    if (!node || !className) return node;
+    String(className).split(/\s+/).forEach(function (c) {
+      if (c) node.classList.add(prefixCls(c));
+    });
+    return node;
+  }
+
+  function removeClass(node, className) {
+    if (!node || !className) return node;
+    String(className).split(/\s+/).forEach(function (c) {
+      if (c) {
+        node.classList.remove(prefixCls(c));
+        node.classList.remove(c);
+      }
+    });
+    return node;
+  }
+
+  function toggleClass(node, className, force) {
+    if (!node || !className) return false;
+    var cls = prefixCls(className.trim());
+    return node.classList.toggle(cls, force);
+  }
+
+  function hasClass(node, className) {
+    if (!node || !className) return false;
+    var cls = prefixCls(className.trim());
+    return node.classList.contains(cls) || node.classList.contains(className);
+  }
+
   /* ---------- DOM 助手 ---------- */
   function el(tag, attrs, children) {
     var node = document.createElement(tag);
@@ -11342,7 +12734,7 @@ window.AK_OPS = [
       Object.keys(attrs).forEach(function (k) {
         var v = attrs[k];
         if (v == null || v === false) return;
-        if (k === 'class') node.className = String(v).split(/\s+/).filter(Boolean).map(function(c){return /^(cp-|gp-|pet-)/.test(c)?c:'cp-'+c;}).join(' ');
+        if (k === 'class' || k === 'className') node.className = cn(v);
         else if (k === 'html') node.innerHTML = v;
         else if (k === 'text') node.textContent = v;
         else if (k === 'style' && typeof v === 'object') {
@@ -12098,6 +13490,7 @@ window.AK_OPS = [
 
   global.UI = {
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
+    cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,
@@ -14025,7 +15418,190 @@ window.AK_OPS = [
    * 返回 { rows:[{name,teacher,location,day,periods,weeks}], skipped:[原行], cols }。
    * rows 里 day/periods 缺失的行会带 missing 标记，交给 UI 提示。
    */
+  /* ==========================================================
+   * 自动适配教务系统日历 .ics 文件
+   * ========================================================== */
+  function parseIcsCourseTable(text) {
+    var events = text.split(/BEGIN:VEVENT/i).slice(1);
+    var rows = [];
+    var DAY_MAP = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+
+    events.forEach(function (ev) {
+      var sm = ev.match(/SUMMARY.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var summary = (sm && sm[1]) ? sm[1] : '';
+      summary = summary.replace(/\r?\n\s*/g, '').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\').trim();
+      summary = summary.replace(/\[.*?周.*?\]/g, '').replace(/^\[.*?\]\s*/, '').replace(/（考试）$/, '').trim();
+      if (!summary) return;
+
+      var lm = ev.match(/LOCATION.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var location = (lm && lm[1]) ? lm[1] : '';
+      location = location.replace(/\r?\n\s*/g, '').replace(/\\,/g, ',').replace(/\\;/g, ';').trim();
+
+      var dm = ev.match(/DESCRIPTION.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+      var desc = (dm && dm[1]) ? dm[1] : '';
+      desc = desc.replace(/\r?\n\s*/g, '').replace(/\\n/g, ' ').trim();
+
+      var dtsm = ev.match(/DTSTART.*?:(\d{8}T\d{4,6}|\d{8})/i);
+      var dtem = ev.match(/DTEND.*?:(\d{8}T\d{4,6}|\d{8})/i);
+      var rrm = ev.match(/RRULE.*?:(.*?)(?:\r?\n[A-Z]|\r?\nEND:)/is);
+
+      var dtstart = dtsm ? dtsm[1] : '';
+      var dtend = dtem ? dtem[1] : '';
+      var rrule = rrm ? rrm[1] : '';
+
+      var day = 0;
+      var bym = rrule.match(/BYDAY=([A-Z]{2})/i);
+      var byday = bym ? bym[1] : '';
+      if (byday && DAY_MAP[byday.toUpperCase()]) {
+        day = DAY_MAP[byday.toUpperCase()];
+      } else if (dtstart && dtstart.length >= 8) {
+        var y = parseInt(dtstart.slice(0, 4), 10);
+        var m = parseInt(dtstart.slice(4, 6), 10) - 1;
+        var d = parseInt(dtstart.slice(6, 8), 10);
+        var dt = new Date(y, m, d);
+        day = dt.getDay() === 0 ? 7 : dt.getDay();
+      }
+
+      var periods = [];
+      if (dtstart.indexOf('T') >= 0 && dtend.indexOf('T') >= 0) {
+        var stTime = dtstart.slice(9, 11) + ':' + dtstart.slice(11, 13);
+        var enTime = dtend.slice(9, 11) + ':' + dtend.slice(11, 13);
+        if (typeof Store !== 'undefined' && Store.periods) {
+          Store.periods.forEach(function (p, idx) {
+            if (p.start && p.end && ((p.start >= stTime && p.start < enTime) || (p.end > stTime && p.end <= enTime))) {
+              periods.push(idx + 1);
+            }
+          });
+        }
+      }
+      if (!periods.length) periods = [1, 2];
+
+      var startWeek = 1;
+      var cm = rrule.match(/COUNT=(\d+)/i);
+      var endWeek = cm ? Math.min(25, parseInt(cm[1], 10)) : 16;
+      var im = rrule.match(/INTERVAL=(\d+)/i);
+      var interval = im ? im[1] : '1';
+      var weekType = 'all';
+      if (interval === '2') {
+        weekType = (startWeek % 2 === 1) ? 'odd' : 'even';
+      }
+
+      rows.push({
+        name: summary,
+        teacher: desc,
+        location: location,
+        day: day || 1,
+        periods: periods,
+        weeks: { start: startWeek, end: endWeek, type: weekType },
+        missing: []
+      });
+    });
+
+    return { rows: rows, skipped: [], cols: { name: 0, day: 1, period: 2 } };
+  }
+
+  /* ==========================================================
+   * 自动解析教务系统网页源码 (HTML DOM 抽取)
+   * ========================================================== */
+  function parseHtmlCourseTable(htmlText) {
+    var doc = null;
+    try {
+      if (typeof DOMParser !== 'undefined') {
+        doc = new DOMParser().parseFromString(htmlText, 'text/html');
+      }
+    } catch (e) { doc = null; }
+
+    var rows = [], skipped = [];
+    if (!doc) return { rows: [], skipped: ['当前运行环境不支持 HTML DOMParser 解析'], cols: null };
+
+    var tables = doc.querySelectorAll('table');
+    var targetTable = null;
+    for (var i = 0; i < tables.length; i++) {
+      var t = tables[i];
+      var txt = t.textContent || '';
+      if (/星期[一二三四五六日天]|周[一二三四五六日天]/.test(txt)) {
+        targetTable = t;
+        break;
+      }
+    }
+    if (!targetTable && tables.length) targetTable = tables[0];
+    if (!targetTable) return { rows: [], skipped: ['未在 HTML 中找到课表表格'], cols: null };
+
+    var colDays = {};
+    var trs = targetTable.querySelectorAll('tr');
+    var trArr = Array.prototype.slice.call(trs);
+
+    trArr.forEach(function (tr) {
+      var ths = tr.querySelectorAll('th, td');
+      for (var c = 0; c < ths.length; c++) {
+        var d = parseDay(ths[c].textContent);
+        if (d > 0 && !colDays[c]) {
+          colDays[c] = d;
+        }
+      }
+    });
+
+    trArr.forEach(function (tr, rIdx) {
+      var tds = tr.querySelectorAll('td');
+      for (var c = 0; c < tds.length; c++) {
+        var td = tds[c];
+        var text = (td.textContent || '').trim();
+        if (!text || text.length < 2) continue;
+        if (/^(第?\d+节|节次|时间|上午|下午|晚上)$/.test(text)) continue;
+        if (parseDay(text) > 0 && text.length <= 5) continue;
+        if (rIdx === 0 && colDays[c]) continue;
+
+        var day = colDays[c] || 0;
+        if (!day) day = parseDay(text);
+
+        var periods = parsePeriodNums(text);
+        var rowspan = (td.getAttribute ? parseInt(td.getAttribute('rowspan'), 10) : 1) || 1;
+        if (!periods.length) {
+          var pStart = rIdx;
+          periods = [];
+          for (var rp = 0; rp < rowspan; rp++) periods.push(pStart + rp);
+          if (periods[0] === 0) periods = [1, 2];
+        }
+
+        var weeks = parseWeeks(text, 20);
+        var lines = text.split(/[\r\n\s]{2,}|\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+        var courseName = lines[0] || text.slice(0, 15);
+        var loc = '';
+        var teacher = '';
+        for (var l = 1; l < lines.length; l++) {
+          var line = lines[l];
+          if (/(?:[一-龥]{1,}(?:楼|教|室|馆|场|中心|基)\d*|[A-Za-z]\d{2,4}|\d{3,4})/.test(line)) {
+            loc = line;
+          } else if (/[\u4e00-\u9fa5]{2,4}(?:老师|教授|讲师)?$/.test(line) && !teacher) {
+            teacher = line;
+          }
+        }
+
+        if (day > 0 && courseName) {
+          rows.push({
+            name: courseName.replace(/\[.*?周.*?\]/, '').trim(),
+            teacher: teacher,
+            location: loc,
+            day: day,
+            periods: periods,
+            weeks: weeks,
+            missing: []
+          });
+        }
+      }
+    });
+
+    return { rows: rows, skipped: skipped, cols: { name: 0, day: 1, period: 2 } };
+  }
+
   function parseCourseTable(text) {
+    var raw = String(text || '').trim();
+    if (raw.indexOf('BEGIN:VCALENDAR') >= 0 || raw.indexOf('BEGIN:VEVENT') >= 0) {
+      return parseIcsCourseTable(raw);
+    }
+    if (raw.indexOf('<table') >= 0 || raw.indexOf('<tr') >= 0 || raw.indexOf('<!DOCTYPE') >= 0 || raw.indexOf('<html') >= 0) {
+      return parseHtmlCourseTable(raw);
+    }
     var lines = String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); })
       .filter(function (l) { return l; });
     var rows = [], skipped = [], cols = null;
@@ -14282,15 +15858,59 @@ window.AK_OPS = [
                    '示例：高等数学\t张老师\t教学楼A301\t周一\t1-2节\t1-16周\n' +
                    '也可以写：周一 第1-2节 高等数学 张老师 A301'
     });
+    var fileInput = el('input', {
+      type: 'file', accept: '.html,.htm,.ics,.csv,.tsv,.txt', style: { display: 'none' },
+      onchange: function (e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          var content = evt.target.result;
+          ta.value = content;
+          preview(content);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    var dropZone = el('div', {
+      class: 'cp-batch-dropzone',
+      style: {
+        padding: '12px', border: '2px dashed var(--border)', borderRadius: '8px',
+        textAlign: 'center', marginBottom: '10px', background: 'var(--bg-weak)', cursor: 'pointer'
+      },
+      onclick: function () { fileInput.click(); }
+    }, [
+      el('span', { style: { fontSize: '13px', color: 'var(--text-2)' }, text: '📂 点击或拖拽上传教务课表文件（支持 .html 网页源码 / .ics 日历 / .csv / .tsv）' }),
+      fileInput
+    ]);
+
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.style.borderColor = 'var(--primary)'; });
+    dropZone.addEventListener('dragleave', function (e) { dropZone.style.borderColor = 'var(--border)'; });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--border)';
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function (evt) {
+          var content = evt.target.result;
+          ta.value = content;
+          preview(content);
+        };
+        reader.readAsText(file);
+      }
+    });
+
     var m = V.modal({
-      title: '批量导入课表',
+      title: '批量导入课表（支持教务网页与日历）',
       width: '620px',
       autofocus: true,
       body: [
+        dropZone,
         el('p', {
           class: 'ocr-hint',
-          text: '支持 Tab（Excel 直接复制）、逗号或空格分隔。会自动跳过表头，' +
-                '认出课程名、星期、节次即可导入，老师和地点认不出会留空，导入后还能逐门改。'
+          text: '或在下方直接粘贴教务网页源码（HTML）、日历文本（ICS）或 Excel/Tab 文本，系统将智能自适应解析。'
         }),
         ta,
         el('div', { id: 'cpBatchPreview', style: { marginTop: '10px' } })
@@ -14536,6 +16156,176 @@ window.AK_OPS = [
     }
   };
 
+
+  /* ==========================================================
+   * 考试周备考看板 (Exam Week & Revision Kanban)
+   * ========================================================== */
+  function renderExamBoard(root) {
+    var sem = Store.currentSemester();
+    var exams = Store.courseExams();
+    var allTasks = Store.tasks || [];
+
+    var boardWrap = el('div', { class: 'cp-exam-board' });
+
+    // 1. 顶部备考 Hero 概览
+    var todayStr = DateUtil.format(new Date());
+    var upcomingExams = exams.filter(function (c) { return c.exam && c.exam.date >= todayStr; });
+    var nextEx = upcomingExams[0];
+
+    var heroCard = el('div', {
+      style: {
+        background: 'linear-gradient(135deg, var(--primary) 0%, #4338ca 100%)',
+        color: '#fff',
+        padding: '18px 20px',
+        borderRadius: '12px',
+        marginBottom: '16px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }
+    }, [
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+        el('div', {}, [
+          el('div', { style: { fontSize: '12px', opacity: 0.85, letterSpacing: '1px' }, text: 'EXAM SPRINT KANBAN' }),
+          el('div', { style: { fontSize: '20px', fontWeight: 'bold', margin: '4px 0' }, text: '🎯 考试周备考冲刺看板' }),
+          el('div', { style: { fontSize: '13px', opacity: 0.9 }, text: nextEx
+            ? ('下一门考试：' + nextEx.name + ' · ' + nextEx.exam.date + (nextEx.exam.start ? (' ' + nextEx.exam.start) : '') + (nextEx.location ? (' · ' + nextEx.location) : ''))
+            : '本学期暂无未完成的考试科目，继续保持！'
+          })
+        ]),
+        el('button', {
+          class: 'btn',
+          style: { background: '#ffffff', color: 'var(--primary)', fontWeight: 'bold' },
+          onclick: function () {
+            if (global.TaskDialog) {
+              TaskDialog.open(null, { tags: ['复习'] });
+            }
+          }
+        }, ['+ 新增复习待办'])
+      ])
+    ]);
+    boardWrap.appendChild(heroCard);
+
+    if (!exams.length) {
+      boardWrap.appendChild(el('div', {
+        class: 'card', style: { padding: '32px 20px', textAlign: 'center' }
+      }, [
+        el('div', { style: { fontSize: '36px', marginBottom: '10px' } }, ['📖']),
+        el('div', { style: { fontSize: '16px', fontWeight: 'bold', marginBottom: '6px' } }, ['暂无考试科目']),
+        el('div', { style: { fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' } }, ['点击课表中的课程，编辑并填写「考试日期与考场」，即可在这里自动生成专属复习看板。']),
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () { view.tab = 'table'; view.render(); }
+        }, ['返回课表设置考试'])
+      ]));
+      root.appendChild(boardWrap);
+      return;
+    }
+
+    // 2. 各门考试科目卡片与复习泳道
+    exams.forEach(function (c) {
+      var ex = c.exam || {};
+      var exTasks = allTasks.filter(function (t) { return t.courseId === c.id; });
+      var doneCount = exTasks.filter(function (t) { return t.status === 'done'; }).length;
+      var totalCount = exTasks.length;
+      var pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+      var daysLeft = '';
+      if (ex.date) {
+        var diff = Math.ceil((DateUtil.parse(ex.date) - DateUtil.parse(todayStr)) / 86400000);
+        if (diff > 0) daysLeft = '还有 ' + diff + ' 天';
+        else if (diff === 0) daysLeft = '今天考试！';
+        else daysLeft = '已考完';
+      }
+
+      var exCard = el('div', { class: 'card cp-exam-course-card', style: { padding: '16px', marginBottom: '16px' } });
+
+      var head = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' } }, [
+        el('div', {}, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            el('span', { style: { width: '12px', height: '12px', borderRadius: '50%', background: c.color || 'var(--primary)' } }),
+            el('b', { style: { fontSize: '16px' }, text: c.name }),
+            daysLeft ? el('span', { class: 'badge', style: { background: daysLeft.indexOf('天') >= 0 ? 'var(--amber)' : (daysLeft.indexOf('今天') >= 0 ? 'var(--red)' : 'var(--text-muted)'), color: '#fff' }, text: daysLeft }) : null
+          ]),
+          el('div', { style: { fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '4px' } }, [
+            '📅 考试时间：' + (ex.date || '未定') + (ex.start ? (' ' + ex.start + (ex.end ? ('-' + ex.end) : '')) : '') +
+            (c.location ? (' · 考场：' + c.location) : '')
+          ])
+        ]),
+        el('div', { style: { textAlign: 'right' } }, [
+          el('div', { style: { fontSize: '13px', fontWeight: 'bold', color: 'var(--primary)' }, text: doneCount + '/' + totalCount + ' 复习完成 (' + pct + '%)' }),
+          el('button', {
+            class: 'btn btn-sm', style: { marginTop: '4px' },
+            onclick: function () {
+              if (global.TaskDialog) {
+                TaskDialog.open(null, { courseId: c.id, tags: ['复习'] });
+              }
+            }
+          }, ['+ 添加任务'])
+        ])
+      ]);
+      exCard.appendChild(head);
+
+      var lanesGrid = el('div', {
+        class: 'cp-exam-lanes',
+        style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }
+      });
+
+      var LANES = [
+        { id: 'todo', name: '📌 待复习考点', filter: function (t) { return t.status !== 'done' && (!t.examStage || t.examStage === 'review'); } },
+        { id: 'doing', name: '⚡ 攻坚刷题模考', filter: function (t) { return t.status !== 'done' && (t.examStage === 'drill' || t.examStage === 'sprint'); } },
+        { id: 'done', name: '✅ 已攻克掌握', filter: function (t) { return t.status === 'done' || t.examStage === 'done'; } }
+      ];
+
+      LANES.forEach(function (lane) {
+        var laneCol = el('div', {
+          style: { background: 'var(--bg-weak)', borderRadius: '8px', padding: '10px', minHeight: '110px' }
+        });
+        laneCol.appendChild(el('div', {
+          style: { fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', color: 'var(--text-2)' }
+        }, [
+          el('span', {}, [lane.name]),
+          el('span', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, [String(exTasks.filter(lane.filter).length)])
+        ]));
+
+        var laneTasks = exTasks.filter(lane.filter);
+        if (!laneTasks.length) {
+          laneCol.appendChild(el('div', { style: { fontSize: '11.5px', color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }, text: '暂无任务' }));
+        } else {
+          laneTasks.forEach(function (t) {
+            var isDone = t.status === 'done';
+            var taskCard = el('div', {
+              class: 'card',
+              style: {
+                padding: '8px 10px', marginBottom: '6px', fontSize: '12.5px',
+                borderLeft: '3px solid ' + (c.color || 'var(--primary)'),
+                textDecoration: isDone ? 'line-through' : 'none',
+                opacity: isDone ? 0.6 : 1
+              }
+            }, [
+              el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+                el('input', {
+                  type: 'checkbox', checked: isDone,
+                  onchange: function () {
+                    Store.updateTask(t.id, { status: this.checked ? 'done' : 'todo', doneAt: this.checked ? new Date().toISOString() : '' });
+                    view.render();
+                  }
+                }),
+                el('span', { style: { flex: 1, cursor: 'pointer' }, onclick: function () { if (global.TaskDialog) TaskDialog.open(t.id); } }, [t.title])
+              ])
+            ]);
+            laneCol.appendChild(taskCard);
+          });
+        }
+
+        lanesGrid.appendChild(laneCol);
+      });
+
+      exCard.appendChild(lanesGrid);
+      boardWrap.appendChild(exCard);
+    });
+
+    root.appendChild(boardWrap);
+  }
+
   var view = {
     id: 'schedule',
     name: '课程表',
@@ -14638,7 +16428,8 @@ window.AK_OPS = [
       var weekNo = this.week;
       var totalWeeks = Store.semester.weeks;
       var weekStart = Store.weekStartDate(weekNo);
-      var weekEnd = DateUtil.addDays(weekStart, 6);
+      var dayCount = Store.settings.showWeekend === false ? 5 : 7;
+      var weekEnd = DateUtil.addDays(weekStart, dayCount - 1);
       var inTerm = weekNo >= 1 && weekNo <= totalWeeks;
 
       /* ---- 周切换条 ---- */
@@ -14657,6 +16448,15 @@ window.AK_OPS = [
         el('div', { class: 'week-meta' }, [
           el('span', { class: 'chip ' + (weekNo === Store.currentWeek() ? 'chip-primary' : ''),
             text: weekNo === Store.currentWeek() ? '本周' : '非本周' }),
+          el('button', {
+            class: 'btn btn-sm',
+            title: Store.settings.showWeekend ? '收起周六、周日两列' : '展开周六、周日两列',
+            onclick: function () {
+              var on = !Store.settings.showWeekend;
+              Store.updateSettings({ showWeekend: on });
+              UI.toast(on ? '已显示周末' : '已隐藏周末');
+            }
+          }, [Store.settings.showWeekend ? '隐藏周末' : '显示周末']),
           el('button', {
             class: 'btn btn-sm', onclick: function () { self.goWeek(Store.currentWeek()); }
           }, ['回到本周'])
@@ -14723,7 +16523,7 @@ window.AK_OPS = [
       var thead = el('thead', { class: 'tt-head' });
       var trh = el('tr');
       trh.appendChild(el('th', { class: 'col-time' }));
-      for (var d = 1; d <= 7; d++) {
+      for (var d = 1; d <= dayCount; d++) {
         var date = Store.dateOf(weekNo, d);
         var isToday = DateUtil.toStr(date) === todayStr;
         trh.appendChild(el('th', { class: isToday ? 'today' : '' }, [
@@ -14758,7 +16558,7 @@ window.AK_OPS = [
         if (newGroup) timeCell.insertBefore(el('span', { class: 'grp-tag', text: grp }), timeCell.firstChild);
         tr.appendChild(timeCell);
 
-        for (var dc = 1; dc <= 7; dc++) {
+        for (var dc = 1; dc <= dayCount; dc++) {
           var inst = renderAt[dc + '|' + ri];
           if (inst && inst.type === 'covered') continue;
 
@@ -14820,7 +16620,7 @@ window.AK_OPS = [
         tbody.appendChild(tr);
       });
 
-      var table = el('table', { class: 'tt' }, [thead, tbody]);
+      var table = el('table', { class: 'tt' + (dayCount < 7 ? ' no-weekend' : '') }, [thead, tbody]);
 
       /* ---- 空状态 ---- */
       if (!Store.courses.length) {
@@ -14933,7 +16733,8 @@ window.AK_OPS = [
         weekType: c ? c.weekType : 'all',
         note: c ? c.note : '',
         credit: c ? (c.credit || 0) : 0,
-        exam: c ? c.exam : null
+        exam: c ? c.exam : null,
+        rotations: c && Array.isArray(c.rotations) ? JSON.parse(JSON.stringify(c.rotations)) : []
       };
 
       // 现有全部时段（编辑时用来回填 / 保留未编辑的部分）
@@ -15295,6 +17096,7 @@ window.AK_OPS = [
           exam: examDate ? { date: examDate, start: fExamStart.value || '', end: fExamEnd.value || '' } : null,
           weekType: data.weekType,
           note: fNote.value.trim(),
+          rotations: data.rotations || [],
           startWeek: wk.startWeek,
           endWeek: wk.endWeek
         };
@@ -15985,7 +17787,9 @@ window.AK_OPS = [
   function collect(weekNo) {
     var days = [];
     var todayStr = DateUtil.toStr(DateUtil.today());
-    for (var d = 1; d <= 7; d++) {
+    // 与课表页保持一致：关掉周末时导出的图也只画 5 天
+    var dayCount = Store.settings.showWeekend === false ? 5 : 7;
+    for (var d = 1; d <= dayCount; d++) {
       var date = Store.dateOf(weekNo, d);
       days.push({
         label: Store.DAY_NAMES[d - 1],
@@ -16151,6 +17955,604 @@ window.AK_OPS = [
 
 </script>
 <script>
+/* ==========================================================
+ * 模块：原生离线白噪音引擎 (Web Audio Ambient Sound Generator)
+ * 采用浏览器纯原生 Web Audio API 算法合成，零外部资源依赖，完全离线运行。
+ * 提供雨声、粉噪、褐噪、白噪音等多种音效及音量渐变控制。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var SOUNDS = {
+    rain: { id: 'rain', name: '淅沥雨声', desc: '轻柔雨声与低频水滴，助眠与深度阅读', icon: '🌧️' },
+    pink: { id: 'pink', name: '粉红噪音', desc: '频谱均匀柔和，平衡环境杂音', icon: '🌸' },
+    brown: { id: 'brown', name: '深沉褐噪', desc: '低频滚滚如远海与微风，极致专注', icon: '🌊' },
+    white: { id: 'white', name: '全频白噪', desc: '全频段能量均等，遮蔽突发声响', icon: '⚡' }
+  };
+
+  var ctx = null;
+  var currentSource = null;
+  var gainNode = null;
+  var activeType = 'rain';
+  var volume = 0.5;
+  var isPlaying = false;
+  var bufferCache = {};
+
+  function getAudioContext() {
+    var AudioCtx = global.AudioContext || global.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!ctx) {
+      try {
+        ctx = new AudioCtx();
+      } catch (e) {
+        return null;
+      }
+    }
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(function () {});
+    }
+    return ctx;
+  }
+
+  /** 生成指定类型的无缝循环音频缓冲区（5秒，首尾淡入淡出消除卡顿） */
+  function createBuffer(c, type) {
+    if (bufferCache[type]) return bufferCache[type];
+    var sampleRate = c.sampleRate || 44100;
+    var duration = 5;
+    var length = sampleRate * duration;
+    var buffer = c.createBuffer(1, length, sampleRate);
+    var data = buffer.getChannelData(0);
+
+    if (type === 'white') {
+      for (var i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.4;
+      }
+    } else if (type === 'pink') {
+      var b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (var i = 0; i < length; i++) {
+        var white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+        b6 = white * 0.115926;
+      }
+    } else if (type === 'brown') {
+      var lastOut = 0.0;
+      for (var i = 0; i < length; i++) {
+        var white = Math.random() * 2 - 1;
+        lastOut = (lastOut + (0.02 * white)) / 1.02;
+        data[i] = lastOut * 3.5;
+      }
+    } else {
+      // 默认 rain：褐噪低频基底 + 粉噪水流感 + 随机轻雨滴脉冲
+      var rLast = 0.0;
+      var rb0 = 0, rb1 = 0;
+      for (var i = 0; i < length; i++) {
+        var white = Math.random() * 2 - 1;
+        rLast = (rLast + (0.02 * white)) / 1.02;
+        rb0 = 0.99886 * rb0 + white * 0.0555179;
+        rb1 = 0.99332 * rb1 + white * 0.0750759;
+        var pink = (rb0 + rb1) * 0.4;
+        var drop = (Math.random() < 0.0018) ? (Math.random() * 0.5) : 0;
+        data[i] = (rLast * 2.2 + pink * 0.45 + drop) * 0.35;
+      }
+    }
+
+    // 首尾 0.1s 平滑交叉淡入淡出，确保循环时零爆音 (click/pop)
+    var fadeLen = Math.floor(sampleRate * 0.1);
+    for (var f = 0; f < fadeLen; f++) {
+      var ratio = f / fadeLen;
+      data[f] = data[f] * ratio + data[length - fadeLen + f] * (1 - ratio);
+    }
+
+    bufferCache[type] = buffer;
+    return buffer;
+  }
+
+  var WhiteNoise = {
+    SOUNDS: SOUNDS,
+
+    play: function (type, vol) {
+      if (type && SOUNDS[type]) activeType = type;
+      if (typeof vol === 'number') volume = Math.max(0, Math.min(1, vol));
+
+      var c = getAudioContext();
+      if (!c) return false;
+
+      this.stop();
+
+      try {
+        var buf = createBuffer(c, activeType);
+        var src = c.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+
+        var gain = c.createGain();
+        gain.gain.setValueAtTime(0.001, c.currentTime);
+        // 0.3秒平滑淡入
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), c.currentTime + 0.3);
+
+        src.connect(gain);
+        gain.connect(c.destination);
+
+        src.start(0);
+        currentSource = src;
+        gainNode = gain;
+        isPlaying = true;
+        this.emitChange();
+        return true;
+      } catch (e) {
+        isPlaying = false;
+        return false;
+      }
+    },
+
+    stop: function () {
+      if (!currentSource) {
+        isPlaying = false;
+        this.emitChange();
+        return;
+      }
+      try {
+        if (gainNode && ctx) {
+          gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
+        }
+        var s = currentSource;
+        currentSource = null;
+        setTimeout(function () {
+          try { s.stop(0); s.disconnect(); } catch (err) {}
+        }, 220);
+      } catch (e) {
+        currentSource = null;
+      }
+      isPlaying = false;
+      this.emitChange();
+    },
+
+    toggle: function (type, vol) {
+      if (isPlaying && (!type || type === activeType)) {
+        this.stop();
+        return false;
+      }
+      return this.play(type || activeType, vol);
+    },
+
+    setVolume: function (v) {
+      volume = Math.max(0, Math.min(1, v));
+      if (gainNode && ctx) {
+        try {
+          gainNode.gain.setValueAtTime(gainNode.gain.value, ctx.currentTime);
+          gainNode.gain.linearRampToValueAtTime(Math.max(0.001, volume), ctx.currentTime + 0.05);
+        } catch (e) {}
+      }
+      this.emitChange();
+    },
+
+    setType: function (type) {
+      if (!SOUNDS[type]) return;
+      activeType = type;
+      if (isPlaying) {
+        this.play(type, volume);
+      } else {
+        this.emitChange();
+      }
+    },
+
+    state: function () {
+      return {
+        playing: isPlaying,
+        type: activeType,
+        volume: volume,
+        sound: SOUNDS[activeType] || SOUNDS.rain
+      };
+    },
+
+    _listeners: [],
+    onChange: function (fn) {
+      if (typeof fn === 'function') this._listeners.push(fn);
+    },
+    emitChange: function () {
+      var st = this.state();
+      this._listeners.forEach(function (fn) {
+        try { fn(st); } catch (e) {}
+      });
+    }
+  };
+
+  global.WhiteNoise = WhiteNoise;
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));
+
+</script>
+<script>
+/* ==========================================================
+ * 模块：学业生活白皮书 (Academic & Life Retrospective White Paper)
+ * 聚合学业绩点(GPA)、时间投入、就寝规律度、记账消费、日记心情晴雨表与目标达成
+ * 提供杂志排版风格全景卡片与 Canvas 2D 高清长图一键导出。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = global.UI || (typeof UI !== 'undefined' ? UI : {});
+  var el = V.el || function () { return document.createElement('div'); };
+  var S = global.Store || (typeof Store !== 'undefined' ? Store : {});
+
+  var WhitePaper = {
+    /** 聚合整学期（或当前）全部多维数据 */
+    compileData: function () {
+      var S = global.Store || (typeof Store !== 'undefined' ? Store : {});
+      var sem = S.currentSemester ? S.currentSemester() : { id: 's1', name: '当前学期' };
+      var courses = (S.courses || []).filter(function (c) {
+        return !c.semesterId || c.semesterId === sem.id;
+      });
+
+      // 1. 学业与成绩 (GPA)
+      var totalCredit = 0;
+      courses.forEach(function (c) { totalCredit += (Number(c.credit) || 0); });
+      var gradeStat = typeof S.gradeSummary === 'function' ? S.gradeSummary() : { gpa: '0.00', totalCredits: totalCredit };
+      
+      // 课程投入排行 (通过 stats-calc)
+      var courseInvest = [];
+      if (global.StatsCalc && typeof StatsCalc.sumByCourse === 'function') {
+        courseInvest = StatsCalc.sumByCourse(S.activities || [], courses);
+      }
+      var topCourses = courseInvest.slice(0, 3);
+
+      // 2. 作息与睡眠规律度
+      var sleeps = S.sleepRecords ? S.sleepRecords() : [];
+      var totalSleepMin = 0;
+      var validSleepDays = 0;
+      var bedtimeMinutes = []; // 分钟数 (0-1440)
+      sleeps.forEach(function (s) {
+        if (!s.start || !s.end) return;
+        var sm = DateUtil.parse(s.start), em = DateUtil.parse(s.end);
+        if (!sm || !em) return;
+        var diff = Math.max(0, (em - sm) / 60000);
+        if (diff > 120 && diff < 900) {
+          totalSleepMin += diff;
+          validSleepDays++;
+          bedtimeMinutes.push(sm.getHours() * 60 + sm.getMinutes());
+        }
+      });
+      var avgSleepHours = validSleepDays > 0 ? (totalSleepMin / validSleepDays / 60).toFixed(1) : '7.2';
+      // 规律度评估 (方差标准差)
+      var sleepRating = '规律稳定';
+      if (bedtimeMinutes.length >= 3) {
+        var avgBt = bedtimeMinutes.reduce(function (a, b) { return a + b; }, 0) / bedtimeMinutes.length;
+        var variance = bedtimeMinutes.reduce(function (a, b) { return a + Math.pow(b - avgBt, 2); }, 0) / bedtimeMinutes.length;
+        var stdDev = Math.sqrt(variance);
+        if (stdDev > 90) sleepRating = '波动较大 · 建议避免熬夜';
+        else if (stdDev > 50) sleepRating = '较为规律';
+        else sleepRating = '非常自律 · 节律稳定';
+      }
+
+      // 3. 深度专注与投入
+      var pm = S.pomodoro || {};
+      var focusHours = ((pm.focusMinutes || 0) / 60).toFixed(1);
+      var sessionsCount = (pm.sessions || []).length;
+
+      // 4. 记账收支
+      var ledgers = S.ledgers || [];
+      var totalExpense = 0, totalIncome = 0;
+      var catMap = {};
+      ledgers.forEach(function (l) {
+        var amt = Number(l.amount) || 0;
+        if (l.type === 'expense' || !l.type) {
+          totalExpense += amt;
+          var cat = l.category || '日常';
+          catMap[cat] = (catMap[cat] || 0) + amt;
+        } else if (l.type === 'income') {
+          totalIncome += amt;
+        }
+      });
+      var topCatName = '餐饮';
+      var topCatAmt = 0;
+      Object.keys(catMap).forEach(function (k) {
+        if (catMap[k] > topCatAmt) { topCatAmt = catMap[k]; topCatName = k; }
+      });
+
+      // 5. 心情晴雨表与日记
+      var diaries = S.diaries || [];
+      var moodCounts = { great: 0, good: 0, normal: 0, tired: 0, low: 0 };
+      diaries.forEach(function (d) {
+        if (d.mood && moodCounts[d.mood] !== undefined) {
+          moodCounts[d.mood]++;
+        }
+      });
+      var warmDays = moodCounts.great + moodCounts.good;
+      var coldDays = moodCounts.tired + moodCounts.low;
+
+      // 6. 待办与执行力
+      var tasks = S.tasks || [];
+      var doneTasks = tasks.filter(function (t) { return t.status === 'done'; }).length;
+      var taskRate = tasks.length > 0 ? Math.round((doneTasks / tasks.length) * 100) : 100;
+
+      // 7. 目标达成
+      var goals = S.goals || [];
+      var goalPctSum = 0, countGoals = 0;
+      goals.forEach(function (g) {
+        if (g.archived) return;
+        var pct = S.goalProgress ? S.goalProgress(g).pct : 0;
+        if (typeof pct === 'number') { goalPctSum += pct; countGoals++; }
+      });
+      var avgGoalPct = countGoals > 0 ? Math.round(goalPctSum / countGoals) : 0;
+
+      return {
+        semesterName: sem.name || '当前学期',
+        courseCount: courses.length,
+        totalCredit: totalCredit,
+        gpa: gradeStat.gpa || '3.75',
+        topCourses: topCourses,
+        avgSleepHours: avgSleepHours,
+        sleepRating: sleepRating,
+        focusHours: focusHours,
+        sessionsCount: sessionsCount,
+        totalExpense: totalExpense.toFixed(2),
+        totalIncome: totalIncome.toFixed(2),
+        topExpenseCat: topCatName,
+        diaryCount: diaries.length,
+        warmDays: warmDays,
+        coldDays: coldDays,
+        taskRate: taskRate,
+        doneTasks: doneTasks,
+        totalTasks: tasks.length,
+        avgGoalPct: avgGoalPct
+      };
+    },
+
+    /** 打开学业生活白皮书全屏弹窗 */
+    openDialog: function () {
+      var data = this.compileData();
+      var self = this;
+
+      var body = el('div', { class: 'cp-whitepaper-body', style: { padding: '6px 0', lineHeight: '1.6' } });
+
+      // 杂志顶栏
+      body.appendChild(el('div', {
+        style: {
+          background: 'linear-gradient(135deg, var(--primary) 0%, #1e40af 100%)',
+          color: '#ffffff',
+          padding: '24px 20px',
+          borderRadius: '12px',
+          marginBottom: '16px',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.1)'
+        }
+      }, [
+        el('div', { style: { fontSize: '12px', letterSpacing: '2px', opacity: 0.85, textTransform: 'uppercase' }, text: 'ACADEMIC & LIFE RETROSPECTIVE' }),
+        el('div', { style: { fontSize: '22px', fontWeight: 'bold', margin: '4px 0 8px' }, text: '学业与生活全景白皮书' }),
+        el('div', { style: { fontSize: '13px', opacity: 0.9 }, text: data.semesterName + ' · 综合评估与成长图鉴' })
+      ]));
+
+      // 核心三联统计格
+      body.appendChild(el('div', {
+        style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px' }
+      }, [
+        el('div', { class: 'card', style: { padding: '12px', textAlign: 'center' } }, [
+          el('div', { style: { fontSize: '22px', fontWeight: 'bold', color: 'var(--primary)' }, text: data.gpa }),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '学分绩点 (GPA)' })
+        ]),
+        el('div', { class: 'card', style: { padding: '12px', textAlign: 'center' } }, [
+          el('div', { style: { fontSize: '22px', fontWeight: 'bold', color: 'var(--green)' }, text: data.focusHours + 'h' }),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '深度专注工时' })
+        ]),
+        el('div', { class: 'card', style: { padding: '12px', textAlign: 'center' } }, [
+          el('div', { style: { fontSize: '22px', fontWeight: 'bold', color: 'var(--amber)' }, text: data.taskRate + '%' }),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '待办执行完成率' })
+        ])
+      ]));
+
+      // 模块 1: 学业与课程投入
+      var acCard = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+      acCard.appendChild(el('div', { class: 'section-title', style: { marginBottom: '8px' } }, ['📚 学业修读与学科投入']));
+      acCard.appendChild(el('div', { style: { fontSize: '13px', color: 'var(--text-2)', marginBottom: '8px' } }, [
+        '本学期修读 ', el('b', {}, [String(data.courseCount)]), ' 门课程，共计 ', el('b', {}, [String(data.totalCredit)]), ' 学分。'
+      ]));
+      if (data.topCourses.length) {
+        acCard.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }, text: '时间投入排行：' }));
+        data.topCourses.forEach(function (tc, idx) {
+          acCard.appendChild(el('div', {
+            style: { display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', padding: '4px 0' }
+          }, [
+            el('span', {}, [(idx + 1) + '. ' + tc.name]),
+            el('span', { style: { fontWeight: 'bold', color: 'var(--primary)' } }, [Math.round(tc.minutes / 60 * 10) / 10 + ' 小时'])
+          ]));
+        });
+      }
+      body.appendChild(acCard);
+
+      // 模块 2: 作息健康与生理节律
+      var sleepCard = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+      sleepCard.appendChild(el('div', { class: 'section-title', style: { marginBottom: '8px' } }, ['🌙 作息节律与健康']));
+      sleepCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' } }, [
+        el('span', {}, ['日均睡眠时长：']),
+        el('b', {}, [data.avgSleepHours + ' 小时'])
+      ]));
+      sleepCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' } }, [
+        el('span', {}, ['就寝规律度评估：']),
+        el('span', { style: { color: 'var(--green)', fontWeight: 'bold' } }, [data.sleepRating])
+      ]));
+      body.appendChild(sleepCard);
+
+      // 模块 3: 消费与生活记账
+      var ledCard = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+      ledCard.appendChild(el('div', { class: 'section-title', style: { marginBottom: '8px' } }, ['💰 生活消费与收支']));
+      ledCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' } }, [
+        el('span', {}, ['学期累计支出：']),
+        el('b', { style: { color: 'var(--red)' } }, ['¥ ' + data.totalExpense])
+      ]));
+      ledCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' } }, [
+        el('span', {}, ['最大开销类别：']),
+        el('b', {}, [data.topExpenseCat])
+      ]));
+      body.appendChild(ledCard);
+
+      // 模块 4: 心态晴雨表与目标
+      var moodCard = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '16px' } });
+      moodCard.appendChild(el('div', { class: 'section-title', style: { marginBottom: '8px' } }, ['🌈 心态晴雨表与目标执行']));
+      moodCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' } }, [
+        el('span', {}, ['心情冷暖指数：']),
+        el('span', {}, [
+          el('span', { style: { color: '#f59e0b', fontWeight: 'bold' } }, ['暖心 ' + data.warmDays + ' 天']),
+          document.createTextNode(' / '),
+          el('span', { style: { color: '#3b82f6' } }, ['低落 ' + data.coldDays + ' 天'])
+        ])
+      ]));
+      moodCard.appendChild(el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13px' } }, [
+        el('span', {}, ['学期在办目标平均进度：']),
+        el('b', { style: { color: 'var(--primary)' } }, [data.avgGoalPct + '%'])
+      ]));
+      body.appendChild(moodCard);
+
+      // 导出按钮
+      var btnExport = el('button', {
+        class: 'btn btn-primary',
+        style: { width: '100%', padding: '10px 0', fontSize: '14px', borderRadius: '8px' },
+        onclick: function () {
+          self.exportImage(data);
+        }
+      }, ['📷 保存白皮书高清海报 (PNG)']);
+      body.appendChild(btnExport);
+
+      V.modal({
+        title: '📊 学业生活白皮书',
+        body: body,
+        width: 520
+      });
+    },
+
+    /** 使用纯前端 Canvas 2D 绘制高清总结海报并下载 */
+    exportImage: function (data) {
+      var W = 750, H = 1080;
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // 背景与卡片底色
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, W, H);
+
+      // 顶栏深蓝渐变
+      var grad = ctx.createLinearGradient(0, 0, W, 220);
+      grad.addColorStop(0, '#2563eb');
+      grad.addColorStop(1, '#1e40af');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, 220);
+
+      // 顶栏文字
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('ACADEMIC & LIFE RETROSPECTIVE · COURSE PLANNER', 40, 50);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 34px sans-serif';
+      ctx.fillText('学业与生活全景白皮书', 40, 105);
+
+      ctx.font = '18px sans-serif';
+      ctx.fillText(data.semesterName + ' · 个人成长纪要', 40, 150);
+
+      // 卡片绘制助手
+      function drawCard(x, y, w, h, title) {
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.06)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 4;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, w, h, 12) : ctx.rect(x, y, w, h);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+
+        if (title) {
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 18px sans-serif';
+          ctx.fillText(title, x + 20, y + 36);
+        }
+      }
+
+      // 核心三格 (GPA / 专注工时 / 待办率)
+      drawCard(40, 250, 206, 110);
+      ctx.fillStyle = '#2563eb';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillText(data.gpa, 60, 310);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('学分绩点 (GPA)', 60, 340);
+
+      drawCard(272, 250, 206, 110);
+      ctx.fillStyle = '#16a34a';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillText(data.focusHours + 'h', 292, 310);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('深度专注工时', 292, 340);
+
+      drawCard(504, 250, 206, 110);
+      ctx.fillStyle = '#d97706';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillText(data.taskRate + '%', 524, 310);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('待办执行率', 524, 340);
+
+      // 学业与科目投入
+      drawCard(40, 390, 670, 170, '📚 学业修读与学科投入');
+      ctx.fillStyle = '#334155';
+      ctx.font = '15px sans-serif';
+      ctx.fillText('本学期修读 ' + data.courseCount + ' 门课程，累计 ' + data.totalCredit + ' 学分。', 60, 460);
+      if (data.topCourses.length) {
+        var tcText = data.topCourses.map(function (tc, idx) {
+          return (idx + 1) + '. ' + tc.name + ' (' + (Math.round(tc.minutes / 60 * 10) / 10) + 'h)';
+        }).join('    ');
+        ctx.fillText('时间投入前列：' + tcText, 60, 500);
+      }
+
+      // 作息健康
+      drawCard(40, 580, 670, 150, '🌙 作息节律与健康');
+      ctx.fillStyle = '#334155';
+      ctx.font = '15px sans-serif';
+      ctx.fillText('平均就寝睡眠时长：' + data.avgSleepHours + ' 小时', 60, 650);
+      ctx.fillText('生理节律稳定性：' + data.sleepRating, 60, 690);
+
+      // 消费与心态
+      drawCard(40, 750, 670, 150, '💰 生活消费与心情晴雨');
+      ctx.fillStyle = '#334155';
+      ctx.font = '15px sans-serif';
+      ctx.fillText('累计支出：¥ ' + data.totalExpense + '    主要支出分类：' + data.topExpenseCat, 60, 820);
+      ctx.fillText('心情晴雨表：暖色积极 ' + data.warmDays + ' 天 / 低落疲惫 ' + data.coldDays + ' 天', 60, 860);
+
+      // 底部水印印章
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('由「课程规划助手」自动生成 · 持续精进，静待花开', W / 2, 970);
+      ctx.fillText(new Date().toLocaleDateString() + ' · 终身成长档案', W / 2, 995);
+
+      // 下载文件
+      canvas.toBlob(function (blob) {
+        if (!blob) return;
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '学业生活全景白皮书-' + data.semesterName + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        UI.toast('已保存白皮书海报！');
+      }, 'image/png');
+    }
+  };
+
+  global.WhitePaper = WhitePaper;
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));
+
+</script>
+<script>
 
 
 /* ==========================================================
@@ -16223,11 +18625,11 @@ window.AK_OPS = [
       }, [
         el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' } }, [
           el('div', { style: { flex: '1', minWidth: '180px' } }, [
-            el('div', { style: { fontSize: '12.5px', opacity: '.82', marginBottom: '4px' },
+            el('div', { class: 'hero-sub', style: { fontSize: '12.5px', opacity: '.82', marginBottom: '4px' },
               text: greet + '，今天也要好好上课' }),
-            el('div', { style: { fontSize: '24px', fontWeight: '700', letterSpacing: '.4px', lineHeight: '1.25' },
+            el('div', { class: 'hero-title', style: { fontSize: '24px', fontWeight: '700', letterSpacing: '.4px', lineHeight: '1.25' },
               text: (today.getMonth() + 1) + ' 月 ' + today.getDate() + ' 日 · ' + Store.DAY_NAMES[dow - 1] }),
-            el('div', { style: { fontSize: '12.5px', opacity: '.86', marginTop: '4px' },
+            el('div', { class: 'hero-desc', style: { fontSize: '12.5px', opacity: '.86', marginTop: '4px' },
               text: !inTerm ? '学期外 · 假期愉快' : (courses.length ? ('第 ' + weekNo + ' 周 · 今天 ' + courses.length + ' 节课') : ('第 ' + weekNo + ' 周 · 今天没有课')) })
           ]),
           el('div', { class: 'hero-stats', style: { display: 'flex', gap: '18px', textAlign: 'center' } }, [
@@ -16238,6 +18640,48 @@ window.AK_OPS = [
         ])
       ]);
       root.appendChild(hero);
+
+      /* ---------- 🎯 心愿干员到货备考动态 ---------- */
+      (function () {
+        if (!Store.pomodoro || Store.pomodoro.mode !== 'gacha' || !Store.wishlistForecast) return;
+        var forecasts = Store.wishlistForecast();
+        if (!forecasts.length) return;
+        var near = forecasts.filter(function (f) { return f.isCurrent || (f.daysLeft > 0 && f.daysLeft <= 7); });
+        if (!near.length) return;
+        var f0 = near[0];
+        var text = f0.isCurrent
+          ? ('【' + f0.name + '】正在「' + f0.poolName + '」当期 UP 寻访中！当前备考合成玉进度 ' + f0.readyPct + '%。')
+          : ('【' + f0.name + '】将在 ' + f0.daysLeft + ' 天后进入「' + f0.poolName + '」UP！当前备考合成玉进度 ' + f0.readyPct + '%。');
+
+        root.appendChild(el('div', {
+          class: 'card cp-wishlist-banner',
+          style: {
+            background: 'linear-gradient(135deg, #0f766e 0%, #115e59 100%)',
+            color: '#fff',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
+            el('span', { style: { fontSize: '20px' } }, ['🎯']),
+            el('div', {}, [
+              el('div', { style: { fontWeight: 'bold', fontSize: '14px' }, text: '心愿干员到货预告' }),
+              el('div', { style: { fontSize: '12px', opacity: 0.9, marginTop: '2px' }, text: text + ' 今日完成专注与作业即可加速攒玉！' })
+            ])
+          ]),
+          el('button', {
+            class: 'btn btn-sm',
+            style: { background: '#fff', color: '#0f766e', fontWeight: 'bold', minWidth: '70px' },
+            onclick: function () { App.go('gacha'); }
+          }, ['去寻访 ›'])
+        ]));
+      })();
+
 
       /* ---------- 倒数纪念日 ---------- */
       (function () {
@@ -18214,6 +20658,7 @@ window.AK_OPS = [
       var self = this;
       var root = host;
       qHost = host;
+      stopSleepTicker();     // 重绘会换掉 DOM，旧计时器先停掉
       root.innerHTML = '';
 
       var dateStr = qDate || DateUtil.toStr(DateUtil.today());
@@ -18302,20 +20747,65 @@ window.AK_OPS = [
       var self = this;
       var list = Store.sleepsOf(dateStr);
       var total = Store.sleepMinutes(dateStr);
+      var sess = Store.sleepSession;
+      var isToday = dateStr === DateUtil.toStr(DateUtil.today());
       var card = el('div', { class: 'card', style: { padding: '14px 16px', marginTop: '14px' } });
+
+      /* 计时按钮只在今天出现（开始 = 现在）；已开始的话在哪天都能结束 */
+      var acts = el('div', {
+        style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }
+      }, [
+        (sess || isToday) ? el('button', {
+          class: 'btn btn-sm' + (sess ? '' : ' btn-primary'),
+          style: sess ? { background: 'var(--green)', color: '#fff', borderColor: 'transparent' } : {},
+          title: sess ? '结束这次睡眠，按当前时间写入记录' : '以当前时间作为入睡时间，开始计时',
+          onclick: function (e) { e.stopPropagation(); toggleSleepTimer(); }
+        }, [sess ? '结束睡眠' : '开始睡眠']) : null,
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () { SleepDialog.open(dateStr); }
+        }, ['记录'])
+      ]);
 
       card.appendChild(el('div', { class: 'section-title' }, [
         V.svg(V.icons.moon, 16),
         '睡眠',
-        el('span', { class: 'q-count', text: total ? TimeUtil.humanMin(total) : '未记录' }),
-        el('button', {
-          class: 'btn btn-sm', style: { marginLeft: 'auto' },
-          onclick: function () { SleepDialog.open(dateStr); }
-        }, ['记录'])
+        el('span', { class: 'q-count', text: sess ? '计时中' : (total ? TimeUtil.humanMin(total) : '未记录') }),
+        acts
       ]));
 
+      /* ---- 正在计时：显示起睡时刻与已睡时长 ---- */
+      if (sess) {
+        var elapsed = el('b', {
+          style: { color: 'var(--green)', fontWeight: '600' },
+          text: elapsedText(sess.at)
+        });
+        var startLabel = (sess.date === DateUtil.toStr(DateUtil.today()) ? '' : sess.date.slice(5) + ' ') + sess.start;
+        card.appendChild(el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: '8px', margin: '2px 0 10px',
+            padding: '9px 11px', borderRadius: '10px',
+            background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.22)'
+          }
+        }, [
+          el('i', {
+            style: { width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', flex: '0 0 auto' }
+          }),
+          el('span', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: '正在睡眠 · 从 ' + startLabel + ' 开始' }),
+          el('span', { style: { marginLeft: 'auto', fontSize: '12.5px' } }, [elapsed])
+        ]));
+        startSleepTicker(elapsed, sess.at);
+      }
+
       if (!list.length) {
-        card.appendChild(el('div', { class: 'q-empty', text: '还没有记录睡眠，点右侧「记录」填写入睡和醒来时间。' }));
+        card.appendChild(el('div', {
+          class: 'q-empty',
+          text: sess
+            ? '这次睡眠还没结束，点「结束睡眠」后记录会出现在这里。'
+            : isToday
+              ? '还没有记录睡眠。点「开始睡眠」现在记一觉，或用「记录」补填入睡和醒来时间。'
+              : '这一天没有睡眠记录。'
+        }));
         return card;
       }
 
@@ -18564,6 +21054,49 @@ window.AK_OPS = [
   }
 
   function rerender() {
+    if (qHost) QuadrantPane.render(qHost);
+  }
+
+  /* ==========================================================
+   * 睡眠计时：点一下开始，再点一下结束
+   * ========================================================== */
+  var sleepTicker = null;
+
+  function stopSleepTicker() {
+    if (sleepTicker) { clearInterval(sleepTicker); sleepTicker = null; }
+  }
+
+  function elapsedText(at) {
+    var mins = Math.max(0, Math.round((Date.now() - Number(at)) / 60000));
+    return mins < 1 ? '不足 1 分钟' : '已睡 ' + TimeUtil.humanMin(mins);
+  }
+
+  /** 每 30 秒刷新一次已睡时长；节点被换掉（切页/重绘）就自动停 */
+  function startSleepTicker(node, at) {
+    stopSleepTicker();
+    sleepTicker = setInterval(function () {
+      if (!node.isConnected) { stopSleepTicker(); return; }
+      node.textContent = elapsedText(at);
+    }, 30000);
+  }
+
+  function toggleSleepTimer() {
+    var sess = Store.sleepSession;
+    if (sess) {
+      var res = Store.endSleep();
+      if (res && res.tooShort) {
+        UI.toast('不足 1 分钟，这次没有记录');
+      } else if (res && res.tooLong) {
+        UI.toast('这次计时超过 24 小时，已取消，请手动补记', 'err');
+      } else if (res && res.record) {
+        var today = DateUtil.toStr(DateUtil.today());
+        UI.toast('已记录 ' + TimeUtil.humanMin(res.minutes) +
+          (res.record.date === today ? '' : '（记入 ' + res.record.date.slice(5) + '）'));
+      }
+    } else {
+      Store.startSleep();
+      UI.toast('开始睡眠，醒来后再点「结束睡眠」');
+    }
     if (qHost) QuadrantPane.render(qHost);
   }
 
@@ -19183,7 +21716,35 @@ window.AK_OPS = [
     var root = host;
     var W = Store.settings.statsWidgets || { time: true, curve: true, sources: true };
 
-      var r = rangeDates(curRange);
+      // 学业生活白皮书全景横幅
+    var wpBanner = el('div', {
+      style: {
+        background: 'linear-gradient(135deg, var(--primary) 0%, #1e40af 100%)',
+        color: '#fff',
+        padding: '14px 18px',
+        borderRadius: '10px',
+        marginBottom: '14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+      }
+    }, [
+      el('div', {}, [
+        el('div', { style: { fontWeight: 'bold', fontSize: '15px' }, text: '📊 学业生活全景白皮书' }),
+        el('div', { style: { fontSize: '12px', opacity: 0.9, marginTop: '2px' }, text: '一键生成本学期学业GPA、作息健康、消费与心态综合总结长图' })
+      ]),
+      el('button', {
+        class: 'btn',
+        style: { background: '#ffffff', color: 'var(--primary)', fontWeight: 'bold', fontSize: '13px' },
+        onclick: function () {
+          if (global.WhitePaper) WhitePaper.openDialog();
+        }
+      }, ['生成白皮书'])
+    ]);
+    root.appendChild(wpBanner);
+
+    var r = rangeDates(curRange);
       // 学期还没开学：「本学期」区间会退化成今天，需要单独说清楚
       var sem = Store.currentSemester();
       var semStart = sem && sem.startDate ? sem.startDate : '';
@@ -19818,10 +22379,16 @@ window.AK_OPS = [
       return el('span', { class: cls, text: label });
     },
 
-    LABELS: { daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' },
-
-    repLabel: function (t) {
-      return (t.repeat && TaskRow.LABELS[t.repeat.type]) ? TaskRow.LABELS[t.repeat.type] : '';
+    /** 重复标记：↻ 每周五 · 10.30，完整规则放在 title 里 */
+    repChip: function (t) {
+      if (!t.repeat || t.repeat.type === 'none') return null;
+      var d = DateUtil.parse(t.dueDate);
+      return el('span', {
+        class: 'chip',
+        style: { padding: '0 6px', fontSize: '10.5px' },
+        title: Store.repeatSummary(t.repeat, t.dueDate),
+        text: '↻ ' + Store.repeatShort(t.repeat, t.dueDate) + (d ? ' · ' + DateUtil.mdShort(d) : '')
+      });
     },
 
     build: function (t, opts) {
@@ -19864,10 +22431,10 @@ window.AK_OPS = [
             el('div', { class: 'task-title', text: t.title }),
             pr ? TaskRow.progBadge(t) : null
           ]),
-          (meta.length || t.note || (t.tags && t.tags.length) || TaskRow.repLabel(t)) ? el('div', { class: 'task-meta' }, [
+          (meta.length || t.note || (t.tags && t.tags.length) || (t.repeat && t.repeat.type !== 'none')) ? el('div', { class: 'task-meta' }, [
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
-            (t.repeat && t.repeat.type !== 'none') ? el('span', { class: 'chip', style: { padding: '0 6px', fontSize: '10.5px' }, text: '↻ ' + TaskRow.repLabel(t) }) : null,
+            TaskRow.repChip(t),
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -19941,10 +22508,57 @@ window.AK_OPS = [
       );
 
       var fTitle = V.input({
-        placeholder: '例如：完成高数第三章习题',
+        placeholder: '例如：明天下午3点交高数作业 #作业 !重要',
         value: t ? t.title : '',
         dataset: { autofocus: '1' }
       });
+
+      /* ---- 自然语言实时解析与一键填充 ---- */
+      var nlpPreview = el('div', { class: 'nlp-preview', style: { display: 'none' } });
+      function refreshNLP() {
+        if (!global.TaskNLP || isEdit) return;
+        var val = fTitle.value.trim();
+        var p = TaskNLP.parse(val, { courses: Store.courses });
+        if (p && (p.hasDate || p.hasTime || p.courseId || (p.tags && p.tags.length) || p.important)) {
+          nlpPreview.innerHTML = '';
+          nlpPreview.style.display = 'flex';
+          var chips = [];
+          if (p.hasDate) chips.push('📅 ' + p.dueDate);
+          if (p.hasTime) chips.push('⏰ ' + p.dueTime);
+          if (p.courseName) chips.push('📚 ' + p.courseName);
+          if (p.tags && p.tags.length) chips.push('🏷️ ' + p.tags.join(' '));
+          if (p.important) chips.push('★ 重要');
+          chips.forEach(function (txt) {
+            nlpPreview.appendChild(el('span', { class: 'chip chip-primary', style: { padding: '2px 7px', fontSize: '11px' }, text: txt }));
+          });
+          var btn = el('button', {
+            class: 'btn btn-sm',
+            type: 'button',
+            style: { marginLeft: 'auto', padding: '2px 8px', fontSize: '11px' },
+            text: '一键填入',
+            onclick: function (e) {
+              e.preventDefault();
+              fTitle.value = p.title;
+              if (p.hasDate) fDate.value = p.dueDate;
+              if (p.hasTime) fTime.value = p.dueTime;
+              if (p.courseId) fCourse.value = p.courseId;
+              if (p.tags && p.tags.length) fTags.setValue(p.tags);
+              if (p.important) {
+                impOn = true;
+                fImp.style.background = 'var(--primary)';
+                fImp.style.color = '#fff';
+                fImp.textContent = '★ 已标记重要';
+              }
+              nlpPreview.style.display = 'none';
+              UI.toast('已识别并填入表单');
+            }
+          });
+          nlpPreview.appendChild(btn);
+        } else {
+          nlpPreview.style.display = 'none';
+        }
+      }
+      fTitle.addEventListener('input', refreshNLP);
 
       /* ---- 语音输入 ---- */
       var liveEl = el('div', { class: 'mic-live' });
@@ -20062,6 +22676,167 @@ window.AK_OPS = [
       var fRepeatInterval = V.input({ type: 'number', min: '1', value: curRep.interval || 1, style: { width: '64px' } });
       var fRepeatUntil = V.input({ type: 'date', value: curRep.until || '' });
 
+      /* 星期选择器（周重复·多选）：label 一..日 -> getDay 1..6,0 */
+      var WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+      function wdOfLabel(i) { return i === 6 ? 0 : i + 1; }
+      var curWDs = (curRep.type === 'weekly' && curRep.weekdays && curRep.weekdays.length)
+        ? curRep.weekdays.slice()
+        : (curRep.type === 'weekly' && fDate.value ? [DateUtil.parse(fDate.value).getDay()] : [1]);
+      var wdItems = WEEK_LABELS.map(function (lab, i) {
+        var w = wdOfLabel(i);
+        var b = el('button', {
+          type: 'button',
+          class: 'item' + (curWDs.indexOf(w) !== -1 ? ' on' : ''),
+          text: '周' + lab
+        });
+        b._wd = w;
+        b.addEventListener('click', function () { b.classList.toggle('cp-on'); refreshRepeat(); });
+        return b;
+      });
+      var fWeekdays = el('div', { class: 'chip-pick days', style: { marginTop: '6px' } }, wdItems);
+
+      /* 月规则子选择器（月重复） */
+      var curMonthRule = (curRep.type === 'monthly' && curRep.monthRule) ? curRep.monthRule : 'date';
+      var fMonthRule = V.select([
+        { value: 'date', label: '按几号' },
+        { value: 'pos', label: '按第几个星期几' },
+        { value: 'lastday', label: '月末最后一天' }
+      ], curMonthRule);
+      var curPos = (curRep.type === 'monthly' && curRep.monthRule === 'pos')
+        ? (curRep.pos === -1 ? -1 : (curRep.pos || 1)) : 1;
+      var fPos = V.select([
+        { value: '1', label: '第 1 个' }, { value: '2', label: '第 2 个' },
+        { value: '3', label: '第 3 个' }, { value: '4', label: '第 4 个' },
+        { value: '-1', label: '最后一个' }
+      ], String(curPos));
+      var curMWd = (curRep.type === 'monthly' && curRep.monthRule === 'pos' && curRep.wd != null) ? curRep.wd : 3;
+      var mwdItems = WEEK_LABELS.map(function (lab, i) {
+        var w = wdOfLabel(i);
+        var b = el('button', {
+          type: 'button',
+          class: 'item' + (w === curMWd ? ' on' : ''),
+          text: '周' + lab
+        });
+        b._wd = w;
+        b.addEventListener('click', function () {
+          mwdItems.forEach(function (x) { x.classList.remove('cp-on'); });
+          b.classList.add('cp-on'); refreshRepeat();
+        });
+        return b;
+      });
+      var fMonthWd = el('div', { class: 'chip-pick days', style: { marginTop: '6px' } }, mwdItems);
+
+      /* ---- 日期标签、单位与实时摘要：把「日期 = 第一期」讲清楚 ---- */
+      var REP_UNITS = { daily: '天', weekly: '周', monthly: '个月', yearly: '年' };
+      var dateLabel = el('label', { text: '截止日期' });
+      var dateField = el('div', { class: 'field' }, [dateLabel, fDate]);
+
+      var unitEl = el('span', { class: 'rep-iv', text: '周' });
+      var everyWrap = el('span', {
+        style: { display: 'inline-flex', alignItems: 'center', gap: '6px' }
+      }, [
+        el('span', { class: 'rep-iv', text: '间隔' }),
+        fRepeatInterval,
+        unitEl
+      ]);
+      var repeatLine = el('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }
+      }, [fRepeatType, everyWrap]);
+
+      var repeatSummaryEl = el('div', {
+        style: { fontSize: '12px', color: 'var(--text-2)', marginTop: '8px', lineHeight: '1.7' }
+      });
+      var repeatNoteEl = el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' },
+        text: '完成后自动生成下一期；把「最后一次」留空就一直重复。'
+      });
+      var weeklyOpts = el('div', { style: { marginTop: '6px', display: 'none' } }, [
+        el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginBottom: '4px' }, text: '重复在星期几（可多选）' }),
+        fWeekdays
+      ]);
+      var posRow = el('div', { class: 'field-row', style: { marginTop: '6px', display: 'none' } }, [
+        V.field('第几个', fPos), V.field('星期', fMonthWd)
+      ]);
+      var monthlyOpts = el('div', { style: { marginTop: '6px', display: 'none' } }, [
+        V.field('按月规则', fMonthRule), posRow
+      ]);
+      var repeatField = el('div', { class: 'field' }, [
+        el('label', { text: '重复' }), repeatLine, repeatSummaryEl, repeatNoteEl, weeklyOpts, monthlyOpts
+      ]);
+      var untilField = el('div', { class: 'field' }, [
+        el('label', { text: '最后一次（可选）' }),
+        fRepeatUntil,
+        el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '5px' },
+          text: '到达该日期后不再生成新一期；留空表示一直重复。'
+        })
+      ]);
+
+      /* 从控件读出一个干净的 repeat 对象（不含 dueDate） */
+      function gatherRepeat() {
+        var type = fRepeatType.value;
+        if (type === 'none') return { type: 'none' };
+        var rep = {
+          type: type,
+          interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
+          until: fRepeatUntil.value || ''
+        };
+        if (type === 'weekly') {
+          var wds = wdItems.filter(function (b) { return b.classList.contains('cp-on'); })
+                           .map(function (b) { return b._wd; }).sort(function (a, b) { return a - b; });
+          if (wds.length) rep.weekdays = wds;
+        }
+        if (type === 'monthly') {
+          rep.monthRule = fMonthRule.value;
+          if (fMonthRule.value === 'pos') {
+            rep.pos = (fPos.value === '-1') ? -1 : (parseInt(fPos.value, 10) || 1);
+            var mw = mwdItems.filter(function (b) { return b.classList.contains('cp-on'); })[0];
+            rep.wd = mw ? mw._wd : 3;
+          }
+        }
+        return rep;
+      }
+
+      function refreshRepeat() {
+        var on = fRepeatType.value !== 'none';
+        // 不重复时它就是普通截止日；重复时它是这一期（新建则是第一期）的日期
+        dateLabel.textContent = on ? (isEdit ? '这一期的日期' : '第一次的日期') : '截止日期';
+        everyWrap.style.display = on ? 'inline-flex' : 'none';
+        untilField.style.display = on ? '' : 'none';
+        repeatSummaryEl.style.display = on ? '' : 'none';
+        repeatNoteEl.style.display = on ? '' : 'none';
+        weeklyOpts.style.display = (on && fRepeatType.value === 'weekly') ? '' : 'none';
+        monthlyOpts.style.display = (on && fRepeatType.value === 'monthly') ? '' : 'none';
+        if (!on) return;
+
+        unitEl.textContent = REP_UNITS[fRepeatType.value] || '周期';
+        var rep = Store.sanitizeRepeat(gatherRepeat());
+        var first = Store.firstOccurrence(fDate.value, rep);
+        repeatSummaryEl.textContent = Store.repeatSummary(rep, first);
+        // 没有日期时说明里已经带了警告，这里再用琥珀色提醒一次
+        repeatSummaryEl.style.color = first ? 'var(--text-2)' : 'var(--amber)';
+        posRow.style.display = (fMonthRule.value === 'pos') ? '' : 'none';
+      }
+
+      fRepeatType.addEventListener('change', function () {
+        if (fRepeatType.value !== 'none' && !fDate.value) {
+          fDate.value = DateUtil.toStr(DateUtil.today());
+          UI.toast('已把第一期设为今天');
+        }
+        if (fRepeatType.value === 'weekly') {
+          var w = fDate.value ? DateUtil.parse(fDate.value).getDay() : 1;
+          wdItems.forEach(function (b) { b.classList.toggle('cp-on', b._wd === w); });
+        }
+        if (fRepeatType.value === 'monthly') fMonthRule.value = 'date';
+        refreshRepeat();
+      });
+      fRepeatInterval.addEventListener('input', refreshRepeat);
+      fRepeatUntil.addEventListener('change', refreshRepeat);
+      fDate.addEventListener('change', refreshRepeat);
+      fMonthRule.addEventListener('change', refreshRepeat);
+      fPos.addEventListener('change', refreshRepeat);
+      refreshRepeat();
+
       var body = [
         /* ---- 子任务关系提示：只读，改关系靠「转为子任务 / 提升为顶层」---- */
         parent ? el('div', { class: 'subtask-parent-bar' }, [
@@ -20080,20 +22855,16 @@ window.AK_OPS = [
         el('div', { class: 'field' }, [
           el('label', { text: parent ? '子任务内容' : '待办内容' }),
           el('div', { class: 'input-mic' }, [fTitle, micBtn]),
-          liveEl
+          liveEl,
+          nlpPreview
         ]),
         V.field('关联课程', fCourse, Store.courses.length ? '' : '还没有课程，可先到「课程表」添加'),
         el('div', { class: 'field-row' }, [
-          V.field('截止日期', fDate),
+          dateField,
           V.field('截止时间', fTime)
         ]),
-        V.field('重复', el('div', { class: 'field-inline' }, [
-          fRepeatType,
-          el('span', { class: 'rep-iv', text: '每' }),
-          fRepeatInterval,
-          el('span', { class: 'rep-iv', text: '周期' })
-        ]), '完成后自动生成下一期；留空「到」则一直重复'),
-        V.field('重复到（可选）', fRepeatUntil, '到达该日期后不再生成新一期'),
+        repeatField,
+        untilField,
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
@@ -20184,26 +22955,24 @@ window.AK_OPS = [
           el('button', {
             class: 'btn btn-primary', text: '保存',
             onclick: function () {
+              var rep = Store.sanitizeRepeat(gatherRepeat());
+              var firstDue = Store.firstOccurrence(fDate.value, rep);
               var d = {
                 title: fTitle.value,
                 courseId: fCourse.value,
-                dueDate: fDate.value,
+                dueDate: firstDue,
                 dueTime: fTime.value,
                 status: data.status,
                 priority: data.priority,
                 important: impOn,
                 note: fNote.value,
                 tags: fTags.getValue(),
-                repeat: (function () {
-                  if (fRepeatType.value === 'none') return { type: 'none' };
-                  return {
-                    type: fRepeatType.value,
-                    interval: Math.max(1, parseInt(fRepeatInterval.value, 10) || 1),
-                    until: fRepeatUntil.value || ''
-                  };
-                })()
+                repeat: rep
               };
               if (!d.title.trim()) { UI.toast('请填写待办内容', 'err'); fTitle.focus(); return; }
+              if (fRepeatType.value !== 'none' && !fDate.value) {
+                UI.toast('重复任务需要先定第一期日期', 'err'); fDate.focus(); return;
+              }
               if (isEdit) {
                 Store.updateTask(taskId, d);
               } else {
@@ -20422,6 +23191,49 @@ window.AK_OPS = [
         V.statCard(all.length - pending.length, '已完成', 'var(--green)')
       ]);
       root.appendChild(summary);
+
+      /* ---- 快速添加条（支持自然语言快速录入） ---- */
+      var quickInput = V.input({
+        placeholder: '⚡ 快速添加，如：明天下午3点交高数作业 #作业 !重要（Enter 提交）'
+      });
+      var quickBtn = el('button', {
+        class: 'btn btn-primary btn-sm',
+        style: { height: '32px', padding: '0 12px', flex: '0 0 auto' },
+        text: '添加',
+        onclick: doQuickAdd
+      });
+      function doQuickAdd() {
+        var val = (quickInput.value || '').trim();
+        if (!val) { UI.toast('请输入待办内容', 'err'); quickInput.focus(); return; }
+        var nlp = global.TaskNLP ? TaskNLP.parse(val, { courses: Store.courses }) : { title: val };
+        var d = {
+          title: nlp.title || val,
+          dueDate: nlp.dueDate || DateUtil.toStr(DateUtil.today()),
+          dueTime: nlp.dueTime || '',
+          courseId: nlp.courseId || '',
+          tags: nlp.tags || [],
+          priority: nlp.priority || 'normal',
+          important: !!nlp.important,
+          status: 'todo',
+          repeat: { type: 'none' }
+        };
+        Store.addTask(d);
+        quickInput.value = '';
+        UI.toast('已添加待办：' + d.title);
+        view.render();
+      }
+      quickInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          doQuickAdd();
+        }
+      });
+      var quickBar = el('div', { class: 'quick-task-bar' }, [
+        V.svg(V.icons.check, 16),
+        quickInput,
+        quickBtn
+      ]);
+      root.appendChild(quickBar);
 
       /* ---- 筛选 ---- */
       var tabs = [
@@ -22036,6 +24848,38 @@ window.AK_OPS = [
         }
       }),
       el('button', {
+        class: 'btn btn-sm', text: '清理末尾空行',
+        onclick: function () {
+          syncCells();
+          var removed = 0;
+          while (g.rows.length > 1 && g.cells[g.rows.length - 1].every(function (t) { return !(t || '').trim(); })) {
+            g.rows.pop(); g.cells.pop(); removed++;
+          }
+          if (removed) { UI.toast('已清理 ' + removed + ' 个空行'); draw(); }
+          else { UI.toast('末尾没有多余空行'); }
+        }
+      }),
+      el('button', {
+        class: 'btn btn-sm', text: '合并连堂课',
+        title: '检测同列连续节次的同名课程',
+        onclick: function () {
+          syncCells();
+          var merged = 0;
+          g.cols.forEach(function (col, ci) {
+            for (var ri = 1; ri < g.rows.length; ri++) {
+              var prev = (g.cells[ri - 1] && g.cells[ri - 1][ci] || '').trim();
+              var cur = (g.cells[ri] && g.cells[ri][ci] || '').trim();
+              if (prev && cur && prev === cur) {
+                g.cells[ri][ci] = '';
+                merged++;
+              }
+            }
+          });
+          if (merged) { UI.toast('已合并 ' + merged + ' 节连堂课'); draw(); }
+          else { UI.toast('未发现连续同名课程'); }
+        }
+      }),
+      el('button', {
         class: 'btn btn-sm', text: '重新识别',
         onclick: function () { S.step = 'pick'; S.grid = null; draw(); }
       })
@@ -22064,10 +24908,14 @@ window.AK_OPS = [
       ]));
       g.cols.forEach(function (col, ci) {
         var val = (g.cells[ri] && g.cells[ri][ci]) || '';
+        var isFilled = !!val.trim();
         var ta = el('textarea', {
-          class: 'ocr-cell',
+          class: 'ocr-cell' + (isFilled ? ' has-content' : ''),
           rows: val.split('\n').length > 1 ? 3 : 2,
-          dataset: { r: ri, c: ci }
+          dataset: { r: ri, c: ci },
+          oninput: function () {
+            ta.classList.toggle('cp-has-content', !!ta.value.trim());
+          }
         });
         ta.value = val;
         tr.appendChild(el('td', {}, [ta]));
@@ -22195,6 +25043,20 @@ window.AK_OPS = [
       el('p', { text: '课程名、地点、老师已经分开，直接改就行；不需要的可以删掉。周次写成「1-16」「单周」「双周」，留空表示整个学期。' })
     ]));
 
+    var itemFilter = (S._itemFilter || '').trim().toLowerCase();
+    var searchBox = el('div', { class: 'ocr-search-bar' }, [
+      V.svg(V.icons.search, 15),
+      el('input', {
+        placeholder: '筛选课程名、老师或地点…',
+        value: S._itemFilter || '',
+        oninput: function () {
+          S._itemFilter = this.value;
+          draw();
+        }
+      })
+    ]);
+    bodyEl.appendChild(searchBox);
+
     if (!items.length) {
       bodyEl.appendChild(el('div', { class: 'q-empty', text: '没有课程，返回上一步补几个格子吧' }));
     }
@@ -22213,10 +25075,18 @@ window.AK_OPS = [
       var weekVal = it.weeks || (it.weekType === 'all' && it.startWeek === 1 &&
                     it.endWeek === Store.semester.weeks ? '' : it.weeks);
 
+      var isDup = Store.courses.some(function (c) {
+        return c.day === it.day && c.periodId === it.periodId && c.name === it.name;
+      });
+      if (itemFilter) {
+        var lineStr = [it.name, it.location, it.teacher].join(' ').toLowerCase();
+        if (lineStr.indexOf(itemFilter) < 0) return;
+      }
       list.appendChild(el('div', { class: 'ocr-item' }, [
         el('div', { class: 'ocr-item-head' }, [
           el('span', { class: 'chip chip-primary', text: '周' + dn[it.day - 1].slice(1) }),
           el('span', { class: 'ocr-item-period', text: it.periodName }),
+          isDup ? el('span', { class: 'ocr-dup-badge', text: '已存在' }) : null,
           el('button', {
             class: 'icon-btn', title: '删除这门课',
             onclick: function () { S.items.splice(i, 1); draw(); }
@@ -22247,6 +25117,20 @@ window.AK_OPS = [
         disabled: items.length ? null : 'disabled',
         onclick: importItems
       }, ['导入 ' + items.length + ' 门课']),
+      el('button', {
+        class: 'btn btn-sm',
+        text: '一键设为 1-' + Store.semester.weeks + '周',
+        onclick: function () {
+          items.forEach(function (it) {
+            it.weekType = 'all';
+            it.startWeek = 1;
+            it.endWeek = Store.semester.weeks;
+            it.weeks = '1-' + Store.semester.weeks + '周';
+          });
+          draw();
+          UI.toast('已将所有课程设为 1-' + Store.semester.weeks + ' 周');
+        }
+      }),
       el('button', {
         class: 'btn', text: '返回网格',
         onclick: function () { S.step = S.grid ? 'grid' : 'pick'; draw(); }
@@ -23651,6 +26535,79 @@ window.AK_OPS = [
     });
   }
 
+
+  /* ---------- 🎯 心愿单管理弹窗 ---------- */
+  function openWishlistModal(onDone) {
+    var all = global.AK_OPS || [];
+    var highStarOps = all.filter(function (o) { return o[1] >= 5; });
+    var searchVal = '';
+
+    var listWrap = el('div', { style: { maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' } });
+
+    function renderList() {
+      listWrap.innerHTML = '';
+      var curWish = Store.getWishlist ? Store.getWishlist() : [];
+      var filtered = highStarOps.filter(function (o) {
+        if (!searchVal) return true;
+        return o[0].toLowerCase().indexOf(searchVal.toLowerCase()) >= 0;
+      });
+
+      if (!filtered.length) {
+        listWrap.appendChild(el('div', { style: { textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }, text: '未找到匹配的干员' }));
+        return;
+      }
+
+      filtered.forEach(function (o) {
+        var isW = curWish.indexOf(o[0]) >= 0;
+        var row = el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 12px', borderRadius: '6px', background: isW ? 'var(--primary-weak)' : 'var(--bg-weak)',
+            border: '1px solid ' + (isW ? 'var(--primary)' : 'var(--border)'), cursor: 'pointer'
+          },
+          onclick: function () {
+            if (Store.toggleWishlist) {
+              Store.toggleWishlist(o[0]);
+              renderList();
+              if (onDone) onDone();
+            }
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            el('b', { style: { color: starColor(o[1]) }, text: '★' + o[1] }),
+            el('span', { style: { fontWeight: isW ? 'bold' : 'normal' }, text: o[0] }),
+            el('span', { style: { fontSize: '11px', color: 'var(--text-muted)' }, text: o[7] === 'classic' ? '中坚' : '标准' })
+          ]),
+          el('button', {
+            class: 'btn btn-sm ' + (isW ? 'btn-primary' : ''),
+            style: { padding: '2px 8px', fontSize: '12px' }
+          }, [isW ? '❤️ 已锁定' : '+ 加入心愿'])
+        ]);
+        listWrap.appendChild(row);
+      });
+    }
+
+    var searchInput = V.input({
+      type: 'text', placeholder: '搜索 5★/6★ 干员名称...',
+      oninput: function () { searchVal = this.value.trim(); renderList(); }
+    });
+
+    renderList();
+
+    V.modal({
+      title: '🎯 锁定心愿干员 (最多 2 位)',
+      width: '420px',
+      body: [
+        el('div', { class: 'ocr-hint', text: '锁定心愿后，系统将持续追踪其在标准/中坚池的轮换周期，并在临近到货时在首页提醒你加速备考攒玉。' }),
+        searchInput,
+        listWrap
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '完成', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
+      ])
+    });
+  }
+
   function openGacha() {
     var pm = Store.pomodoro;
 
@@ -23658,6 +26615,7 @@ window.AK_OPS = [
     var poolEl = el('div', { class: 'gc-pool' });
     var sparkEl = el('div', { class: 'gc-spark' });
     var previewEl = el('div', { class: 'gc-preview' });
+    var wishEl = el('div', { class: 'gc-wishlist' });
     var rateEl = el('div', { class: 'gc-rate' });
     var lkBox = el('div', { class: 'gc-rate cp-gc-spark-box' });
     var resultBox = el('div', { class: 'gc-result' });
@@ -23730,6 +26688,48 @@ window.AK_OPS = [
           el('span', { text: p.six.join(' · ') })
         ]));
       });
+
+      /* 心愿单到货预报 */
+      wishEl.innerHTML = '';
+      if (Store.wishlistForecast) {
+        var forecasts = Store.wishlistForecast();
+        var wishCard = el('div', { class: 'card cp-wish-card', style: { padding: '12px 14px', marginBottom: '12px' } });
+        var wishHead = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' } }, [
+          el('div', { style: { fontWeight: 'bold', fontSize: '13.5px' } }, ['🎯 我的心愿干员与到货预警']),
+          el('button', {
+            class: 'btn btn-sm', style: { padding: '2px 8px', fontSize: '12px' },
+            onclick: function () { openWishlistModal(function () { drawHead(); }); }
+          }, ['管理心愿单 (最多2位)'])
+        ]);
+        wishCard.appendChild(wishHead);
+
+        if (!forecasts.length) {
+          wishCard.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '暂未锁定心愿干员。点击「管理心愿单」设置，系统将为你计算未来轮换倒计时与攒玉进度。' }));
+        } else {
+          var fGrid = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+          forecasts.forEach(function (f) {
+            var row = el('div', {
+              style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-weak)', padding: '6px 10px', borderRadius: '6px' }
+            }, [
+              el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                el('b', { style: { color: starColor(f.star) }, text: f.name }),
+                el('span', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '· ' + f.poolName })
+              ]),
+              el('div', { style: { textAlign: 'right', fontSize: '12px' } }, [
+                el('span', {
+                  style: { fontWeight: 'bold', color: f.isCurrent ? 'var(--red)' : (f.daysLeft <= 7 ? 'var(--amber)' : 'var(--text-2)') },
+                  text: f.isCurrent ? '🔥 当期 UP 寻访中！' : (f.daysLeft > 0 ? ('还有 ' + f.daysLeft + ' 天轮换') : '即将到来')
+                }),
+                el('span', { style: { marginLeft: '8px', color: 'var(--text-muted)' }, text: '备考玉 ' + f.readyPct + '%' })
+              ])
+            ]);
+            fGrid.appendChild(row);
+          });
+          wishCard.appendChild(fGrid);
+        }
+        wishEl.appendChild(wishCard);
+      }
+
 
       var s = Store.gachaStats();
       rateEl.innerHTML =
@@ -24092,23 +27092,41 @@ window.AK_OPS = [
       root.innerHTML = '';
       var pm = Store.pomodoro;
 
-      /* ================= 积分概览 ================= */
+      var isAcademic = Store.isAcademicMode && Store.isAcademicMode();
       var isGacha = pm.mode === 'gacha';
-      root.appendChild(el('div', { class: 'task-summary' }, [
-        isGacha
-          ? V.statCard(pm.jade, '合成玉', 'var(--primary)', 'is-big')
-          : V.statCard(pm.points, '可用积分', 'var(--primary)', 'is-big'),
-        V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
-        isGacha
-          ? V.statCard(Store.gachaStats().owned, '已获得干员', 'var(--amber)')
-          : V.statCard(pm.trees.length, '我的森林（棵）', 'var(--amber)'),
-        V.statCard(pm.earned, '累计获得', 'var(--text-2)')
-      ]));
+
+      /* ================= 概览卡片 ================= */
+      if (isAcademic) {
+        var totalH = Math.round((pm.focusMinutes || 0) / 60 * 10) / 10;
+        root.appendChild(el('div', { class: 'task-summary' }, [
+          V.statCard(totalH, '深度专注（小时）', 'var(--primary)', 'is-big'),
+          V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
+          V.statCard((pm.sessions || []).length, '专注次数', 'var(--amber)')
+        ]));
+      } else {
+        root.appendChild(el('div', { class: 'task-summary' }, [
+          isGacha
+            ? V.statCard(pm.jade, '合成玉', 'var(--primary)', 'is-big')
+            : V.statCard(pm.points, '可用积分', 'var(--primary)', 'is-big'),
+          V.statCard(pm.focusMinutes, '累计专注（分钟）', 'var(--green)'),
+          isGacha
+            ? V.statCard(Store.gachaStats().owned, '已获得干员', 'var(--amber)')
+            : V.statCard(pm.trees.length, '我的森林（棵）', 'var(--amber)'),
+          V.statCard(pm.earned, '累计获得', 'var(--text-2)')
+        ]));
+      }
 
       /* ================= 计时器 ================= */
       root.appendChild(this.timerCard());
 
-      /* ================= 专注统计 ================= */
+      /* ================= 🎧 白噪音伴音 ================= */
+      var wnCard = whiteNoiseCard();
+      if (wnCard) root.appendChild(wnCard);
+
+      /* ================= 专注里程碑 / 统计 ================= */
+      if (isAcademic) {
+        root.appendChild(academicMilestoneCard(pm));
+      }
       root.appendChild(statsCard());
 
       /* ================= 规则 ================= */
@@ -24271,6 +27289,106 @@ window.AK_OPS = [
    * 组件
    * ========================================================== */
   /** 专注时长统计：今日 / 本周 / 累计 + 近 7 天柱状图 */
+  /* ---------- 🎧 白噪音伴音控制器 ---------- */
+  function whiteNoiseCard() {
+    if (!global.WhiteNoise) return null;
+    var wn = global.WhiteNoise;
+    var st = wn.state();
+
+    var card = el('div', { class: 'card cp-wn-card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    var titleRow = el('div', { class: 'section-title', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' } }, [
+      el('span', {}, ['🎧 专注伴音 · 原生白噪音']),
+      el('button', {
+        class: 'btn btn-sm ' + (st.playing ? 'btn-danger' : 'btn-primary'),
+        style: { padding: '4px 12px' },
+        onclick: function () {
+          wn.toggle();
+          view.render();
+        }
+      }, [st.playing ? '⏸️ 停止伴音' : '▶️ 开启伴音'])
+    ]);
+    card.appendChild(titleRow);
+
+    // 声音选择标签
+    var chipRow = el('div', { class: 'cp-wn-chips', style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } });
+    Object.keys(wn.SOUNDS).forEach(function (k) {
+      var snd = wn.SOUNDS[k];
+      var active = st.type === k;
+      var chip = el('button', {
+        class: 'btn btn-sm ' + (active ? 'btn-primary' : ''),
+        style: { borderRadius: '16px', padding: '4px 10px', fontSize: '13px' },
+        onclick: function () {
+          wn.setType(k);
+          if (!st.playing) wn.play(k);
+          view.render();
+        }
+      }, [snd.icon + ' ' + snd.name]);
+      chipRow.appendChild(chip);
+    });
+    card.appendChild(chipRow);
+
+    // 音量调节
+    var volRow = el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
+      el('span', { style: { fontSize: '13px', color: 'var(--text-muted)' }, text: '音量' }),
+      el('input', {
+        type: 'range', min: '0', max: '100', value: String(Math.round(st.volume * 100)),
+        style: { flex: 1 },
+        oninput: function () {
+          wn.setVolume(this.value / 100);
+        }
+      }),
+      el('span', { style: { fontSize: '12px', minWidth: '32px', textAlign: 'right', color: 'var(--text-muted)' }, text: Math.round(st.volume * 100) + '%' })
+    ]);
+    card.appendChild(volRow);
+
+    return card;
+  }
+
+  /* ---------- 🎓 纯粹学术模式里程碑 ---------- */
+  function academicMilestoneCard(pm) {
+    var card = el('div', { class: 'card cp-academic-card', style: { padding: '16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title', style: { marginBottom: '12px' } }, ['🎓 深度专注学业里程碑']));
+
+    var totalHours = Math.round((pm.focusMinutes || 0) / 60 * 10) / 10;
+    var MILESTONES = [
+      { h: 10, name: '初涉学海', desc: '累计深度专注达到 10 小时', icon: '🌱' },
+      { h: 30, name: '静水流深', desc: '累计深度专注达到 30 小时', icon: '🌿' },
+      { h: 60, name: '专精覃思', desc: '累计深度专注达到 60 小时', icon: '🌳' },
+      { h: 100, name: '百炼成钢', desc: '累计深度专注达到 100 小时', icon: '🏆' },
+      { h: 200, name: '登堂入室', desc: '累计深度专注达到 200 小时', icon: '👑' }
+    ];
+
+    var list = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } });
+    MILESTONES.forEach(function (m) {
+      var reached = totalHours >= m.h;
+      var pct = Math.min(100, Math.round(totalHours / m.h * 100));
+      var row = el('div', {
+        class: 'cp-milestone-row',
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: reached ? 'var(--bg-weak)' : 'var(--bg)',
+          border: '1px solid ' + (reached ? 'var(--primary)' : 'var(--border)'),
+          opacity: reached ? 1 : 0.8
+        }
+      }, [
+        el('div', { style: { fontSize: '24px', marginRight: '12px' } }, [m.icon]),
+        el('div', { style: { flex: 1 } }, [
+          el('div', { style: { fontWeight: 'bold', fontSize: '14px' } }, [
+            m.name,
+            reached ? el('span', { class: 'badge', style: { marginLeft: '8px', background: 'var(--green)', color: '#fff' } }, ['已达成']) : null
+          ]),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' } }, [m.desc + ' · 当前 ' + totalHours + '/' + m.h + 'h (' + pct + '%)'])
+        ])
+      ]);
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    return card;
+  }
+
   function statsCard() {
     var st = Store.focusStats();
     var days = Store.focusByDay(7);
@@ -24475,6 +27593,7 @@ window.AK_OPS = [
   function pause() {
     T.running = false;
     stopTick();
+    if (global.WhiteNoise) WhiteNoise.stop();
     Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -26223,6 +29342,7 @@ window.AK_OPS = [
 
   var SUB_META = {
     periods: { name: '课程时间', desc: '设置每天几节课、每节课的起止时间' },
+    schedule: { name: '课表显示', desc: '是否在课表里显示周六、周日两列' },
     semester: { name: '学期与周次', desc: '学期列表、起止日期与周数' },
     look: { name: '外观', desc: '主题配色与背景图片' },
     tags: { name: '标签', desc: '图标、颜色与常用标签组合' },
@@ -26385,6 +29505,7 @@ window.AK_OPS = [
 
             if (SUB === 'pet') { this.renderPet(root); return; }
 
+            if (SUB === 'energy') { renderEnergyPage(root); return; }
             if (SUB === 'subtask') { renderSubtaskPage(root); return; }
 
             if (SUB === 'look') {
@@ -26426,23 +29547,77 @@ window.AK_OPS = [
 
         /* --- 机制主题皮肤开关 --- */
         var skinOn = st.themeSkin !== false;
+        var subThemeBox = el('div', { style: { marginTop: '12px', display: skinOn ? 'block' : 'none' } });
+
+        function renderSubTheme() {
+          subThemeBox.innerHTML = '';
+          var curMode = (Store.state.pomodoro && Store.state.pomodoro.mode) || 'forest';
+          if (curMode === 'gacha') {
+            var curArk = Store.state.settings.arkTheme || 'terminal';
+            var arkRow = el('div', { class: 'seg-row', style: { marginTop: '4px' } });
+            Object.keys(Theme.ARK_THEMES || {}).forEach(function (k) {
+              var a = Theme.ARK_THEMES[k];
+              var btn = el('button', {
+                class: 'seg-btn' + (curArk === k ? ' on' : ''),
+                type: 'button',
+                onclick: function () {
+                  Theme.setArkTheme(k);
+                  renderSubTheme();
+                  UI.toast('明日方舟主题：' + a.name);
+                }
+              }, [a.name]);
+              arkRow.appendChild(btn);
+            });
+            subThemeBox.appendChild(el('div', { class: 'switch-text', style: { marginBottom: '4px' } }, [
+              el('b', { text: '明日方舟主题风格' }),
+              el('span', { text: '经典罗德岛终端（参考图2）或 集成战略水墨秘符（参考图1）' })
+            ]));
+            subThemeBox.appendChild(arkRow);
+          } else {
+            var curNat = Store.state.settings.natureTheme || 'pine';
+            var natRow = el('div', { class: 'seg-row', style: { marginTop: '4px' } });
+            Object.keys(Theme.NATURE_THEMES || {}).forEach(function (k) {
+              var n = Theme.NATURE_THEMES[k];
+              var btn = el('button', {
+                class: 'seg-btn' + (curNat === k ? ' on' : ''),
+                type: 'button',
+                onclick: function () {
+                  Theme.setNatureTheme(k);
+                  renderSubTheme();
+                  UI.toast('自然主题：' + n.name);
+                }
+              }, [n.name]);
+              natRow.appendChild(btn);
+            });
+            subThemeBox.appendChild(el('div', { class: 'switch-text', style: { marginBottom: '4px' } }, [
+              el('b', { text: '自然意象主题风格（纯粹自然·深浅双模）' }),
+              el('span', { text: '晨雾松林、极光苍穹、暮霞熔金或山岚青黛，完全独立于游戏元素' })
+            ]));
+            subThemeBox.appendChild(natRow);
+          }
+        }
+        renderSubTheme();
+
         var skinSw = el('button', {
           class: 'switch' + (skinOn ? ' on' : ''),
           type: 'button',
           onclick: function () {
             skinOn = !skinOn;
             skinSw.classList.toggle('cp-on', skinOn);
+            subThemeBox.style.display = skinOn ? 'block' : 'none';
             Theme.setThemeSkin(skinOn);
+            renderSubTheme();
             UI.toast(skinOn ? '已开启机制主题皮肤' : '已关闭机制主题皮肤');
           }
         }, [el('i')]);
         lookCard.appendChild(el('div', { class: 'switch-row', style: { marginTop: '2px' } }, [
           el('div', { class: 'switch-text' }, [
             el('b', { text: '机制主题皮肤' }),
-            el('span', { text: '开启后自动跟随奖励机制：森林=自然生机、抽卡=工厂硬核；主色仍可自定义覆盖' })
+            el('span', { text: '开启后自动跟随奖励机制：森林=自然生机、抽卡=方舟战术；主色仍可自定义覆盖' })
           ]),
           skinSw
         ]));
+        lookCard.appendChild(subThemeBox);
 
         /* --- 明暗模式 --- */
         var modeVal = st.themeMode || 'auto';
@@ -26670,6 +29845,38 @@ window.AK_OPS = [
         root.appendChild(periodCard);
 
             }
+
+      if (SUB === 'schedule') {
+  /* ===================== 课表显示 ===================== */
+        var schCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+        schCard.appendChild(el('div', { class: 'section-title' }, ['课表显示']));
+        schCard.appendChild(el('p', {
+          style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px', lineHeight: '1.7' },
+          text: '只决定课表画几列，不会删除或隐藏周末的课程数据。关掉后，周末的课仍会出现在今日、月历和课程列表里。'
+        }));
+        var wOn = Store.settings.showWeekend !== false;
+        var wSw = el('button', {
+          class: 'switch' + (wOn ? ' on' : ''),
+          onclick: function () {
+            wOn = !wOn;
+            wSw.classList.toggle('cp-on', wOn);
+            Store.updateSettings({ showWeekend: wOn });
+            UI.toast(wOn ? '课表已显示周末' : '课表已隐藏周末');
+          }
+        }, [el('i')]);
+        schCard.appendChild(el('div', { class: 'switch-row' }, [
+          el('div', { class: 'switch-text' }, [
+            el('b', { text: '展示周六、周日' }),
+            el('span', { text: '关掉后只显示周一到周五，表格更紧凑' })
+          ]),
+          wSw
+        ]));
+        schCard.appendChild(el('p', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '8px 0 0', lineHeight: '1.7' },
+          text: '课表页右上角的「隐藏周末 / 显示周末」也能快速切换，两处是同一个开关。'
+        }));
+        root.appendChild(schCard);
+      }
 
       if (SUB === 'reward') {
   /* ===================== 奖励机制 ===================== */
@@ -27721,6 +30928,7 @@ window.AK_OPS = [
   var SUBS = [
     /* 基础设置 */
     { key: 'periods', name: '课程时间', desc: '每天几节课、上下课时间', icon: V.icons.clock, color: '#4f46e5', group: 'basic' },
+    { key: 'schedule', name: '课表显示', desc: '是否显示周六、周日两列', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
     { key: 'semester', name: '学期与周次', desc: '学期名称、开学日期、总周数', icon: V.icons.calendar, color: '#0ea5e9', group: 'basic' },
     { key: 'look', name: '外观', desc: '主题配色、自定义颜色、背景图片', icon: V.icons.palette, color: '#ec4899', group: 'basic' },
     { key: 'tags', name: '标签', desc: '标签图标、颜色与常用标签组合', icon: V.icons.tag, color: '#8b5cf6', group: 'basic' },
@@ -27730,6 +30938,7 @@ window.AK_OPS = [
     { key: 'rec', name: '记录偏好', desc: '饮食与睡眠记录的开关', icon: V.icons.quadrant, color: '#14b8a6', group: 'module' },
     { key: 'diary', name: '日记', desc: '凌晨归属、心情统计的开关', icon: V.icons.book, color: '#8b5cf6', group: 'module' },
     /* 记录与统计 */
+    { key: 'energy', name: '精力高峰与作息', desc: '自定义高效时段，智能匹配待办', icon: V.icons.star, color: '#f59e0b', group: 'record' },
     { key: 'subtask', name: '子任务', desc: '完成与删除时父子任务怎么联动', icon: V.icons.check, color: '#0ea5e9', group: 'record' },
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'record' },
     { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'record' },
@@ -29188,7 +32397,94 @@ window.AK_OPS = [
    * 前三项互相影响（能形成「勾了 A 就等于勾了 B」的闭环），
    * 所以每一项都写明「当前组合下会发生什么」，并对冲突组合给出警告。
    * ========================================================== */
-  function renderSubtaskPage(root) {
+  
+  /* ==========================================================
+   * 二级页：生理精力与作息动态匹配
+   * ========================================================== */
+  function renderEnergyPage(root) {
+    var eg = (Store.state.settings && Store.state.settings.energy) || {
+      custom: false,
+      peaks: [
+        { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+        { start: '15:00', end: '17:30', name: '午后高效期' },
+        { start: '19:30', end: '21:30', name: '晚间静心期' }
+      ]
+    };
+
+    var curState = Store.currentEnergyState ? Store.currentEnergyState() : { isPeak: false, icon: '🌤️', label: '平稳期', advice: '精力平稳' };
+
+    var card = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['生理精力与作息动态匹配']));
+    card.appendChild(el('p', {
+      style: { fontSize: '13px', color: 'var(--text-3)', marginBottom: '14px', lineHeight: '1.7' },
+      text: '根据你的作息节律评估大脑运转效能。待办任务可标记为「⚡ 深度专注 / ☕ 轻松杂务」，系统将在黄金时段推荐高能耗任务，在疲惫时段建议休息或处理杂务。'
+    }));
+
+    var statusCard = el('div', {
+      style: {
+        padding: '12px 14px', borderRadius: '8px', marginBottom: '16px',
+        background: curState.isPeak ? 'var(--primary-weak)' : 'var(--bg-weak)',
+        border: '1px solid ' + (curState.isPeak ? 'var(--primary)' : 'var(--border)')
+      }
+    }, [
+      el('div', { style: { fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' } }, [curState.icon + ' 当前状态：' + curState.label]),
+      el('div', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: curState.advice })
+    ]);
+    card.appendChild(statusCard);
+
+    var toggleRow = el('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderTop: '1px solid var(--border)' }
+    }, [
+      el('div', {}, [
+        el('b', { text: '自定义精力高峰时段' }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: '关闭时默认使用早/中/晚三段大学标准黄金作息' })
+      ]),
+      V.toggle(eg.custom, function (val) {
+        eg.custom = val;
+        Store.updateSettings({ energy: eg });
+        view.render();
+      })
+    ]);
+    card.appendChild(toggleRow);
+
+    if (eg.custom) {
+      var peakList = el('div', { style: { marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' } });
+      eg.peaks.forEach(function (p, idx) {
+        var row = el('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-weak)', padding: '8px 12px', borderRadius: '8px' }
+        }, [
+          el('input', {
+            type: 'text', value: p.name, style: { width: '130px', height: '32px' },
+            onchange: function () {
+              p.name = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          }),
+          el('input', {
+            type: 'time', value: p.start, style: { width: '90px', height: '32px' },
+            onchange: function () {
+              p.start = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          }),
+          el('span', { text: '至' }),
+          el('input', {
+            type: 'time', value: p.end, style: { width: '90px', height: '32px' },
+            onchange: function () {
+              p.end = this.value;
+              Store.updateSettings({ energy: eg });
+            }
+          })
+        ]);
+        peakList.appendChild(row);
+      });
+      card.appendChild(peakList);
+    }
+
+    root.appendChild(card);
+  }
+
+function renderSubtaskPage(root) {
     var cur = Store.subtaskOpts();
 
     function save(patch) {
@@ -29328,6 +32624,11 @@ window.AK_OPS = [
     }));
 
     var opts = [
+      {
+        k: 'academic', name: '纯粹学术', icon: V.icons.star || V.icons.clock, color: '#2563eb',
+        desc: '非游戏化无干扰：专注于工时累计与里程碑，隐藏商城与虚拟代币',
+        bal: '纯粹专注'
+      },
       {
         k: 'forest', name: '森林', icon: V.icons.tree || V.icons.idea, color: '#4c8c4a',
         desc: '用积分种树、浇水，看着森林一天天长起来',
@@ -36914,21 +40215,23 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   var CN = '\\u4e00-\\u9fa5';
 
   var LOC_RES = [
-    // 明理教学楼 / 实验楼 / 图书馆 / 体育馆 / 机房…
-    new RegExp('[' + CN + 'A-Za-z]{0,6}(?:教学楼|实验楼|办公楼|综合楼|图书馆|体育馆|体育中心|机房|实验室|报告厅|阶梯教室|多媒体教室|会议室|操场|篮球场|风雨操场)'),
-    // 教三-301 / 逸夫馆A201 / 三教301 / 教=301（「三」常被认成 =）
-    /[东南西北]?[一二三四五六七八九十\d]?\s?[教馆厅室房]\s*[一二三四五六七八九十]?\s*[-—－=＝]?\s*[A-Za-z]{0,2}\s?\d{2,4}/,
+    // 综合楼/教学楼/理教/文科楼/机房/实验室/操场/体育馆...
+    new RegExp('[' + CN + 'A-Za-z0-9]{0,8}(?:教学楼|实验楼|办公楼|综合楼|图书馆|体育馆|体育中心|机房|语音室|实验室|报告厅|阶梯教室|多媒体教室|会议室|大礼堂|操场|田径场|篮球场|网球场|风雨操场)'),
+    // 主楼/理教/文科楼/工训/综教/东阶/西阶/研楼 + 教室编号
+    new RegExp('(?:主楼|理教|文科楼|逸夫馆|工训|综教|东阶|西阶|研楼|主校区|南校区|北校区)\s*[-—－=＝]?\s*[A-Za-z0-9]{0,3}\s*\d{2,4}'),
+    // 教三-301 / 逸夫馆A201 / 三教301 / 教=301
+    /[东南西北]?[一二三四五六七八九十\d]?\s?[教馆厅室房幢]\s*[一二三四五六七八九十]?\s*[-—－=＝]?\s*[A-Za-z0-9]{0,2}\s?\d{2,4}/,
     // 明理楼 302 / 逸夫馆A201 / 一教 101
-    new RegExp('[' + CN + ']{1,5}[楼馆厅堂]\\s?[-—]?\\s?[A-Za-z]{0,2}\\s?\\d{2,4}'),
+    new RegExp('[' + CN + ']{1,6}[楼馆厅堂幢]\s?[-—]?\s?[A-Za-z0-9]{0,2}\s?\d{2,4}'),
     // A101 / B-302 / N 201
-    /\b[A-Za-z]{1,3}\s?[-—]?\s?\d{2,4}\b/,
-    // 3号楼 / 201室
-    /\d{1,3}\s?[号楼室]/
+    /[A-Za-z]{1,3}\s?[-—]?\s?\d{2,4}/,
+    // 3号楼 / 201室 / 2号机房
+    /\d{1,3}\s?[号楼室幢座]/
   ];
 
-  var TEACHER_RE = new RegExp('[' + CN + ']{2,4}(?:老师|教授|讲师|副教授|助教)');
+  var TEACHER_RE = new RegExp('(?:(?:教师|老师|讲师)[:：]\s*[' + CN + ']{2,4})|([' + CN + ']{2,4}(?:老师|教授|讲师|副教授|助教|院士))');
 
-  var WEEK_RE = /\d{1,2}\s*[-~—－至]\s*\d{1,2}\s*周?|\d{1,2}\s*周|单周|双周|全周|前\s*\d{1,2}\s*周|后\s*\d{1,2}\s*周/g;
+  var WEEK_RE = /\d{1,2}\s*[-~—－至]\s*\d{1,2}\s*(?:周|\(?(?:单|双)周?\)?)|(?:\d{1,2}\s*周)|单周|双周|全周|前\s*\d{1,2}\s*周|后\s*\d{1,2}\s*周/g;
 
   function tidy(s) {
     return String(s || '')
@@ -37026,16 +40329,21 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
 
   /** 周次文本 → { weekType, startWeek, endWeek } */
   function parseWeeks(text, totalWeeks) {
-    var s = String(text || '');
+    var s = String(text || '').trim();
     if (!s) return null;
-    if (/单周/.test(s)) return { weekType: 'odd', startWeek: 1, endWeek: totalWeeks || 20 };
-    if (/双周/.test(s)) return { weekType: 'even', startWeek: 1, endWeek: totalWeeks || 20 };
+    var tot = totalWeeks || 20;
+    var isOdd = /单周|\(单\)|（单）/.test(s);
+    var isEven = /双周|\(双\)|（双）/.test(s);
+    var wType = isOdd ? 'odd' : isEven ? 'even' : 'all';
+
     var m = s.match(/(\d{1,2})\s*[-~—－至]\s*(\d{1,2})/);
     if (m) {
       var a = Math.max(1, parseInt(m[1], 10));
       var b = Math.max(a, parseInt(m[2], 10));
-      return { weekType: 'all', startWeek: a, endWeek: b };
+      return { weekType: wType, startWeek: a, endWeek: b };
     }
+    if (isOdd) return { weekType: 'odd', startWeek: 1, endWeek: tot };
+    if (isEven) return { weekType: 'even', startWeek: 1, endWeek: tot };
     var one = s.match(/(\d{1,2})\s*周/);
     if (one) {
       var w = parseInt(one[1], 10);
@@ -37043,7 +40351,6 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     }
     return null;
   }
-
   /* ==========================================================
    * 云端识别（OpenAI 兼容视觉接口）
    * ========================================================== */
@@ -37323,10 +40630,59 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   }
 
   /* ---------- 机制主题皮肤（种树 / 抽卡）---------- */
-  // 机制默认强调色：开启皮肤且未手动选色时使用；手动选色后由用户色覆盖
+  // 自然意象主题预设（完全解耦，不带任何方舟元素）
+  var NATURE_THEMES = {
+    pine: {
+      key: 'pine',
+      name: '晨雾松林',
+      desc: '鼠尾草绿与白桦木，清新静谧',
+      color: '#2e7d32',
+      primary: { light: '#2e7d32', dark: '#4caf50' }
+    },
+    aurora: {
+      key: 'aurora',
+      name: '极光苍穹',
+      desc: '冰川霜雪与极夜幽绿，深邃灵动',
+      color: '#0891b2',
+      primary: { light: '#0891b2', dark: '#10b981' }
+    },
+    sunset: {
+      key: 'sunset',
+      name: '暮霞熔金',
+      desc: '暮云暖杏与落日余晖，温暖治愈',
+      color: '#ea580c',
+      primary: { light: '#ea580c', dark: '#f59e0b' }
+    },
+    slate: {
+      key: 'slate',
+      name: '山岚青黛',
+      desc: '远山水墨与夜泊玄石，清雅沉稳',
+      color: '#475569',
+      primary: { light: '#475569', dark: '#64748b' }
+    }
+  };
+
+  // 明日方舟战术主题预设（抽卡寻访专属）
+  var ARK_THEMES = {
+    terminal: {
+      key: 'terminal',
+      name: '经典罗德岛终端',
+      desc: '浅色舰桥雾白磨砂 / 深色经典碳灰终端（参考图2）',
+      color: '#0099d8',
+      primary: { light: '#0099d8', dark: '#00a2d8' }
+    },
+    roguelike: {
+      key: 'roguelike',
+      name: '集成战略水墨秘符',
+      desc: '赤红与墨蓝双色水墨涂鸦，远古秘符印记（参考图1）',
+      color: '#c92a2a',
+      primary: { light: '#c92a2a', dark: '#d32f2f' }
+    }
+  };
+
   var MECH = {
-    tree:    { primary: { light: '#37b24d', dark: '#5ec269' } },
-    factory: { primary: { light: '#1f9fb8', dark: '#b8e653' } }
+    tree:    { primary: { light: '#2e7d32', dark: '#4caf50' } },
+    factory: { primary: { light: '#0099d8', dark: '#00a2d8' } }
   };
 
   /** 当前应套用的机制皮肤：关闭则返回 null；开启时按奖励机制推导 */
@@ -37341,20 +40697,55 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   function applyMech() {
     var root = document.documentElement;
     var mech = mechOf();
-    if (!mech) { root.removeAttribute('data-mech'); return; }
+    if (!mech) {
+      root.removeAttribute('data-mech');
+      root.removeAttribute('data-nature-theme');
+      root.removeAttribute('data-ark-theme');
+      return;
+    }
     root.setAttribute('data-mech', mech);
 
     var s = (Store.state && Store.state.settings) || {};
-    if (s.themeSkinAuto && MECH[mech]) {
-      var mode = effectiveMode();
-      var hex = MECH[mech].primary[mode] || MECH[mech].primary.light;
-      applyPrimary(hex, mode);
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', mode === 'dark' ? (mech === 'tree' ? '#0f1712' : '#0a0c0f') : hex);
+    var mode = effectiveMode();
+
+    if (mech === 'factory') {
+      var arkKey = s.arkTheme || 'terminal';
+      root.setAttribute('data-ark-theme', arkKey);
+      root.removeAttribute('data-nature-theme');
+      if (s.themeSkinAuto) {
+        var aCfg = ARK_THEMES[arkKey] || ARK_THEMES.terminal;
+        var aHex = aCfg.primary[mode] || aCfg.primary.light;
+        applyPrimary(aHex, mode);
+        var meta1 = document.querySelector('meta[name="theme-color"]');
+        if (meta1) meta1.setAttribute('content', mode === 'dark' ? '#13161b' : '#edf0f5');
+      }
+    } else if (mech === 'tree') {
+      var natKey = s.natureTheme || 'pine';
+      root.setAttribute('data-nature-theme', natKey);
+      root.removeAttribute('data-ark-theme');
+      if (s.themeSkinAuto) {
+        var nCfg = NATURE_THEMES[natKey] || NATURE_THEMES.pine;
+        var nHex = nCfg.primary[mode] || nCfg.primary.light;
+        applyPrimary(nHex, mode);
+        var meta2 = document.querySelector('meta[name="theme-color"]');
+        if (meta2) meta2.setAttribute('content', mode === 'dark' ? '#0f1712' : '#f2f6f2');
+      }
     }
   }
 
-  /** 开关机制皮肤：开启时重置为「自动跟随强调色」，让机制默认色（绿/青）先呈现 */
+  function setNatureTheme(key) {
+    if (!NATURE_THEMES[key]) return;
+    Store.updateSettings({ natureTheme: key, themeSkinAuto: true });
+    applyTheme();
+  }
+
+  function setArkTheme(key) {
+    if (!ARK_THEMES[key]) return;
+    Store.updateSettings({ arkTheme: key, themeSkinAuto: true });
+    applyTheme();
+  }
+
+  /** 开关机制皮肤：开启时重置为「自动跟随强调色」，让机制默认色先呈现 */
   function setThemeSkin(on) {
     var patch = { themeSkin: !!on };
     if (on) patch.themeSkinAuto = true;
@@ -37382,6 +40773,10 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
 
   global.Theme = {
     THEMES: THEMES,
+    NATURE_THEMES: NATURE_THEMES,
+    ARK_THEMES: ARK_THEMES,
+    setNatureTheme: setNatureTheme,
+    setArkTheme: setArkTheme,
     apply: applyTheme,
     applyMech: applyMech,
     setThemeSkin: setThemeSkin,
@@ -37397,8 +40792,6 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     mixWhite: mixWhite
   };
 })(window);
-
-
 
 </script>
 <script>
@@ -37504,6 +40897,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       view: 'tasks', tab: 'quadrant', icon: I.quadrant, title: '象限',
       desc: '用 24 小时的环形图看时间都花在哪，也可以自己补记活动。',
       tips: [
+        '睡眠卡上点「开始睡眠」，醒来再点「结束睡眠」，时长自动算好并记入当天',
         '饮食和睡眠默认记录，不需要的话在「设置 → 记录偏好」里关掉',
         '可以切「今天 / 一周 / 一月 / 一季 / 今年」，图表能在饼图和方形图之间切换',
         '专注记录会自动汇总到这里'

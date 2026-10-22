@@ -844,21 +844,23 @@
   var CN = '\\u4e00-\\u9fa5';
 
   var LOC_RES = [
-    // 明理教学楼 / 实验楼 / 图书馆 / 体育馆 / 机房…
-    new RegExp('[' + CN + 'A-Za-z]{0,6}(?:教学楼|实验楼|办公楼|综合楼|图书馆|体育馆|体育中心|机房|实验室|报告厅|阶梯教室|多媒体教室|会议室|操场|篮球场|风雨操场)'),
-    // 教三-301 / 逸夫馆A201 / 三教301 / 教=301（「三」常被认成 =）
-    /[东南西北]?[一二三四五六七八九十\d]?\s?[教馆厅室房]\s*[一二三四五六七八九十]?\s*[-—－=＝]?\s*[A-Za-z]{0,2}\s?\d{2,4}/,
+    // 综合楼/教学楼/理教/文科楼/机房/实验室/操场/体育馆...
+    new RegExp('[' + CN + 'A-Za-z0-9]{0,8}(?:教学楼|实验楼|办公楼|综合楼|图书馆|体育馆|体育中心|机房|语音室|实验室|报告厅|阶梯教室|多媒体教室|会议室|大礼堂|操场|田径场|篮球场|网球场|风雨操场)'),
+    // 主楼/理教/文科楼/工训/综教/东阶/西阶/研楼 + 教室编号
+    new RegExp('(?:主楼|理教|文科楼|逸夫馆|工训|综教|东阶|西阶|研楼|主校区|南校区|北校区)\s*[-—－=＝]?\s*[A-Za-z0-9]{0,3}\s*\d{2,4}'),
+    // 教三-301 / 逸夫馆A201 / 三教301 / 教=301
+    /[东南西北]?[一二三四五六七八九十\d]?\s?[教馆厅室房幢]\s*[一二三四五六七八九十]?\s*[-—－=＝]?\s*[A-Za-z0-9]{0,2}\s?\d{2,4}/,
     // 明理楼 302 / 逸夫馆A201 / 一教 101
-    new RegExp('[' + CN + ']{1,5}[楼馆厅堂]\\s?[-—]?\\s?[A-Za-z]{0,2}\\s?\\d{2,4}'),
+    new RegExp('[' + CN + ']{1,6}[楼馆厅堂幢]\s?[-—]?\s?[A-Za-z0-9]{0,2}\s?\d{2,4}'),
     // A101 / B-302 / N 201
-    /\b[A-Za-z]{1,3}\s?[-—]?\s?\d{2,4}\b/,
-    // 3号楼 / 201室
-    /\d{1,3}\s?[号楼室]/
+    /[A-Za-z]{1,3}\s?[-—]?\s?\d{2,4}/,
+    // 3号楼 / 201室 / 2号机房
+    /\d{1,3}\s?[号楼室幢座]/
   ];
 
-  var TEACHER_RE = new RegExp('[' + CN + ']{2,4}(?:老师|教授|讲师|副教授|助教)');
+  var TEACHER_RE = new RegExp('(?:(?:教师|老师|讲师)[:：]\s*[' + CN + ']{2,4})|([' + CN + ']{2,4}(?:老师|教授|讲师|副教授|助教|院士))');
 
-  var WEEK_RE = /\d{1,2}\s*[-~—－至]\s*\d{1,2}\s*周?|\d{1,2}\s*周|单周|双周|全周|前\s*\d{1,2}\s*周|后\s*\d{1,2}\s*周/g;
+  var WEEK_RE = /\d{1,2}\s*[-~—－至]\s*\d{1,2}\s*(?:周|\(?(?:单|双)周?\)?)|(?:\d{1,2}\s*周)|单周|双周|全周|前\s*\d{1,2}\s*周|后\s*\d{1,2}\s*周/g;
 
   function tidy(s) {
     return String(s || '')
@@ -956,16 +958,21 @@
 
   /** 周次文本 → { weekType, startWeek, endWeek } */
   function parseWeeks(text, totalWeeks) {
-    var s = String(text || '');
+    var s = String(text || '').trim();
     if (!s) return null;
-    if (/单周/.test(s)) return { weekType: 'odd', startWeek: 1, endWeek: totalWeeks || 20 };
-    if (/双周/.test(s)) return { weekType: 'even', startWeek: 1, endWeek: totalWeeks || 20 };
+    var tot = totalWeeks || 20;
+    var isOdd = /单周|\(单\)|（单）/.test(s);
+    var isEven = /双周|\(双\)|（双）/.test(s);
+    var wType = isOdd ? 'odd' : isEven ? 'even' : 'all';
+
     var m = s.match(/(\d{1,2})\s*[-~—－至]\s*(\d{1,2})/);
     if (m) {
       var a = Math.max(1, parseInt(m[1], 10));
       var b = Math.max(a, parseInt(m[2], 10));
-      return { weekType: 'all', startWeek: a, endWeek: b };
+      return { weekType: wType, startWeek: a, endWeek: b };
     }
+    if (isOdd) return { weekType: 'odd', startWeek: 1, endWeek: tot };
+    if (isEven) return { weekType: 'even', startWeek: 1, endWeek: tot };
     var one = s.match(/(\d{1,2})\s*周/);
     if (one) {
       var w = parseInt(one[1], 10);
@@ -973,7 +980,6 @@
     }
     return null;
   }
-
   /* ==========================================================
    * 云端识别（OpenAI 兼容视觉接口）
    * ========================================================== */

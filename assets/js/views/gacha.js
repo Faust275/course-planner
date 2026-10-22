@@ -201,6 +201,79 @@
     });
   }
 
+
+  /* ---------- 🎯 心愿单管理弹窗 ---------- */
+  function openWishlistModal(onDone) {
+    var all = global.AK_OPS || [];
+    var highStarOps = all.filter(function (o) { return o[1] >= 5; });
+    var searchVal = '';
+
+    var listWrap = el('div', { style: { maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' } });
+
+    function renderList() {
+      listWrap.innerHTML = '';
+      var curWish = Store.getWishlist ? Store.getWishlist() : [];
+      var filtered = highStarOps.filter(function (o) {
+        if (!searchVal) return true;
+        return o[0].toLowerCase().indexOf(searchVal.toLowerCase()) >= 0;
+      });
+
+      if (!filtered.length) {
+        listWrap.appendChild(el('div', { style: { textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }, text: '未找到匹配的干员' }));
+        return;
+      }
+
+      filtered.forEach(function (o) {
+        var isW = curWish.indexOf(o[0]) >= 0;
+        var row = el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 12px', borderRadius: '6px', background: isW ? 'var(--primary-weak)' : 'var(--bg-weak)',
+            border: '1px solid ' + (isW ? 'var(--primary)' : 'var(--border)'), cursor: 'pointer'
+          },
+          onclick: function () {
+            if (Store.toggleWishlist) {
+              Store.toggleWishlist(o[0]);
+              renderList();
+              if (onDone) onDone();
+            }
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+            el('b', { style: { color: starColor(o[1]) }, text: '★' + o[1] }),
+            el('span', { style: { fontWeight: isW ? 'bold' : 'normal' }, text: o[0] }),
+            el('span', { style: { fontSize: '11px', color: 'var(--text-muted)' }, text: o[7] === 'classic' ? '中坚' : '标准' })
+          ]),
+          el('button', {
+            class: 'btn btn-sm ' + (isW ? 'btn-primary' : ''),
+            style: { padding: '2px 8px', fontSize: '12px' }
+          }, [isW ? '❤️ 已锁定' : '+ 加入心愿'])
+        ]);
+        listWrap.appendChild(row);
+      });
+    }
+
+    var searchInput = V.input({
+      type: 'text', placeholder: '搜索 5★/6★ 干员名称...',
+      oninput: function () { searchVal = this.value.trim(); renderList(); }
+    });
+
+    renderList();
+
+    V.modal({
+      title: '🎯 锁定心愿干员 (最多 2 位)',
+      width: '420px',
+      body: [
+        el('div', { class: 'ocr-hint', text: '锁定心愿后，系统将持续追踪其在标准/中坚池的轮换周期，并在临近到货时在首页提醒你加速备考攒玉。' }),
+        searchInput,
+        listWrap
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '完成', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
+      ])
+    });
+  }
+
   function openGacha() {
     var pm = Store.pomodoro;
 
@@ -208,6 +281,7 @@
     var poolEl = el('div', { class: 'gc-pool' });
     var sparkEl = el('div', { class: 'gc-spark' });
     var previewEl = el('div', { class: 'gc-preview' });
+    var wishEl = el('div', { class: 'gc-wishlist' });
     var rateEl = el('div', { class: 'gc-rate' });
     var lkBox = el('div', { class: 'gc-rate cp-gc-spark-box' });
     var resultBox = el('div', { class: 'gc-result' });
@@ -280,6 +354,48 @@
           el('span', { text: p.six.join(' · ') })
         ]));
       });
+
+      /* 心愿单到货预报 */
+      wishEl.innerHTML = '';
+      if (Store.wishlistForecast) {
+        var forecasts = Store.wishlistForecast();
+        var wishCard = el('div', { class: 'card cp-wish-card', style: { padding: '12px 14px', marginBottom: '12px' } });
+        var wishHead = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' } }, [
+          el('div', { style: { fontWeight: 'bold', fontSize: '13.5px' } }, ['🎯 我的心愿干员与到货预警']),
+          el('button', {
+            class: 'btn btn-sm', style: { padding: '2px 8px', fontSize: '12px' },
+            onclick: function () { openWishlistModal(function () { drawHead(); }); }
+          }, ['管理心愿单 (最多2位)'])
+        ]);
+        wishCard.appendChild(wishHead);
+
+        if (!forecasts.length) {
+          wishCard.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '暂未锁定心愿干员。点击「管理心愿单」设置，系统将为你计算未来轮换倒计时与攒玉进度。' }));
+        } else {
+          var fGrid = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+          forecasts.forEach(function (f) {
+            var row = el('div', {
+              style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-weak)', padding: '6px 10px', borderRadius: '6px' }
+            }, [
+              el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+                el('b', { style: { color: starColor(f.star) }, text: f.name }),
+                el('span', { style: { fontSize: '12px', color: 'var(--text-muted)' }, text: '· ' + f.poolName })
+              ]),
+              el('div', { style: { textAlign: 'right', fontSize: '12px' } }, [
+                el('span', {
+                  style: { fontWeight: 'bold', color: f.isCurrent ? 'var(--red)' : (f.daysLeft <= 7 ? 'var(--amber)' : 'var(--text-2)') },
+                  text: f.isCurrent ? '🔥 当期 UP 寻访中！' : (f.daysLeft > 0 ? ('还有 ' + f.daysLeft + ' 天轮换') : '即将到来')
+                }),
+                el('span', { style: { marginLeft: '8px', color: 'var(--text-muted)' }, text: '备考玉 ' + f.readyPct + '%' })
+              ])
+            ]);
+            fGrid.appendChild(row);
+          });
+          wishCard.appendChild(fGrid);
+        }
+        wishEl.appendChild(wishCard);
+      }
+
 
       var s = Store.gachaStats();
       rateEl.innerHTML =

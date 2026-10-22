@@ -346,6 +346,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cp-grid-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
 
 .cp-tt { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; table-layout: fixed; }
+/* 隐藏周末后只剩 6 列，宽度收一点，避免每列被拉得过宽 */
+.cp-tt.cp-no-weekend { min-width: 640px; }
 .cp-tt th, .cp-tt td { padding: 0; }
 
 .cp-tt-head th {
@@ -3621,15 +3623,13 @@ mark.cp-hit {
 .cp-tb-type i { width: 10px; height: 10px; border-radius: 3px; }
 
 /* ==========================================================
- * 机制主题皮肤：种树（自然有生机） / 抽卡（工厂·硬核）
+ * 机制主题皮肤：种树（纯粹自然意象·解耦） / 抽卡（明日方舟战术终端）
  * 由 <html data-mech="tree|factory"> 切换；强调色可被用户手动选色覆盖
  * ========================================================== */
 
 /* 装饰层：固定铺满、不挡操作，按机制显隐对应元素 */
 .cp-deco { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .cp-deco > * { position: absolute; opacity: 0; transition: opacity .45s var(--ease-out); }
-/* 装饰层位于背景（.cp-app-bg z-index:0）之上、应用内容（.cp-app z-index:1）之下，
-   透明度必须由这里统一控制（原先写在 SVG inline style 里会永久可见，且盖住内容） */
 html[data-mech="tree"] .cp-deco .deco-tree,
 html[data-mech="factory"] .cp-deco .deco-factory { opacity: 1; }
 html[data-mech="tree"] .cp-deco .deco-tree.deco-a { opacity: .5; }
@@ -3638,70 +3638,337 @@ html[data-mech="tree"] .cp-deco .deco-tree.deco-c { opacity: .4; }
 html[data-mech="factory"] .cp-deco .deco-factory.deco-a { opacity: .5; }
 html[data-mech="factory"] .cp-deco .deco-factory.deco-b { opacity: .32; }
 
-/* ---------- 种树：自然有生机 ---------- */
+/* ==========================================================
+ * 一、种树专属：纯粹自然生态主题（完全解耦，不继承任何方舟元素）
+ * ========================================================== */
 html[data-mech="tree"] {
-  --bg: #eef6ec;
-  --surface: #ffffff;
-  --surface-2: #f3f9f1;
-  --line: #e1ece0;
-  --line-strong: #cfe0cc;
-  --radius: 20px;
-  --radius-lg: 26px;
-  --shadow-sm: 0 1px 3px rgba(31, 74, 33, .06);
-  --shadow: 0 6px 20px rgba(31, 74, 33, .08);
-  --shadow-lg: 0 20px 50px rgba(31, 74, 33, .14);
+  --font-display: var(--font);
+  --font-mono: var(--font);
+  --radius: 16px;
+  --radius-lg: 22px;
 }
-html[data-mech="tree"] .card,
-html[data-mech="tree"] .cp-card { border-radius: var(--radius-lg); }
-
-/* ---------- 抽卡：工厂·硬核（对标明日方舟浅色终端）---------- */
-html[data-mech="factory"] {
-  --bg: #eef1f4;
-  --surface: #ffffff;
-  --surface-2: #f6f8fa;
-  --line: #c7ced6;
-  --line-strong: #101418;
-  --radius: 4px;
-  --radius-lg: 6px;
-  --shadow-sm: 2px 2px 0 #101418;
-  --shadow: 4px 4px 0 #101418;
-  --shadow-lg: 6px 6px 0 #101418;
+html[data-mech="tree"] .section-title,
+html[data-mech="tree"] .hero-title,
+html[data-mech="tree"] .cp-brand strong,
+html[data-mech="tree"] .modal-title,
+html[data-mech="tree"] .cp-stat-title,
+html[data-mech="tree"] .cp-card-title,
+html[data-mech="tree"] .cp-exam-title {
+  font-family: var(--font) !important;
+  font-weight: 600;
+  letter-spacing: normal;
 }
-/* 蓝图网点底纹 */
-html[data-mech="factory"] body {
-  background-image: radial-gradient(rgba(16, 20, 24, .10) 1px, transparent 1.4px);
-  background-size: 14px 14px;
-}
-/* 卡片：方舟主菜单板块——磨砂白切角面板 + 顶部强调线 + 网点水印
-   （排除 cp-hero：那是主视觉卡，原本是主题色渐变底 + 白字，覆盖成白底会导致白字隐形） */
-html[data-mech="factory"] .card:not(.cp-hero),
-html[data-mech="factory"] .cp-card:not(.cp-hero) {
-  border: 1px solid rgba(16, 20, 24, .55);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .93), rgba(255, 255, 255, .85));
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  box-shadow: none;
-  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px));
+html[data-mech="tree"] .card:not(.cp-hero),
+html[data-mech="tree"] .cp-card:not(.cp-hero) {
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: relative;
+  overflow: hidden;
 }
-/* 顶部强调短线（对应主菜单板块的橙色横线；hero 保留自身渐变，不加短线下划线） */
-html[data-mech="factory"] .card:not(.cp-hero)::before,
-html[data-mech="factory"] .cp-card:not(.cp-hero)::before {
-  content: ''; position: absolute; left: 0; top: 0; width: 36px; height: 3px;
-  background: var(--primary); pointer-events: none; z-index: 1;
+/* 移除方舟的橙色短条 */
+html[data-mech="tree"] .card:not(.cp-hero)::before,
+html[data-mech="tree"] .cp-card:not(.cp-hero)::before {
+  display: none !important;
 }
-/* 右下淡网点水印（对应板块上的淡色图标水印） */
-html[data-mech="factory"] .card:not(.cp-hero)::after,
-html[data-mech="factory"] .cp-card:not(.cp-hero)::after {
-  content: ''; position: absolute; right: 0; bottom: 0; width: 58px; height: 58px;
-  background-image: radial-gradient(rgba(16, 20, 24, .17) 1px, transparent 1.35px);
-  background-size: 7px 7px;
-  -webkit-mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
-  mask-image: linear-gradient(135deg, transparent 32%, #000 78%);
+/* 柔和年轮微暗纹 */
+html[data-mech="tree"] .card:not(.cp-hero)::after,
+html[data-mech="tree"] .cp-card:not(.cp-hero)::after {
+  content: ''; position: absolute; right: 14px; bottom: 10px; width: 44px; height: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232e7d32' opacity='0.035'%3E%3Cpath d='M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-4a4 4 0 1 1 0-8 4 4 0 0 1 0 8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
   pointer-events: none;
 }
-/* 主按钮前加部署箭头 */
-html[data-mech="factory"] .btn-primary::before { content: '► '; font-family: var(--font-mono, monospace); }
+
+/* 1. 晨雾松林 (Pine Mist - 默认) */
+html[data-mode="light"][data-mech="tree"],
+html[data-mode="light"][data-mech="tree"][data-nature-theme="pine"] {
+  --bg: #f2f6f2;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(243, 248, 243, 0.88);
+  --line: rgba(46, 125, 50, 0.08);
+  --line-strong: rgba(46, 125, 50, 0.16);
+  --shadow: 0 6px 22px rgba(31, 74, 33, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"],
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="pine"] {
+  --bg: #0f1712;
+  --surface: rgba(20, 31, 23, 0.92);
+  --surface-2: rgba(26, 40, 30, 0.88);
+  --line: rgba(129, 199, 132, 0.10);
+  --line-strong: rgba(129, 199, 132, 0.18);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.5);
+}
+
+/* 2. 极光苍穹 (Aurora) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="aurora"] {
+  --bg: #edf5f7;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(239, 248, 250, 0.88);
+  --line: rgba(8, 145, 178, 0.09);
+  --line-strong: rgba(8, 145, 178, 0.18);
+  --shadow: 0 6px 22px rgba(8, 145, 178, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="aurora"] {
+  --bg: #0b151e;
+  --surface: rgba(16, 28, 38, 0.92);
+  --surface-2: rgba(22, 38, 51, 0.88);
+  --line: rgba(16, 185, 129, 0.12);
+  --line-strong: rgba(16, 185, 129, 0.22);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* 3. 暮霞熔金 (Sunset) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="sunset"] {
+  --bg: #f9f4f1;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(253, 246, 242, 0.88);
+  --line: rgba(234, 88, 12, 0.08);
+  --line-strong: rgba(234, 88, 12, 0.16);
+  --shadow: 0 6px 22px rgba(234, 88, 12, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="sunset"] {
+  --bg: #1c1417;
+  --surface: rgba(38, 26, 30, 0.92);
+  --surface-2: rgba(50, 34, 39, 0.88);
+  --line: rgba(245, 158, 11, 0.12);
+  --line-strong: rgba(245, 158, 11, 0.22);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* 4. 山岚青黛 (Slate Mountain) */
+html[data-mode="light"][data-mech="tree"][data-nature-theme="slate"] {
+  --bg: #f3f4f6;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(246, 247, 249, 0.88);
+  --line: rgba(71, 85, 105, 0.08);
+  --line-strong: rgba(71, 85, 105, 0.16);
+  --shadow: 0 6px 22px rgba(71, 85, 105, 0.07);
+}
+html[data-mode="dark"][data-mech="tree"][data-nature-theme="slate"] {
+  --bg: #10141a;
+  --surface: rgba(24, 30, 40, 0.92);
+  --surface-2: rgba(32, 40, 53, 0.88);
+  --line: rgba(148, 163, 184, 0.10);
+  --line-strong: rgba(148, 163, 184, 0.20);
+  --shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+}
+
+/* ==========================================================
+ * 二、抽卡专属：明日方舟战术终端主题（全域高对比宋体 + 取消所有板块圆角 + 半透明磨砂）
+ * ========================================================== */
+html[data-mech="factory"] {
+  --font-display: "Source Han Serif SC", "Source Han Serif CN", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun", "FZNewShuSong-Z10S", serif;
+  --font-mono: "DIN Alternate", "DIN", "Bender", "SF Pro Display", "Roboto Mono", "Consolas", monospace;
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+
+/* 全域文字覆盖：该主题下所有呈现出来的文字均统一使用方舟宋体字系 */
+html[data-mech="factory"],
+html[data-mech="factory"] * {
+  font-family: var(--font-display) !important;
+}
+
+/* 仅特定的机械数字、倒计时与时间戳使用 DIN 等宽工科数字 */
+html[data-mech="factory"] .cp-hero-stats div div:first-child,
+html[data-mech="factory"] .cp-stat-num,
+html[data-mech="factory"] .cp-time,
+html[data-mech="factory"] .cp-countdown,
+html[data-mech="factory"] .cp-pomo-time {
+  font-family: var(--font-mono) !important;
+  font-weight: 700 !important;
+}
+
+/* 取消所有板块与元素的圆角：纯正直角机能模块 */
+html[data-mech="factory"],
+html[data-mech="factory"] * {
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+html[data-mech="factory"] .card,
+html[data-mech="factory"] .cp-card,
+html[data-mech="factory"] .cp-hero,
+html[data-mech="factory"] .btn,
+html[data-mech="factory"] .cp-btn,
+html[data-mech="factory"] .cp-daily-card,
+html[data-mech="factory"] .cp-sum-card,
+html[data-mech="factory"] .cp-modal,
+html[data-mech="factory"] .cp-input,
+html[data-mech="factory"] .input,
+html[data-mech="factory"] .cp-select,
+html[data-mech="factory"] .cp-textarea,
+html[data-mech="factory"] .cp-nav-item,
+html[data-mech="factory"] .cp-tab-item,
+html[data-mech="factory"] .cp-seg-btn,
+html[data-mech="factory"] .cp-tag-chip,
+html[data-mech="factory"] .cp-brand-logo,
+html[data-mech="factory"] .cp-badge,
+html[data-mech="factory"] .cp-batch-dropzone,
+html[data-mech="factory"] .cp-tcell,
+html[data-mech="factory"] .cp-kanban-task,
+html[data-mech="factory"] .cp-empty,
+html[data-mech="factory"] .cp-empty-btn,
+html[data-mech="factory"] button,
+html[data-mech="factory"] select,
+html[data-mech="factory"] input,
+html[data-mech="factory"] textarea {
+  border-radius: 0 !important;
+}
+
+/* 顶部问候卡：罗德岛战术中控终端外观（深色半透明磨砂 + 战术高光边带 + 直角） */
+html[data-mech="factory"] .cp-card.cp-hero {
+  background: linear-gradient(135deg, rgba(20, 24, 32, 0.94) 0%, rgba(32, 39, 50, 0.90) 100%) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-left: 6px solid var(--primary) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22) !important;
+  color: #ffffff !important;
+  border-radius: 0 !important;
+}
+html[data-mech="factory"] .cp-card.cp-hero .cp-hero-title {
+  color: #ffffff !important;
+  font-family: var(--font-display) !important;
+  letter-spacing: .8px;
+}
+html[data-mech="factory"] .cp-card.cp-hero .cp-hero-stats div div:first-child {
+  color: #ffffff !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* 卡片磨砂半透明质感，直角，保留 100% 原始排版 */
+html[data-mech="factory"] .card:not(.cp-hero),
+html[data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mech="factory"] .cp-daily-card,
+html[data-mech="factory"] .cp-sum-card {
+  border-radius: 0 !important;
+  clip-path: none !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* 顶部标志性罗德岛小橙条饰（如截图任务橙条） */
+html[data-mech="factory"] .card:not(.cp-hero)::before,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::before {
+  content: ''; position: absolute; left: 18px; top: 0; width: 36px; height: 3.5px;
+  background: #ff7d00; border-radius: 0;
+  pointer-events: none; z-index: 2;
+}
+
+/* 卡片右下角淡战车暗纹水印 */
+html[data-mech="factory"] .card:not(.cp-hero)::after,
+html[data-mech="factory"] .cp-card:not(.cp-hero)::after {
+  content: ''; position: absolute; right: 14px; bottom: 10px; width: 44px; height: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23101418' opacity='0.045'%3E%3Cpath d='M19 22H5v-2h1V10H5V8l2-4h2v2h2V4h2v2h2V4h2l2 4v2h-1v10h1v2zM8 10v8h8v-8H8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
+  pointer-events: none;
+}
+
+/* 浅色终端模式：环境光晕底色 + 晶莹剔透半透毛玻璃卡片 */
+html[data-mode="light"][data-mech="factory"] {
+  --bg: #edf1f6;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(246, 248, 252, 0.76);
+  --line: rgba(16, 20, 24, 0.08);
+  --line-strong: rgba(16, 20, 24, 0.16);
+  --text: #181d24;
+  --text-1: #181d24;
+  --text-2: #525a66;
+  --text-3: #8a94a2;
+}
+html[data-mode="light"][data-mech="factory"] body {
+  background-color: #edf1f6;
+  background-image:
+    radial-gradient(at 10% 15%, rgba(0, 153, 216, 0.12) 0px, transparent 40%),
+    radial-gradient(at 90% 85%, rgba(245, 158, 11, 0.10) 0px, transparent 45%),
+    radial-gradient(at 50% 50%, rgba(255, 255, 255, 0.6) 0px, transparent 60%),
+    linear-gradient(rgba(16, 20, 24, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 20, 24, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px, 24px 24px;
+  background-attachment: fixed;
+}
+html[data-mode="light"][data-mech="factory"] .card:not(.cp-hero),
+html[data-mode="light"][data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mode="light"][data-mech="factory"] .cp-daily-card,
+html[data-mode="light"][data-mech="factory"] .cp-sum-card,
+html[data-mode="light"][data-mech="factory"] .cp-sidebar {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.75) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), 0 8px 30px rgba(16, 24, 40, 0.06) !important;
+}
+
+/* 深色终端模式：深邃夜间终端环境底 + 碳灰半透磨砂卡片（参考图2） */
+html[data-mode="dark"][data-mech="factory"] {
+  --bg: #111419;
+  --surface: rgba(26, 31, 38, 0.76);
+  --surface-2: rgba(35, 41, 50, 0.76);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.15);
+  --text: #ffffff;
+  --text-1: #ffffff;
+  --text-2: #9ea8b6;
+  --text-3: #6b7787;
+}
+html[data-mode="dark"][data-mech="factory"] body {
+  background-color: #111419;
+  background-image:
+    radial-gradient(at 15% 15%, rgba(0, 162, 216, 0.15) 0px, transparent 45%),
+    radial-gradient(at 85% 75%, rgba(245, 158, 11, 0.10) 0px, transparent 50%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+  background-attachment: fixed;
+}
+html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero),
+html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero),
+html[data-mode="dark"][data-mech="factory"] .cp-daily-card,
+html[data-mode="dark"][data-mech="factory"] .cp-sum-card,
+html[data-mode="dark"][data-mech="factory"] .cp-sidebar {
+  background: rgba(26, 31, 38, 0.76) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 36px rgba(0, 0, 0, 0.5) !important;
+}
+html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero)::after,
+html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero)::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff' opacity='0.05'%3E%3Cpath d='M19 22H5v-2h1V10H5V8l2-4h2v2h2V4h2v2h2V4h2l2 4v2h-1v10h1v2zM8 10v8h8v-8H8z'/%3E%3C/svg%3E");
+}
+
+/* 肉鸽限定子主题（参考图1 集成战略水墨秘符） */
+html[data-mech="factory"][data-ark-theme="roguelike"] .card:not(.cp-hero)::before,
+html[data-mech="factory"][data-ark-theme="roguelike"] .cp-card:not(.cp-hero)::before {
+  background: linear-gradient(90deg, #d32f2f 0%, #0284c7 100%);
+  width: 44px;
+}
+html[data-mode="dark"][data-mech="factory"][data-ark-theme="roguelike"] {
+  --bg: #161312;
+  --surface: rgba(36, 31, 29, 0.82);
+  --surface-2: rgba(48, 41, 38, 0.82);
+  --line: rgba(211, 47, 47, 0.18);
+  --line-strong: rgba(211, 47, 47, 0.32);
+}
+html[data-mode="dark"][data-mech="factory"][data-ark-theme="roguelike"] body {
+  background-color: #161312;
+  background-image:
+    radial-gradient(at 15% 15%, rgba(211, 47, 47, 0.18) 0px, transparent 45%),
+    radial-gradient(at 85% 75%, rgba(2, 132, 199, 0.14) 0px, transparent 50%),
+    linear-gradient(rgba(211, 47, 47, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(211, 47, 47, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+  background-attachment: fixed;
+}
+html[data-mech="factory"][data-ark-theme="roguelike"] .card:not(.cp-hero)::after,
+html[data-mech="factory"][data-ark-theme="roguelike"] .cp-card:not(.cp-hero)::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23d32f2f' opacity='0.08' d='M19 22H12V4h2v2h2V4h2l2 4v2h-1v10h1v2zM12 10v8h4v-8h-4z'/%3E%3Cpath fill='%230284c7' opacity='0.08' d='M12 22H5v-2h1V10H5V8l2-4h2v2h2v16zM8 10v8h4v-8H8z'/%3E%3C/svg%3E");
+  width: 52px;
+  height: 52px;
+}
 
 /* ============ 林地 / 树种图鉴 / 枯萎（专注即种树） ============ */
 .cp-grove-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
@@ -3787,55 +4054,6 @@ html[data-mode="dark"][data-mech="tree"] {
   --shadow-lg: 0 20px 50px rgba(0, 0, 0, .6);
 }
 
-/* —— 抽卡 · 深色：基建终端（黑砖 + 荧光绿 + 网格 + 扫描线）—— */
-html[data-mode="dark"][data-mech="factory"] {
-  --bg: #0a0c0f;
-  --surface: #14171b;
-  --surface-2: #191d22;
-  --line: #2a2f36;
-  --line-strong: #3a414d;
-  --text: #e8ecf0;
-  --text-1: #e8ecf0;
-  --text-2: #8792a0;
-  --text-3: #6b7585;
-  --shadow-sm: 0 0 0 1px #2a2f36;
-  --shadow: 0 0 0 1px #2a2f36, 0 8px 22px rgba(0, 0, 0, .6);
-  --shadow-lg: 0 0 0 1px #2a2f36, 0 18px 48px rgba(0, 0, 0, .7);
-}
-html[data-mode="dark"][data-mech="factory"] body {
-  background-image:
-    linear-gradient(rgba(184, 230, 83, .045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(184, 230, 83, .045) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, .02) 1px, transparent 1px);
-  background-size: 30px 30px, 30px 30px, 6px 6px;
-}
-html[data-mode="dark"][data-mech="factory"] .cp-deco::after {
-  content: ''; position: absolute; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(184, 230, 83, .35), transparent);
-  animation: cpScan 6s linear infinite;
-}
-/* 深色板块：黑砖切角面板（对齐基建界面的暗色板块） */
-html[data-mode="dark"][data-mech="factory"] .card:not(.cp-hero),
-html[data-mode="dark"][data-mech="factory"] .cp-card:not(.cp-hero) {
-  border-color: #3a414d;
-  background: linear-gradient(180deg, rgba(30, 34, 40, .94), rgba(22, 26, 31, .9));
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-html[data-mode="dark"][data-mech="factory"] .card::after,
-html[data-mode="dark"][data-mech="factory"] .cp-card::after {
-  background-image: radial-gradient(rgba(184, 230, 83, .14) 1px, transparent 1.35px);
-}
-/* 浅色下扫描线增强：青色高亮带 + 白色高光核，否则白天几乎不可见 */
-html[data-mode="light"][data-mech="factory"] .cp-deco::after {
-  content: ''; position: absolute; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, transparent, rgba(31, 159, 184, .5) 30%,
-              rgba(255, 255, 255, .95) 50%, rgba(31, 159, 184, .5) 70%, transparent);
-  box-shadow: 0 0 10px rgba(31, 159, 184, .45);
-  animation: cpScan 7s linear infinite;
-}
-@keyframes cpScan { 0% { top: -2px; } 100% { top: 100%; } }
-
 /* —— 萤火虫（仅深色森林）—— */
 .deco-fireflies { position: absolute; inset: 0; }
 .deco-fireflies span {
@@ -3917,3 +4135,48 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cp-gc-prev-title { font-size: 11px; color: var(--text-3); }
 .cp-gc-prev-row { display: flex; gap: 8px; font-size: 11.5px; color: var(--text-2); }
 .cp-gc-prev-day { color: var(--text-3); min-width: 34px; }
+
+/* ---- 自然语言快速添加条与智能解析预览 ---- */
+.cp-quick-task-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px 4px 10px; margin-bottom: 12px;
+  background: var(--surface); border: 1.5px dashed var(--line);
+  border-radius: 10px; transition: all .2s;
+}
+.cp-quick-task-bar:focus-within {
+  border-color: var(--primary);
+  border-style: solid;
+  box-shadow: 0 0 0 3px var(--primary-weak);
+}
+.cp-quick-task-bar svg { flex: 0 0 16px; color: var(--text-3); }
+.cp-quick-task-bar input {
+  flex: 1; height: 34px; border: none; outline: none;
+  background: transparent; font-size: 13px; color: var(--text);
+}
+.cp-nlp-preview {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 10px; margin-top: 6px; background: var(--surface-2);
+  border-radius: 8px; border: 1px solid var(--line); font-size: 11.5px;
+}
+
+/* ---- 优化图片识别课表网格与高亮 ---- */
+.cp-ocr-cell.cp-has-content {
+  background: var(--primary-weak, rgba(79, 70, 229, .08));
+  font-weight: 550;
+  border-radius: 4px;
+}
+.cp-ocr-dup-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; background: var(--amber-weak, #fef3c7);
+  color: var(--amber, #b45309); margin-left: 6px;
+}
+.cp-ocr-search-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.cp-ocr-search-bar input {
+  flex: 1; height: 32px; border: none; outline: none;
+  background: transparent; font-size: 12.5px; color: var(--text);
+}

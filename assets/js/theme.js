@@ -200,10 +200,59 @@
   }
 
   /* ---------- 机制主题皮肤（种树 / 抽卡）---------- */
-  // 机制默认强调色：开启皮肤且未手动选色时使用；手动选色后由用户色覆盖
+  // 自然意象主题预设（完全解耦，不带任何方舟元素）
+  var NATURE_THEMES = {
+    pine: {
+      key: 'pine',
+      name: '晨雾松林',
+      desc: '鼠尾草绿与白桦木，清新静谧',
+      color: '#2e7d32',
+      primary: { light: '#2e7d32', dark: '#4caf50' }
+    },
+    aurora: {
+      key: 'aurora',
+      name: '极光苍穹',
+      desc: '冰川霜雪与极夜幽绿，深邃灵动',
+      color: '#0891b2',
+      primary: { light: '#0891b2', dark: '#10b981' }
+    },
+    sunset: {
+      key: 'sunset',
+      name: '暮霞熔金',
+      desc: '暮云暖杏与落日余晖，温暖治愈',
+      color: '#ea580c',
+      primary: { light: '#ea580c', dark: '#f59e0b' }
+    },
+    slate: {
+      key: 'slate',
+      name: '山岚青黛',
+      desc: '远山水墨与夜泊玄石，清雅沉稳',
+      color: '#475569',
+      primary: { light: '#475569', dark: '#64748b' }
+    }
+  };
+
+  // 明日方舟战术主题预设（抽卡寻访专属）
+  var ARK_THEMES = {
+    terminal: {
+      key: 'terminal',
+      name: '经典罗德岛终端',
+      desc: '浅色舰桥雾白磨砂 / 深色经典碳灰终端（参考图2）',
+      color: '#0099d8',
+      primary: { light: '#0099d8', dark: '#00a2d8' }
+    },
+    roguelike: {
+      key: 'roguelike',
+      name: '集成战略水墨秘符',
+      desc: '赤红与墨蓝双色水墨涂鸦，远古秘符印记（参考图1）',
+      color: '#c92a2a',
+      primary: { light: '#c92a2a', dark: '#d32f2f' }
+    }
+  };
+
   var MECH = {
-    tree:    { primary: { light: '#37b24d', dark: '#5ec269' } },
-    factory: { primary: { light: '#1f9fb8', dark: '#b8e653' } }
+    tree:    { primary: { light: '#2e7d32', dark: '#4caf50' } },
+    factory: { primary: { light: '#0099d8', dark: '#00a2d8' } }
   };
 
   /** 当前应套用的机制皮肤：关闭则返回 null；开启时按奖励机制推导 */
@@ -218,20 +267,55 @@
   function applyMech() {
     var root = document.documentElement;
     var mech = mechOf();
-    if (!mech) { root.removeAttribute('data-mech'); return; }
+    if (!mech) {
+      root.removeAttribute('data-mech');
+      root.removeAttribute('data-nature-theme');
+      root.removeAttribute('data-ark-theme');
+      return;
+    }
     root.setAttribute('data-mech', mech);
 
     var s = (Store.state && Store.state.settings) || {};
-    if (s.themeSkinAuto && MECH[mech]) {
-      var mode = effectiveMode();
-      var hex = MECH[mech].primary[mode] || MECH[mech].primary.light;
-      applyPrimary(hex, mode);
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute('content', mode === 'dark' ? (mech === 'tree' ? '#0f1712' : '#0a0c0f') : hex);
+    var mode = effectiveMode();
+
+    if (mech === 'factory') {
+      var arkKey = s.arkTheme || 'terminal';
+      root.setAttribute('data-ark-theme', arkKey);
+      root.removeAttribute('data-nature-theme');
+      if (s.themeSkinAuto) {
+        var aCfg = ARK_THEMES[arkKey] || ARK_THEMES.terminal;
+        var aHex = aCfg.primary[mode] || aCfg.primary.light;
+        applyPrimary(aHex, mode);
+        var meta1 = document.querySelector('meta[name="theme-color"]');
+        if (meta1) meta1.setAttribute('content', mode === 'dark' ? '#13161b' : '#edf0f5');
+      }
+    } else if (mech === 'tree') {
+      var natKey = s.natureTheme || 'pine';
+      root.setAttribute('data-nature-theme', natKey);
+      root.removeAttribute('data-ark-theme');
+      if (s.themeSkinAuto) {
+        var nCfg = NATURE_THEMES[natKey] || NATURE_THEMES.pine;
+        var nHex = nCfg.primary[mode] || nCfg.primary.light;
+        applyPrimary(nHex, mode);
+        var meta2 = document.querySelector('meta[name="theme-color"]');
+        if (meta2) meta2.setAttribute('content', mode === 'dark' ? '#0f1712' : '#f2f6f2');
+      }
     }
   }
 
-  /** 开关机制皮肤：开启时重置为「自动跟随强调色」，让机制默认色（绿/青）先呈现 */
+  function setNatureTheme(key) {
+    if (!NATURE_THEMES[key]) return;
+    Store.updateSettings({ natureTheme: key, themeSkinAuto: true });
+    applyTheme();
+  }
+
+  function setArkTheme(key) {
+    if (!ARK_THEMES[key]) return;
+    Store.updateSettings({ arkTheme: key, themeSkinAuto: true });
+    applyTheme();
+  }
+
+  /** 开关机制皮肤：开启时重置为「自动跟随强调色」，让机制默认色先呈现 */
   function setThemeSkin(on) {
     var patch = { themeSkin: !!on };
     if (on) patch.themeSkinAuto = true;
@@ -259,6 +343,10 @@
 
   global.Theme = {
     THEMES: THEMES,
+    NATURE_THEMES: NATURE_THEMES,
+    ARK_THEMES: ARK_THEMES,
+    setNatureTheme: setNatureTheme,
+    setArkTheme: setArkTheme,
     apply: applyTheme,
     applyMech: applyMech,
     setThemeSkin: setThemeSkin,
@@ -274,5 +362,3 @@
     mixWhite: mixWhite
   };
 })(window);
-
-

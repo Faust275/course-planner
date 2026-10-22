@@ -270,6 +270,38 @@
         }
       }),
       el('button', {
+        class: 'btn btn-sm', text: '清理末尾空行',
+        onclick: function () {
+          syncCells();
+          var removed = 0;
+          while (g.rows.length > 1 && g.cells[g.rows.length - 1].every(function (t) { return !(t || '').trim(); })) {
+            g.rows.pop(); g.cells.pop(); removed++;
+          }
+          if (removed) { UI.toast('已清理 ' + removed + ' 个空行'); draw(); }
+          else { UI.toast('末尾没有多余空行'); }
+        }
+      }),
+      el('button', {
+        class: 'btn btn-sm', text: '合并连堂课',
+        title: '检测同列连续节次的同名课程',
+        onclick: function () {
+          syncCells();
+          var merged = 0;
+          g.cols.forEach(function (col, ci) {
+            for (var ri = 1; ri < g.rows.length; ri++) {
+              var prev = (g.cells[ri - 1] && g.cells[ri - 1][ci] || '').trim();
+              var cur = (g.cells[ri] && g.cells[ri][ci] || '').trim();
+              if (prev && cur && prev === cur) {
+                g.cells[ri][ci] = '';
+                merged++;
+              }
+            }
+          });
+          if (merged) { UI.toast('已合并 ' + merged + ' 节连堂课'); draw(); }
+          else { UI.toast('未发现连续同名课程'); }
+        }
+      }),
+      el('button', {
         class: 'btn btn-sm', text: '重新识别',
         onclick: function () { S.step = 'pick'; S.grid = null; draw(); }
       })
@@ -298,10 +330,14 @@
       ]));
       g.cols.forEach(function (col, ci) {
         var val = (g.cells[ri] && g.cells[ri][ci]) || '';
+        var isFilled = !!val.trim();
         var ta = el('textarea', {
-          class: 'ocr-cell',
+          class: 'ocr-cell' + (isFilled ? ' has-content' : ''),
           rows: val.split('\n').length > 1 ? 3 : 2,
-          dataset: { r: ri, c: ci }
+          dataset: { r: ri, c: ci },
+          oninput: function () {
+            ta.classList.toggle('cp-has-content', !!ta.value.trim());
+          }
         });
         ta.value = val;
         tr.appendChild(el('td', {}, [ta]));
@@ -429,6 +465,20 @@
       el('p', { text: '课程名、地点、老师已经分开，直接改就行；不需要的可以删掉。周次写成「1-16」「单周」「双周」，留空表示整个学期。' })
     ]));
 
+    var itemFilter = (S._itemFilter || '').trim().toLowerCase();
+    var searchBox = el('div', { class: 'ocr-search-bar' }, [
+      V.svg(V.icons.search, 15),
+      el('input', {
+        placeholder: '筛选课程名、老师或地点…',
+        value: S._itemFilter || '',
+        oninput: function () {
+          S._itemFilter = this.value;
+          draw();
+        }
+      })
+    ]);
+    bodyEl.appendChild(searchBox);
+
     if (!items.length) {
       bodyEl.appendChild(el('div', { class: 'q-empty', text: '没有课程，返回上一步补几个格子吧' }));
     }
@@ -447,10 +497,18 @@
       var weekVal = it.weeks || (it.weekType === 'all' && it.startWeek === 1 &&
                     it.endWeek === Store.semester.weeks ? '' : it.weeks);
 
+      var isDup = Store.courses.some(function (c) {
+        return c.day === it.day && c.periodId === it.periodId && c.name === it.name;
+      });
+      if (itemFilter) {
+        var lineStr = [it.name, it.location, it.teacher].join(' ').toLowerCase();
+        if (lineStr.indexOf(itemFilter) < 0) return;
+      }
       list.appendChild(el('div', { class: 'ocr-item' }, [
         el('div', { class: 'ocr-item-head' }, [
           el('span', { class: 'chip chip-primary', text: '周' + dn[it.day - 1].slice(1) }),
           el('span', { class: 'ocr-item-period', text: it.periodName }),
+          isDup ? el('span', { class: 'ocr-dup-badge', text: '已存在' }) : null,
           el('button', {
             class: 'icon-btn', title: '删除这门课',
             onclick: function () { S.items.splice(i, 1); draw(); }
@@ -481,6 +539,20 @@
         disabled: items.length ? null : 'disabled',
         onclick: importItems
       }, ['导入 ' + items.length + ' 门课']),
+      el('button', {
+        class: 'btn btn-sm',
+        text: '一键设为 1-' + Store.semester.weeks + '周',
+        onclick: function () {
+          items.forEach(function (it) {
+            it.weekType = 'all';
+            it.startWeek = 1;
+            it.endWeek = Store.semester.weeks;
+            it.weeks = '1-' + Store.semester.weeks + '周';
+          });
+          draw();
+          UI.toast('已将所有课程设为 1-' + Store.semester.weeks + ' 周');
+        }
+      }),
       el('button', {
         class: 'btn', text: '返回网格',
         onclick: function () { S.step = S.grid ? 'grid' : 'pick'; draw(); }

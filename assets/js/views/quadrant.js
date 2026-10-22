@@ -67,6 +67,7 @@
       var self = this;
       var root = host;
       qHost = host;
+      stopSleepTicker();     // 重绘会换掉 DOM，旧计时器先停掉
       root.innerHTML = '';
 
       var dateStr = qDate || DateUtil.toStr(DateUtil.today());
@@ -155,20 +156,65 @@
       var self = this;
       var list = Store.sleepsOf(dateStr);
       var total = Store.sleepMinutes(dateStr);
+      var sess = Store.sleepSession;
+      var isToday = dateStr === DateUtil.toStr(DateUtil.today());
       var card = el('div', { class: 'card', style: { padding: '14px 16px', marginTop: '14px' } });
+
+      /* 计时按钮只在今天出现（开始 = 现在）；已开始的话在哪天都能结束 */
+      var acts = el('div', {
+        style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }
+      }, [
+        (sess || isToday) ? el('button', {
+          class: 'btn btn-sm' + (sess ? '' : ' btn-primary'),
+          style: sess ? { background: 'var(--green)', color: '#fff', borderColor: 'transparent' } : {},
+          title: sess ? '结束这次睡眠，按当前时间写入记录' : '以当前时间作为入睡时间，开始计时',
+          onclick: function (e) { e.stopPropagation(); toggleSleepTimer(); }
+        }, [sess ? '结束睡眠' : '开始睡眠']) : null,
+        el('button', {
+          class: 'btn btn-sm',
+          onclick: function () { SleepDialog.open(dateStr); }
+        }, ['记录'])
+      ]);
 
       card.appendChild(el('div', { class: 'section-title' }, [
         V.svg(V.icons.moon, 16),
         '睡眠',
-        el('span', { class: 'q-count', text: total ? TimeUtil.humanMin(total) : '未记录' }),
-        el('button', {
-          class: 'btn btn-sm', style: { marginLeft: 'auto' },
-          onclick: function () { SleepDialog.open(dateStr); }
-        }, ['记录'])
+        el('span', { class: 'q-count', text: sess ? '计时中' : (total ? TimeUtil.humanMin(total) : '未记录') }),
+        acts
       ]));
 
+      /* ---- 正在计时：显示起睡时刻与已睡时长 ---- */
+      if (sess) {
+        var elapsed = el('b', {
+          style: { color: 'var(--green)', fontWeight: '600' },
+          text: elapsedText(sess.at)
+        });
+        var startLabel = (sess.date === DateUtil.toStr(DateUtil.today()) ? '' : sess.date.slice(5) + ' ') + sess.start;
+        card.appendChild(el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: '8px', margin: '2px 0 10px',
+            padding: '9px 11px', borderRadius: '10px',
+            background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.22)'
+          }
+        }, [
+          el('i', {
+            style: { width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', flex: '0 0 auto' }
+          }),
+          el('span', { style: { fontSize: '12.5px', color: 'var(--text-2)' }, text: '正在睡眠 · 从 ' + startLabel + ' 开始' }),
+          el('span', { style: { marginLeft: 'auto', fontSize: '12.5px' } }, [elapsed])
+        ]));
+        startSleepTicker(elapsed, sess.at);
+      }
+
       if (!list.length) {
-        card.appendChild(el('div', { class: 'q-empty', text: '还没有记录睡眠，点右侧「记录」填写入睡和醒来时间。' }));
+        card.appendChild(el('div', {
+          class: 'q-empty',
+          text: sess
+            ? '这次睡眠还没结束，点「结束睡眠」后记录会出现在这里。'
+            : isToday
+              ? '还没有记录睡眠。点「开始睡眠」现在记一觉，或用「记录」补填入睡和醒来时间。'
+              : '这一天没有睡眠记录。'
+        }));
         return card;
       }
 
@@ -417,6 +463,49 @@
   }
 
   function rerender() {
+    if (qHost) QuadrantPane.render(qHost);
+  }
+
+  /* ==========================================================
+   * 睡眠计时：点一下开始，再点一下结束
+   * ========================================================== */
+  var sleepTicker = null;
+
+  function stopSleepTicker() {
+    if (sleepTicker) { clearInterval(sleepTicker); sleepTicker = null; }
+  }
+
+  function elapsedText(at) {
+    var mins = Math.max(0, Math.round((Date.now() - Number(at)) / 60000));
+    return mins < 1 ? '不足 1 分钟' : '已睡 ' + TimeUtil.humanMin(mins);
+  }
+
+  /** 每 30 秒刷新一次已睡时长；节点被换掉（切页/重绘）就自动停 */
+  function startSleepTicker(node, at) {
+    stopSleepTicker();
+    sleepTicker = setInterval(function () {
+      if (!node.isConnected) { stopSleepTicker(); return; }
+      node.textContent = elapsedText(at);
+    }, 30000);
+  }
+
+  function toggleSleepTimer() {
+    var sess = Store.sleepSession;
+    if (sess) {
+      var res = Store.endSleep();
+      if (res && res.tooShort) {
+        UI.toast('不足 1 分钟，这次没有记录');
+      } else if (res && res.tooLong) {
+        UI.toast('这次计时超过 24 小时，已取消，请手动补记', 'err');
+      } else if (res && res.record) {
+        var today = DateUtil.toStr(DateUtil.today());
+        UI.toast('已记录 ' + TimeUtil.humanMin(res.minutes) +
+          (res.record.date === today ? '' : '（记入 ' + res.record.date.slice(5) + '）'));
+      }
+    } else {
+      Store.startSleep();
+      UI.toast('开始睡眠，醒来后再点「结束睡眠」');
+    }
     if (qHost) QuadrantPane.render(qHost);
   }
 

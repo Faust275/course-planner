@@ -175,12 +175,15 @@
       // —— 日程 / 象限 ——
       settings: {
         trackMeal: true, trackSleep: true, statsOn: true,   // statsOn：是否开启「统计」功能（待办的统计分页 + 今日卡片）
+        showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         theme: 'indigo', customColor: '#4f46e5',
         themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
         themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
         themeMode: 'auto',        // 明暗：auto（跟随系统）/ light / dark
+        natureTheme: 'pine',      // 自然主题预设：pine(晨雾松林) | aurora(极光苍穹) | sunset(暮霞熔金) | slate(山岚青黛)
+        arkTheme: 'terminal',     // 明日方舟预设：terminal(经典终端) | roguelike(集成战略水墨)
         quiz: { right: 0, wrong: 0 },
         nav: { today: true, schedule: true,
                tasks: true, pomodoro: true, settings: true },
@@ -209,6 +212,15 @@
         asr: { prefer: 'auto', appId: '', apiKey: '', apiSecret: '' },
         ocr: { prefer: 'auto', provider: '', apiKey: '', endpoint: '', model: '' },
         background: { dataUrl: '', mask: 0.5 },
+        // 生理节律与精力高峰偏好（详见「设置 → 精力高峰」）
+        energy: {
+          custom: false,
+          peaks: [
+            { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+            { start: '15:00', end: '17:30', name: '午后高效期' },
+            { start: '19:30', end: '21:30', name: '晚间静心期' }
+          ]
+        },
         // 子任务行为（详见「设置 → 子任务」）。前三项会互相影响，设置页有互斥提示
         subtask: {
           autoDoneParent: false,   // 子任务全完成 → 自动完成父任务
@@ -247,7 +259,7 @@
         jade: 0,            // 合成玉（抽卡）
         mode: 'forest',     // 当前奖励机制：forest | gacha
         gacha: { pity6: 0, total: 0, ops: [], log: [], dailyGuaranteeDay: '', streakNo6: 0, streakNo5: 0,
-                 limited: { target: '', count: 0 } },
+                 limited: { target: '', count: 0 }, wishlist: [] },
         earned: 0,          // 累计获得
         pointLog: [],       // 积分流水：[{date, n, src}]，src ∈ focus/task/plan/goal/ach/sleep/meal/activity
         focusMinutes: 0,    // 累计专注分钟
@@ -267,6 +279,7 @@
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
+      sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
       shop: {                   // 商城：月卡 / 潜能兑换 / 限定专区
@@ -300,6 +313,104 @@
       fishLog: Array.isArray(s.fishLog) ? s.fishLog : [],
       log: Array.isArray(s.log) ? s.log : []
     };
+  }
+
+  /**
+   * 强 Schema 校验与迁移器 (Declarative Schema Validator & Sanitizer)
+   * 对外部导入、旧备份、本地存储读入的数据进行深层结构检验与默认值修复，
+   * 杜绝因缺失属性导致的空指针崩溃（TypeError: reading 'x' of undefined）。
+   * @param {Object} raw - 输入的数据对象
+   * @returns {Object} 符合规范的完整 state 对象
+   */
+  function validateSchema(raw) {
+    var def = defaultState();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return def;
+    }
+
+    var out = Object.assign({}, def, raw);
+
+    // 1. 数组类型安全收敛
+    var arrayKeys = [
+      'courses', 'tasks', 'plans', 'goals', 'ledger', 'notes',
+      'diaries', 'events', 'activities', 'meals', 'sleeps',
+      'courseExceptions', 'periods', 'semesters'
+    ];
+    arrayKeys.forEach(function (k) {
+      if (!Array.isArray(out[k])) out[k] = Array.isArray(def[k]) ? def[k].slice() : [];
+    });
+
+    // 2. 学期与节次校验
+    if (!out.semesters.length) out.semesters = def.semesters.slice();
+    if (!out.periods.length) out.periods = def.periods.slice();
+    if (!out.currentSemesterId || !out.semesters.some(function (s) { return s.id === out.currentSemesterId; })) {
+      out.currentSemesterId = out.semesters[0].id;
+    }
+
+    // 3. Settings 深度校验与收敛
+    var s = (out.settings && typeof out.settings === 'object' && !Array.isArray(out.settings)) ? out.settings : {};
+    out.settings = Object.assign({}, def.settings, s);
+    out.settings.subtask = subOpts(out.settings);
+    out.settings.statsWidgets = Object.assign({}, def.settings.statsWidgets, s.statsWidgets || {});
+    out.settings.health = Object.assign({}, def.settings.health, s.health || {});
+    out.settings.ui = Object.assign({}, def.settings.ui, s.ui || {});
+    out.settings.goals = Object.assign({}, def.settings.goals, s.goals || {});
+    out.settings.diary = Object.assign({}, def.settings.diary, s.diary || {});
+    out.settings.diet = Object.assign({}, def.settings.diet, s.diet || {});
+    out.settings.gpa = Object.assign({}, def.settings.gpa, s.gpa || {});
+    out.settings.tagMeta = (s.tagMeta && typeof s.tagMeta === 'object') ? s.tagMeta : {};
+    out.settings.nav = Object.assign({}, def.settings.nav, s.nav || {});
+    if (!Array.isArray(out.settings.navOrder)) out.settings.navOrder = [];
+    if (['auto', 'light', 'dark'].indexOf(out.settings.themeMode) < 0) out.settings.themeMode = 'auto';
+    if (typeof out.settings.themeSkin !== 'boolean') out.settings.themeSkin = true;
+    if (typeof out.settings.themeSkinAuto !== 'boolean') out.settings.themeSkinAuto = true;
+    if (!out.settings.natureTheme) out.settings.natureTheme = 'pine';
+    if (!out.settings.arkTheme) out.settings.arkTheme = 'terminal';
+    if (typeof out.settings.showWeekend !== 'boolean') out.settings.showWeekend = true;
+    if (typeof out.settings.statsOn !== 'boolean') out.settings.statsOn = true;
+
+    // 4. Pomodoro 深度校验
+    var pm = (out.pomodoro && typeof out.pomodoro === 'object' && !Array.isArray(out.pomodoro)) ? out.pomodoro : {};
+    out.pomodoro = Object.assign({}, def.pomodoro, pm);
+    out.pomodoro.points = Math.max(0, Number(pm.points) || 0);
+    out.pomodoro.jade = Math.max(0, Number(pm.jade) || 0);
+    out.pomodoro.mode = (pm.mode === 'gacha' && out.settings.devArknights) ? 'gacha' : 'forest';
+    out.pomodoro.trees = Array.isArray(pm.trees) ? pm.trees : [];
+    out.pomodoro.pointLog = Array.isArray(pm.pointLog) ? pm.pointLog : [];
+    out.pomodoro.sessions = Array.isArray(pm.sessions) ? pm.sessions : [];
+    out.pomodoro.timer = Object.assign({}, def.pomodoro.timer, pm.timer || {});
+
+    // Gacha 状态校验
+    var gc = (pm.gacha && typeof pm.gacha === 'object') ? pm.gacha : {};
+    out.pomodoro.gacha = Object.assign({}, def.pomodoro.gacha, gc);
+    out.pomodoro.gacha.ops = Array.isArray(gc.ops) ? gc.ops : [];
+    out.pomodoro.gacha.log = Array.isArray(gc.log) ? gc.log : [];
+    out.pomodoro.gacha.pools = (gc.pools && typeof gc.pools === 'object') ? gc.pools : {};
+    ['standard', 'classic'].forEach(function (pid) {
+      var p = out.pomodoro.gacha.pools[pid];
+      if (!p || typeof p !== 'object') p = out.pomodoro.gacha.pools[pid] = {};
+      p.pity6 = Math.max(0, Number(p.pity6) || 0);
+      p.total = Math.max(0, Number(p.total) || 0);
+      p.spark = Math.max(0, Number(p.spark) || 0);
+      p.guaranteed = !!p.guaranteed;
+    });
+    out.pomodoro.gacha.limited = Object.assign({}, def.pomodoro.gacha.limited, gc.limited || {});
+
+    // 5. Shop 深度校验（核心防崩溃区）
+    out.shop = mergeShop(def.shop, out.shop);
+
+    // 6. 成就与使用统计
+    var ach = (out.achievements && typeof out.achievements === 'object') ? out.achievements : {};
+    out.achievements = { done: (ach.done && typeof ach.done === 'object') ? ach.done : {} };
+    out.usage = (out.usage && typeof out.usage === 'object') ? out.usage : {};
+    out.taskSeq = (out.taskSeq && typeof out.taskSeq === 'object') ? out.taskSeq : {};
+
+    // 7. 睡眠临时会话校验
+    if (out.sleepSession && (!out.sleepSession.date || !out.sleepSession.start || typeof out.sleepSession.at !== 'number')) {
+      out.sleepSession = null;
+    }
+
+    return out;
   }
 
   /** 时间工具：HH:MM <-> 分钟 */
@@ -1144,24 +1255,175 @@
   /**
    * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
    * - repeat.type: none | daily | weekly | monthly | yearly
-   * - 基准日若已过期，从今天起算，避免一直在远古日期往后推
-   * - monthly/yearly 的 day 超出目标月时夹到当月最后一天（闰年 2/29 -> 2/28）
+   * - **始终以原定日期为锚点往前推进**，跳过已经错过的期：
+   *   10/23（周五）那期拖到 10/27 才完成，下一期仍是 10/30，而不是 11/3。
+   *   这样「每周五」不会因为晚完成漂成「每周一」。
+   * - 只推进到「第一个晚于今天」的期，不会一次性补出多条欠账
+   * - monthly/yearly 每次加法都从锚点算起，月末夹到当月最后一天（1/31 -> 2/28 -> 3/31）
+   * @returns YYYY-MM-DD 字符串；无下一期返回 null
+   */
+  /** getDay() 编号(0=周日..6=周六) -> 中文星期（周一..周日） */
+  function wdCN(w) {
+    var idx = ((w % 7) + 7) % 7;
+    return DAY_NAMES[(idx + 6) % 7];
+  }
+
+  /** 星期数组按「周一..周日」排序，便于人话展示 */
+  function orderWeekdays(arr) {
+    var order = [1, 2, 3, 4, 5, 6, 0];
+    return order.filter(function (w) { return arr.indexOf(w) !== -1; });
+  }
+
+  /**
+   * 取某年某月的第 pos 个星期 wd（pos>0：第 1..4 个；pos=-1：最后一个）。
+   * 该月不存在该位置的星期（如某月只有 4 个周一却要第 5 个）返回 null。
+   */
+  function nthWeekdayOfMonth(year, monthIdx, pos, wd) {
+    if (wd == null) return null;
+    var first = new Date(year, monthIdx, 1);
+    var firstDow = first.getDay();
+    var diff = (((wd % 7) + 7) % 7) - firstDow;
+    if (diff < 0) diff += 7;
+    var firstMatch = new Date(year, monthIdx, 1 + diff);
+    if (pos > 0) {
+      var d = DateUtil.addDays(firstMatch, (pos - 1) * 7);
+      if (d.getMonth() !== monthIdx) return null;     // 越月说明该月没有第 pos 个（如第 5 个周一）
+      return d;
+    }
+    // 最后一个：先推 4 周，再回退到仍在当月内的那个
+    var last = DateUtil.addDays(firstMatch, 28);
+    while (last.getMonth() !== monthIdx) last = DateUtil.addDays(last, -7);
+    return last;
+  }
+
+  /** 周重复·多选星期：每周/每 N 周的指定星期各出现一次，返回晚于 today 的第一天 */
+  function nextWeeklyMulti(anchor, weekdays, iv, today) {
+    var origin = DateUtil.weekStart(anchor);   // 锚点所在周一，作为 N 周块的起点
+    var blockLen = 7 * iv;
+    var best = null;
+    weekdays.forEach(function (w) {
+      var off = (((w % 7) + 6) % 7);           // 周一=0 … 周日=6（相对 origin 的偏移）
+      var firstInBlock = DateUtil.addDays(origin, off);
+      var delta = DateUtil.diffDays(firstInBlock, today); // >0 表示 firstInBlock 晚于 today
+      var k = delta >= 0 ? 0 : (Math.floor(-delta / blockLen) + 1);
+      var cand = DateUtil.addDays(firstInBlock, k * blockLen);
+      while (DateUtil.diffDays(cand, today) <= 0) cand = DateUtil.addDays(cand, blockLen);
+      if (best === null || DateUtil.diffDays(cand, best) < 0) best = cand;
+    });
+    return best ? DateUtil.toStr(best) : null;
+  }
+
+  /**
+   * 计算下一次应出现的日期（展开式：完成任务时生成这条）。
+   * - repeat.type: none | daily | weekly | monthly | yearly
+   * - **始终以原定日期为锚点往前推进**，跳过已经错过的期：
+   *   10/23（周五）那期拖到 10/27 才完成，下一期仍是 10/30，而不是 11/3。
+   *   这样「每周五」不会因为晚完成漂成「每周一」。
+   * - 只推进到「第一个晚于今天」的期，不会一次性补出多条欠账
+   * - monthly/yearly 每次加法都从锚点算起，月末夹到当月最后一天（1/31 -> 2/28 -> 3/31）
+   * - weekly.weekdays（多选星期）/ monthly.monthRule('pos'|'lastday') 为第三档新增的自定义周期
    * @returns YYYY-MM-DD 字符串；无下一期返回 null
    */
   function nextDueDate(dueDateStr, repeat, todayStr) {
     if (!repeat || repeat.type === 'none') return null;
+    var anchor = DateUtil.parse(dueDateStr);
+    if (!anchor) return null;
     var today = DateUtil.parse(todayStr || DateUtil.toStr(DateUtil.today()));
-    var ref = DateUtil.parse(dueDateStr);
-    if (!ref) return null;
-    if (DateUtil.diffDays(ref, today) < 0) ref = today;       // 已过期的基准，从今天算
+    if (!today) return null;
     var iv = Math.max(1, (repeat.interval | 0) || 1);
-    var nxt;
-    if (repeat.type === 'daily') nxt = DateUtil.addDays(ref, iv);
-    else if (repeat.type === 'weekly') nxt = DateUtil.addDays(ref, 7 * iv);
-    else if (repeat.type === 'monthly') nxt = DateUtil.addMonths(ref, iv);
-    else if (repeat.type === 'yearly') nxt = DateUtil.addYears(ref, iv);
-    else return null;
-    return DateUtil.toStr(nxt);
+
+    // 日：每 iv 天一个，等差 O(1)
+    if (repeat.type === 'daily') {
+      var k = Math.floor(DateUtil.diffDays(today, anchor) / iv) + 1;
+      if (k < 1) k = 1;
+      return DateUtil.toStr(DateUtil.addDays(anchor, k * iv));
+    }
+
+    // 周：多选星期走专属逻辑；否则沿用「每 iv 周」的等差（周几由锚点日期决定）
+    if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        return nextWeeklyMulti(anchor, repeat.weekdays, iv, today);
+      }
+      var wk = Math.floor(DateUtil.diffDays(today, anchor) / (7 * iv)) + 1;
+      if (wk < 1) wk = 1;
+      return DateUtil.toStr(DateUtil.addDays(anchor, wk * 7 * iv));
+    }
+
+    if (repeat.type === 'monthly') {
+      // 月末最后一天（j=0 即锚点当月：若晚于今天就直接用它，不跳过当月）
+      if (repeat.monthRule === 'lastday') {
+        for (var i = 0; i <= 3000; i++) {
+          var lm = DateUtil.addMonths(anchor, iv * i);
+          var last = new Date(lm.getFullYear(), lm.getMonth() + 1, 0);
+          if (DateUtil.diffDays(last, today) > 0) return DateUtil.toStr(last);
+        }
+        return null;
+      }
+      // 第 pos 个星期 wd（pos=-1 = 最后一个）
+      if (repeat.monthRule === 'pos') {
+        for (var j = 0; j <= 3000; j++) {
+          var pm = DateUtil.addMonths(anchor, iv * j);
+          var pd = nthWeekdayOfMonth(pm.getFullYear(), pm.getMonth(), repeat.pos, repeat.wd);
+          if (pd && DateUtil.diffDays(pd, today) > 0) return DateUtil.toStr(pd);
+        }
+        return null;
+      }
+      // 默认：每月固定 day 号（沿用锚点日期的日，月末/闰年夹紧）
+      for (var m = 0; m <= 3000; m++) {
+        var cand = DateUtil.addMonths(anchor, iv * m);
+        if (DateUtil.diffDays(cand, today) > 0) return DateUtil.toStr(cand);
+      }
+      return null;
+    }
+
+    // 年：每 iv 年（闰年 2/29 夹到 2/28）
+    if (repeat.type === 'yearly') {
+      for (var y = 1; y <= 3000; y++) {
+        var cy = DateUtil.addYears(anchor, iv * y);
+        if (DateUtil.diffDays(cy, today) > 0) return DateUtil.toStr(cy);
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * 由「开始日期 + repeat 规则」算出第一期的实际日期（>= 开始日期）。
+   * 用于新建/编辑时把截止日期对齐到规则真正生效的那一天；
+   * 旧规则（无 weekdays/monthRule）原样返回开始日期。
+   * @returns YYYY-MM-DD 字符串
+   */
+  function firstOccurrence(startStr, repeat) {
+    var start = DateUtil.parse(startStr);
+    if (!start || !repeat || repeat.type === 'none') return startStr;
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+
+    if (repeat.type === 'weekly' && repeat.weekdays && repeat.weekdays.length) {
+      for (var i = 0; i <= 400; i++) {
+        var d = DateUtil.addDays(start, i);
+        if (repeat.weekdays.indexOf(d.getDay()) !== -1) return DateUtil.toStr(d);
+      }
+      return startStr;
+    }
+    if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') {
+        for (var a = 0; a <= 400; a++) {
+          var lm = DateUtil.addMonths(start, iv * a);
+          var last = new Date(lm.getFullYear(), lm.getMonth() + 1, 0);
+          if (DateUtil.diffDays(last, start) >= 0) return DateUtil.toStr(last);
+        }
+        return startStr;
+      }
+      if (repeat.monthRule === 'pos') {
+        for (var b = 0; b <= 400; b++) {
+          var pm = DateUtil.addMonths(start, iv * b);
+          var pd = nthWeekdayOfMonth(pm.getFullYear(), pm.getMonth(), repeat.pos, repeat.wd);
+          if (pd && DateUtil.diffDays(pd, start) >= 0) return DateUtil.toStr(pd);
+        }
+        return startStr;
+      }
+    }
+    return startStr;
   }
 
   /** until 是含当天的最末一次；超过 until 即到期 */
@@ -1177,7 +1439,119 @@
     if (!types[raw.type]) return { type: 'none' };
     var r = { type: raw.type, interval: Math.max(1, (raw.interval | 0) || 1) };
     if (raw.until && /^\d{4}-\d{2}-\d{2}$/.test(raw.until)) r.until = raw.until;
+    if (raw.type === 'weekly') {
+      // 多选星期：去重、取合法 0..6、排序；为空则回退「按首期日期的星期」（旧行为）
+      if (raw.weekdays && Array.isArray(raw.weekdays) && raw.weekdays.length) {
+        var seen = {}, wds = [];
+        raw.weekdays.forEach(function (x) {
+          var w = (((x % 7) + 7) % 7);
+          if (!seen[w]) { seen[w] = 1; wds.push(w); }
+        });
+        if (wds.length) r.weekdays = wds.sort(function (a, b) { return a - b; });
+      }
+    }
+    if (raw.type === 'monthly') {
+      if (raw.monthRule === 'pos' && raw.wd != null) {
+        r.monthRule = 'pos';
+        r.wd = (((raw.wd % 7) + 7) % 7);
+        r.pos = (raw.pos === -1) ? -1 : Math.max(1, Math.min(4, (raw.pos | 0) || 1));
+      } else if (raw.monthRule === 'lastday') {
+        r.monthRule = 'lastday';
+      }
+    }
     return r;
+  }
+
+  /**
+   * 重复规则的人话摘要（纯展示，不参与计算）。
+   * 例：每周五一次，从 10 月 23 日（周五）开始，没有结束日期。
+   * @param {object} repeat { type, interval, until }
+   * @param {string} dueDate 第一期的日期 YYYY-MM-DD
+   */
+  function repeatSummary(repeat, dueDate) {
+    if (!repeat || !repeat.type || repeat.type === 'none') return '';
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var d = DateUtil.parse(dueDate);
+    var rule;
+    if (repeat.type === 'daily') {
+      rule = iv > 1 ? '每 ' + iv + ' 天一次' : '每天一次';
+    } else if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        if (repeat.weekdays.length === 1) {
+          // 单星期：沿用简洁写法（每周四一次），与旧「每周」体验一致
+          var single = wdCN(repeat.weekdays[0]).slice(1);
+          rule = (iv > 1 ? '每 ' + iv + ' 周的' : '每周') + single + '一次';
+        } else {
+          var wds = orderWeekdays(repeat.weekdays).map(wdCN);
+          rule = (iv > 1 ? '每 ' + iv + ' 周的' : '每周') + wds.join('、') + '一次';
+        }
+      } else {
+        var wd = d ? DateUtil.weekdayCN(d) : '';
+        rule = iv > 1
+          ? '每 ' + iv + ' 周的' + wd + '一次'
+          : '每周' + (wd ? wd.slice(1) : '') + '一次';   // 周五 -> 每周五
+      }
+    } else if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') {
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') + '最后一天一次';
+      } else if (repeat.monthRule === 'pos') {
+        var posTxt = repeat.pos === -1 ? '最后一个' : '第 ' + repeat.pos + ' 个';
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') + posTxt + wdCN(repeat.wd) + '一次';
+      } else {
+        rule = (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') +
+               (d ? ' ' + d.getDate() + ' 日' : '') + '一次';
+      }
+    } else if (repeat.type === 'yearly') {
+      rule = (iv > 1 ? '每 ' + iv + ' 年的' : '每年') +
+             (d ? ' ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日' : '') + '一次';
+    } else {
+      return '';
+    }
+    if (!d) return rule + '；还没选日期，完成后不会生成下一期。';
+
+    var out = rule + '，从 ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() +
+              ' 日（' + DateUtil.weekdayCN(d) + '）开始';
+    if (repeat.until) {
+      var u = DateUtil.parse(repeat.until);
+      out += u ? '，到 ' + (u.getMonth() + 1) + ' 月 ' + u.getDate() + ' 日为止' : '';
+    } else {
+      out += '，没有结束日期';
+    }
+    return out + '。';
+  }
+
+  /** 列表 chip 用的极简规则：每天 / 每周五 / 每 2 周·周一·周三·周五 / 每月第2周三 / 每月末 */
+  function repeatShort(repeat, dueDate) {
+    if (!repeat || !repeat.type || repeat.type === 'none') return '';
+    var iv = Math.max(1, (repeat.interval | 0) || 1);
+    var d = DateUtil.parse(dueDate);
+    if (repeat.type === 'daily') return iv > 1 ? '每 ' + iv + ' 天' : '每天';
+    if (repeat.type === 'weekly') {
+      if (repeat.weekdays && repeat.weekdays.length) {
+        if (repeat.weekdays.length === 1) {
+          var s = wdCN(repeat.weekdays[0]).slice(1);
+          return (iv > 1 ? '每' + iv + '周·' : '每周') + s;
+        }
+        var ws = orderWeekdays(repeat.weekdays).map(wdCN).join('·');
+        return (iv > 1 ? '每' + iv + '周·' : '') + ws;
+      }
+      var wd2 = d ? DateUtil.weekdayCN(d) : '';
+      return iv > 1 ? '每 ' + iv + ' 周的' + wd2 : '每周' + (wd2 ? wd2.slice(1) : '');
+    }
+    if (repeat.type === 'monthly') {
+      if (repeat.monthRule === 'lastday') return '每月末';
+      if (repeat.monthRule === 'pos') {
+        if (repeat.pos === -1) return '每月末' + wdCN(repeat.wd);
+        return '每月第' + repeat.pos + wdCN(repeat.wd);
+      }
+      return (iv > 1 ? '每 ' + iv + ' 个月的' : '每月') +
+             (d ? ' ' + d.getDate() + ' 日' : '');
+    }
+    if (repeat.type === 'yearly') {
+      return (iv > 1 ? '每 ' + iv + ' 年的' : '每年') +
+             (d ? ' ' + (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日' : '');
+    }
+    return '';
   }
 
   /** 由当前实例生成下一个实例（保留 repeat 使链条继续）；无下一期返回 null */
@@ -1694,6 +2068,7 @@
     get activities() { return state.activities; },
     get meals() { return state.meals; },
     get sleeps() { return state.sleeps; },
+    get sleepSession() { return state.sleepSession || null; },
 
     init: async function () {
       // 检测 localStorage 是否可用（iframe / 隐私模式可能被禁用）
@@ -1725,6 +2100,7 @@
 
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
+      state = validateSchema(state);
       var ds = defaultState();
       if (!state) state = ds;
       if (!state.settings) state.settings = ds.settings;
@@ -1733,6 +2109,7 @@
       }
       if (state.settings.trackMeal == null) state.settings.trackMeal = true;
       if (state.settings.trackSleep == null) state.settings.trackSleep = true;
+      if (state.settings.showWeekend == null) state.settings.showWeekend = true;
       if (state.settings.statsOn == null) state.settings.statsOn = true;
       state.settings.statsWidgets = Object.assign(
         { time: true, curve: true, sources: true, spend: true, course: true }, state.settings.statsWidgets || {});
@@ -1745,6 +2122,8 @@
       if (typeof state.settings.themeSkin !== 'boolean') state.settings.themeSkin = true;
       if (typeof state.settings.themeSkinAuto !== 'boolean') state.settings.themeSkinAuto = true;
       if (['auto', 'light', 'dark'].indexOf(state.settings.themeMode) < 0) state.settings.themeMode = 'auto';
+      if (!state.settings.natureTheme) state.settings.natureTheme = 'pine';
+      if (!state.settings.arkTheme) state.settings.arkTheme = 'terminal';
       if (!state.settings.asr) state.settings.asr = ds.settings.asr;
       if (typeof state.settings.devArknights !== 'boolean') state.settings.devArknights = false;
       if (!state.settings.devArknights && state.pomodoro.mode === 'gacha') state.pomodoro.mode = 'forest';
@@ -1844,6 +2223,11 @@
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
+      // 进行中的睡眠计时：字段不全就丢弃，避免半截状态一直转下去
+      if (state.sleepSession && (!state.sleepSession.date || !state.sleepSession.start ||
+          typeof state.sleepSession.at !== 'number')) {
+        state.sleepSession = null;
+      }
       if (!state.courses) state.courses = [];
       if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
@@ -2300,7 +2684,17 @@
         startWeek: data.startWeek == null ? 1 : data.startWeek,
         endWeek: data.endWeek == null ? this.currentSemester().weeks : data.endWeek,
         weekType: data.weekType || 'all',
-        note: (data.note || '').trim()
+        note: (data.note || '').trim(),
+        rotations: Array.isArray(data.rotations) ? data.rotations.filter(function (r) {
+          return r && (r.location || r.topic);
+        }).map(function (r) {
+          return {
+            startWeek: parseInt(r.startWeek, 10) || 1,
+            endWeek: parseInt(r.endWeek, 10) || 16,
+            location: (r.location || '').trim(),
+            topic: (r.topic || '').trim()
+          };
+        }) : []
       };
       state.courses.push(c);
       this.bumpUsage('course');
@@ -2340,6 +2734,18 @@
         c.startTime = m0.startTime;
         c.endTime = m0.endTime;
         if (data.location == null && m0.location) c.location = m0.location;
+      }
+      if (Array.isArray(data.rotations)) {
+        c.rotations = data.rotations.filter(function (r) {
+          return r && (r.location || r.topic);
+        }).map(function (r) {
+          return {
+            startWeek: parseInt(r.startWeek, 10) || 1,
+            endWeek: parseInt(r.endWeek, 10) || 16,
+            location: (r.location || '').trim(),
+            topic: (r.topic || '').trim()
+          };
+        });
       }
       this.emit();
       return c;
@@ -2740,8 +3146,34 @@
       }];
     },
 
-    /** 把一门课按 slots 展开为「伪记录」：courseId 指向父课程，其余字段取各时段 */
-    expandCourse: function (c) {
+        /** 根据周次获取课程的多地点轮转教室 */
+    courseLocationOnWeek: function (c, week) {
+      if (!c) return '';
+      if (Array.isArray(c.rotations) && c.rotations.length && typeof week === 'number') {
+        for (var i = 0; i < c.rotations.length; i++) {
+          var r = c.rotations[i];
+          if (week >= r.startWeek && week <= r.endWeek) {
+            return r.location || c.location || '';
+          }
+        }
+      }
+      return c.location || '';
+    },
+
+    /** 根据周次获取实验课程课题名 */
+    courseTopicOnWeek: function (c, week) {
+      if (!c || !Array.isArray(c.rotations) || !c.rotations.length || typeof week !== 'number') return '';
+      for (var i = 0; i < c.rotations.length; i++) {
+        var r = c.rotations[i];
+        if (week >= r.startWeek && week <= r.endWeek) {
+          return r.topic || '';
+        }
+      }
+      return '';
+    },
+    /** 把一门课按 slots 展开为「伪记录」：courseId 指向父课程，其余字段取各时段（可按周次动态计算轮转教室） */
+    expandCourse: function (c, week) {
+      var self = this;
       if (!c) return [];
       return this.courseSlots(c).map(function (s) {
         var p = {};
@@ -2754,6 +3186,12 @@
         p.startTime = s.timeMode === 'custom' ? (s.startTime || '') : '';
         p.endTime = s.timeMode === 'custom' ? (s.endTime || '') : '';
         p.location = s.location || c.location || '';
+        if (typeof week === 'number') {
+          var rotLoc = self.courseLocationOnWeek(c, week);
+          if (rotLoc) p.location = rotLoc;
+          var topic = self.courseTopicOnWeek(c, week);
+          if (topic) p.topic = topic;
+        }
         return p;
       });
     },
@@ -2790,6 +3228,16 @@
 
 
     /* ===== 作业 / 待办 CRUD ===== */
+    /** 重复规则的人话摘要（弹窗提示、chip 的 title 共用） */
+    repeatSummary: function (repeat, dueDate) { return repeatSummary(repeat, dueDate); },
+    /** 由「开始日期 + 规则」算出第一期的实际日期（对齐到规则真正生效的那天） */
+    firstOccurrence: function (startStr, repeat) { return firstOccurrence(startStr, repeat); },
+    /** 规范化 repeat 字段（白名单 + 越界 clamp），供 UI 复用 */
+    sanitizeRepeat: function (raw) { return sanitizeRepeat(raw); },
+
+    /** 重复规则的极简标签（列表 chip 用） */
+    repeatShort: function (repeat, dueDate) { return repeatShort(repeat, dueDate); },
+
     addTask: function (data) {
       var t = {
         id: uid('t'),
@@ -2804,6 +3252,8 @@
         note: (data.note || '').trim(),
         repeat: sanitizeRepeat(data.repeat),
         parentId: this.validParentId(data.parentId),
+        energy: data.energy || 'medium',
+        examStage: data.examStage || '',
         createdAt: new Date().toISOString(),
         doneAt: ''
       };
@@ -2837,6 +3287,10 @@
       // 父子关系单独校验：不允许挂到子任务下面（只做一层）
       if (Object.prototype.hasOwnProperty.call(data, 'parentId')) {
         t.parentId = this.validParentId(data.parentId, id);
+      }
+      // 重复规则单独规范化，避免脏数据（weekdays/pos 越界、多余字段）
+      if (Object.prototype.hasOwnProperty.call(data, 'repeat')) {
+        t.repeat = sanitizeRepeat(t.repeat);
       }
       // 首次标记为完成 → 奖励积分
       if (!wasDone && t.status === 'done') {
@@ -3483,6 +3937,55 @@
       return sleepByNight(state.sleeps, dateStr, next);
     },
 
+    /* ===== 睡眠计时：点一下开始，再点一下结束 ===== */
+    /**
+     * 开始一次睡眠计时，以「现在」为入睡时刻，记录挂在入睡那天。
+     * 已经在计时时重复点击不会重置，避免手抖把时长清零。
+     */
+    startSleep: function () {
+      if (state.sleepSession) return state.sleepSession;
+      var now = new Date();
+      state.sleepSession = {
+        date: DateUtil.toStr(now),
+        start: DateUtil.pad(now.getHours()) + ':' + DateUtil.pad(now.getMinutes()),
+        at: now.getTime()
+      };
+      this.emit();
+      return state.sleepSession;
+    },
+
+    /**
+     * 结束睡眠计时并写入一条睡眠记录（结束时刻为「现在」）。
+     * @returns {{minutes:number, record:object|null, tooShort?:boolean, tooLong?:boolean}|null}
+     */
+    endSleep: function (data) {
+      var s = state.sleepSession;
+      if (!s) return null;
+      var now = new Date();
+      var mins = Math.round((now.getTime() - s.at) / 60000);
+      state.sleepSession = null;
+
+      if (mins < 1) { this.emit(); return { minutes: mins, record: null, tooShort: true }; }
+      // 超过 24 小时基本是忘了点结束。时钟时间差会绕回同一天，硬记会得到错误时长
+      if (mins >= 1440) { this.emit(); return { minutes: mins, record: null, tooLong: true }; }
+
+      var r = this.addSleep({
+        date: s.date,
+        start: s.start,
+        end: DateUtil.pad(now.getHours()) + ':' + DateUtil.pad(now.getMinutes()),
+        quality: (data && data.quality) || 'normal',
+        note: (data && data.note) || ''
+      });
+      return { minutes: mins, record: r };
+    },
+
+    /** 放弃这次计时，不产生记录 */
+    cancelSleep: function () {
+      if (!state.sleepSession) return;
+      state.sleepSession = null;
+      this.emit();
+    },
+
   /* ===== 番茄钟 / 积分 / 养树 ===== */
 
     /**
@@ -3574,13 +4077,109 @@
       return on;
     },
 
-    /** 切换奖励机制（余额各自保留，总量不变）；抽卡未开启时拒绝切到 gacha */
+    /** 是否处于非游戏化纯粹学术专注模式 */
+    isAcademicMode: function () {
+      return !!(state && state.pomodoro && state.pomodoro.mode === 'academic');
+    },
+
+    /** 切换奖励机制（academic 纯学术 | forest 森林种树 | gacha 抽卡寻访） */
     setRewardMode: function (mode) {
       if (mode === 'gacha' && !this.gachaEnabled()) return state.pomodoro.mode;
       var pm = state.pomodoro;
-      pm.mode = (mode === 'gacha') ? 'gacha' : 'forest';
+      if (mode === 'academic' || mode === 'gacha' || mode === 'forest') {
+        pm.mode = mode;
+      } else {
+        pm.mode = 'forest';
+      }
+      this.save();
       this.emit();
+      if (typeof App !== 'undefined' && App.rebuildNav) App.rebuildNav();
       return pm.mode;
+    },
+
+    /** 获取生理精力高峰时段（优先自定义，默认早/中/晚三段） */
+    getEnergyPeaks: function () {
+      var eg = state.settings && state.settings.energy;
+      if (eg && eg.custom && Array.isArray(eg.peaks) && eg.peaks.length) {
+        return eg.peaks;
+      }
+      return [
+        { start: '09:00', end: '11:30', name: '晨间黄金专注期' },
+        { start: '15:00', end: '17:30', name: '午后高效期' },
+        { start: '19:30', end: '21:30', name: '晚间静心期' }
+      ];
+    },
+
+    /** 获取当前时刻的生理精力评估与建议 */
+    currentEnergyState: function (nowStr) {
+      if (!nowStr) {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2, '0');
+        var m = String(now.getMinutes()).padStart(2, '0');
+        nowStr = h + ':' + m;
+      }
+      var peaks = this.getEnergyPeaks();
+      for (var i = 0; i < peaks.length; i++) {
+        var p = peaks[i];
+        if (nowStr >= p.start && nowStr <= p.end) {
+          return {
+            isPeak: true,
+            level: 'high',
+            peakName: p.name,
+            icon: '⚡',
+            label: '精力黄金期 · ' + p.name,
+            advice: '大脑运转高效，建议优先处理高难度待办与深度学习。'
+          };
+        }
+      }
+      if (nowStr >= '13:00' && nowStr <= '14:30') {
+        return {
+          isPeak: false,
+          level: 'low',
+          peakName: '午后低谷期',
+          icon: '☕',
+          label: '生理低谷期 · 午后困倦',
+          advice: '处于自然节律低谷，适合小憩片刻、轻松散步或低能耗杂务。'
+        };
+      }
+      if (nowStr >= '23:00' || nowStr <= '05:30') {
+        return {
+          isPeak: false,
+          level: 'rest',
+          peakName: '夜间休整期',
+          icon: '🌙',
+          label: '夜间休整期 · 宜休息',
+          advice: '夜深了，大脑需要代谢修复，建议尽快就寝养精蓄锐。'
+        };
+      }
+      return {
+        isPeak: false,
+        level: 'medium',
+        peakName: '平稳期',
+        icon: '🌤️',
+        label: '常规平稳期 · 精力稳定',
+        advice: '精力处于平稳水平，适合常规作业、复习与计划打卡。'
+      };
+    },
+
+    /** 获取当前学期所有登记了考试的课程列表（按考试日期升序） */
+    courseExams: function (semId) {
+      var sid = semId || state.currentSemesterId;
+      return state.courses.filter(function (c) {
+        return (!c.semesterId || c.semesterId === sid) && c.exam && c.exam.date;
+      }).sort(function (a, b) {
+        var ta = (a.exam.date || '') + ' ' + (a.exam.start || '');
+        var tb = (b.exam.date || '') + ' ' + (b.exam.start || '');
+        return ta < tb ? -1 : (ta > tb ? 1 : 0);
+      });
+    },
+
+    /** 获取关联到指定课程的所有待办任务（复习备考任务） */
+    examTasks: function (courseId) {
+      if (!courseId) return [];
+      return state.tasks.filter(function (t) {
+        return t.courseId === courseId;
+      });
     },
 
     /** 扣森林积分：只动积分池，不与合成玉互通 */
@@ -3796,7 +4395,7 @@
     opByName: function (name) {
       var all = global.AK_OPS || [];
       for (var i = 0; i < all.length; i++) {
-        if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3], limited: !!all[i][6] };
+        if (all[i][0] === name) return { n: all[i][0], r: all[i][1], p: all[i][2], img: all[i][3], limited: !!all[i][6], tag: all[i][7] };
       }
       return null;
     },
@@ -4261,6 +4860,99 @@
     },
 
     /** 井可兑换范围：含当期在内、最近 sparkHistory 期的全部 UP（5★ / 6★） */
+
+    /** 获取心愿单干员列表 */
+    getWishlist: function () {
+      var g = state.pomodoro && state.pomodoro.gacha;
+      return (g && Array.isArray(g.wishlist)) ? g.wishlist : [];
+    },
+
+    /** 切换心愿单（最多同时追踪 2 名心愿干员） */
+    toggleWishlist: function (name) {
+      if (!name) return false;
+      var g = state.pomodoro.gacha;
+      if (!Array.isArray(g.wishlist)) g.wishlist = [];
+      var idx = g.wishlist.indexOf(name);
+      if (idx >= 0) {
+        g.wishlist.splice(idx, 1);
+      } else {
+        if (g.wishlist.length >= 2) g.wishlist.shift();
+        g.wishlist.push(name);
+      }
+      this.save();
+      this.emit();
+      return true;
+    },
+
+    /** 是否在心愿单中 */
+    isWishlisted: function (name) {
+      var g = state.pomodoro && state.pomodoro.gacha;
+      return !!(g && Array.isArray(g.wishlist) && g.wishlist.indexOf(name) >= 0);
+    },
+
+    /** 计算心愿单未来轮换到货预报 */
+    wishlistForecast: function () {
+      var self = this;
+      var g = (state.pomodoro && state.pomodoro.gacha) || {};
+      var list = Array.isArray(g.wishlist) ? g.wishlist : [];
+      if (!list.length) return [];
+      var curDay = this.gachaDayIndex();
+      var out = [];
+
+      list.forEach(function (name) {
+        var rec = self.opByName(name);
+        if (!rec) return;
+        var poolId = (rec.tag === 'classic') ? 'classic' : 'standard';
+        var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
+        var curRot = self.gachaRotIndex(poolId);
+        var star = rec.r;
+
+        var curUps = self.gachaUpOf(poolId, star, curRot);
+        var isCurrent = curUps.indexOf(name) >= 0;
+        var foundRot = isCurrent ? curRot : -1;
+
+        if (!isCurrent) {
+          for (var i = 1; i <= 60; i++) {
+            var upList = self.gachaUpOf(poolId, star, curRot + i);
+            if (upList.indexOf(name) >= 0) {
+              foundRot = curRot + i;
+              break;
+            }
+          }
+        }
+
+        var daysLeft = 0;
+        if (foundRot >= 0) {
+          if (isCurrent) {
+            var dayInPeriod = ((curDay % pool.rotDays) + pool.rotDays) % pool.rotDays;
+            daysLeft = pool.rotDays - dayInPeriod;
+          } else {
+            var targetDay = foundRot * pool.rotDays;
+            daysLeft = targetDay - curDay;
+          }
+        }
+
+        var targetJade = pool.spark * 600;
+        var curJade = (state.pomodoro && state.pomodoro.jade) || 0;
+        var readyPct = Math.min(100, Math.round((curJade / targetJade) * 100));
+
+        out.push({
+          name: name,
+          star: star,
+          img: rec[3],
+          poolId: poolId,
+          poolName: pool.name,
+          isCurrent: isCurrent,
+          daysLeft: daysLeft,
+          readyPct: readyPct,
+          curJade: curJade,
+          targetJade: targetJade
+        });
+      });
+
+      return out;
+    },
+
     gachaSparkPool: function (poolId) {
       var pool = POMO.GACHA_POOLS[poolId] || POMO.GACHA_POOLS.standard;
       var cur = this.gachaRotIndex(poolId);
@@ -5912,9 +6604,14 @@
      */
     exportJSON: function (scope) {
       var s = scope || 'full';
-      if (s === 'full') return JSON.stringify(state, null, 2);
+      if (s === 'full') {
+        var full = JSON.parse(JSON.stringify(state));
+        delete full.sleepSession;   // 进行中的计时是临时状态，不写进备份
+        return JSON.stringify(full, null, 2);
+      }
 
       var out = JSON.parse(JSON.stringify(state));
+      delete out.sleepSession;
 
       // 两档都不带自定义图片：图片 base64 会撑爆同步码，且换设备本就要重选图
       if (out.settings) {
@@ -5990,6 +6687,7 @@
       next.activities = obj.activities || [];
       next.meals = obj.meals || [];
       next.sleeps = obj.sleeps || [];
+      next.sleepSession = null;   // 别人的计时不该跟着同步过来
       next.usage = obj.usage || {};
       next.shop = mergeShop(ds.shop, obj.shop);
       // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
@@ -6060,6 +6758,8 @@
   global.childrenOf = childrenOf;
   global.subtaskProgress = subtaskProgress;
   global.childIds = childIds;
+  Store.validateSchema = validateSchema;
+  global.validateSchema = validateSchema;
   global.Store = Store;
 })(window);
 

@@ -13,11 +13,11 @@
 | 项 | 状态 |
 |---|---|
 | 最后提交 | 修复 `save-file.js`：picker/分享被浏览器自动 Abort（file://、沙箱、非安全上下文）时不再误报「已取消」死路，一律回落下载 + 复制兜底面板；新增 `verify_save_fallback.mjs`；此前：同步重构 + 统一保存通道 + 死代码清理，见 ROADMAP §十四 |
-| 单元测试 | `node tests/run.mjs` **582 条全过**（删除了已移除的同步码分片测试残留） |
-| UI 回归 | 35 个 `verify_*.mjs` 全部通过（含 `verify_save_fallback.mjs` 验证 picker 自动 Abort 回落；`verify_sync.mjs`/`verify_sync_ui.mjs`/`verify_sync_scope.mjs` 为同步重构新增/重写；`verify_backup.mjs` 含 export→import 往返；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
+| 单元测试 | `node tests/run.mjs` **626 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则） |
+| UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
-| 远程 | 领先远程 10+ 提交，**本轮未发布**（按约定先本地验证） |
+| 远程 | 领先远程多提交，**重复任务三档（文案 / 锚点引擎 / 自定义周期）均在本地、未上传**（按约定先本地验证） |
 
 ## 三、第一小时上手路径
 
