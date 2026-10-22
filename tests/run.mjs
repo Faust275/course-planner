@@ -2275,8 +2275,9 @@ console.log('\nTheme: 自然意象主题（解耦）与明日方舟主题体系'
 /* ==========================================================
  * 数据迁移回归：旧档（单学期 / 同名多课程 / 旧树 growth）导入后应被正确迁移。
  * 这些迁移已拆到 store.js 的 migrate* 具名函数里，这里守住行为不回退。
- * 注：pity6→分池、makeUp→摸鱼券 两项搬运会被 validateSchema 抢先初始化的
- * 默认值挡住（既有缺陷，重构前后行为一致），暂不在此断言，避免把缺陷固化。
+ * pity6→分池、makeUp→摸鱼券 两项曾因 validateSchema / mergeShop 抢先用默认值
+ * 打底而搬运失效（老用户保底计数与补签卡归零），现由 hoistLegacy 与 mergeShop
+ * 内的抢救逻辑修好，这里一并断言，防止再退化。
  * ========================================================== */
 console.log('\n数据迁移: 旧档导入后的结构迁移');
 {
@@ -2311,6 +2312,13 @@ console.log('\n数据迁移: 旧档导入后的结构迁移');
   eq('合并后保留两个时段', (st.courses[0].slots || []).length, 2);
   eq('合并后 model 升到 2', st.model, 2);
   eq('被合并课程的任务关联回写主课', st.tasks[0].courseId, 'c1');
+
+  // 旧值抢救：pity6 → 标准池、makeUp → 摸鱼券（曾因默认值抢先打底而丢失）
+  eq('旧档 pity6 42 搬进标准池', st.pomodoro.gacha.pools.standard.pity6, 42);
+  eq('中坚池同步建立且独立', st.pomodoro.gacha.pools.classic.pity6, 0);
+  eq('旧补签卡 3 张转为摸鱼券', st.shop.tickets.fish, 3);
+  eq('旧补签卡使用记录沿用', st.shop.fishLog.length, 1);
+  eq('迁移后 makeUp 旧字段已删除', st.shop.tickets.makeUp, undefined);
 }
 
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);

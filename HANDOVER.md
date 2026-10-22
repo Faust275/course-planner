@@ -12,8 +12,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 测试与数据层健壮性：单测改为直读源码模块（不再依赖构建产物 `index.html`，产物移走仍可跑）；`ensure()` 的一次性迁移拆为 `migrateTrees` / `migratePools` / `migrateShop` / `migrateSemesters` / `migrateCourseSemester` / `migrateCoursesV2` 具名函数（对照实验确认行为等价），新增 10 条迁移回归断言 |
-| 单元测试 | `node tests/run.mjs` **756 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
+| 最后提交 | 修复旧档数据丢失：新增 `hoistLegacy()`（早于 `validateSchema`）把旧 `pity6` 搬进标准池；`makeUp → 摸鱼券` 抢救移入 `mergeShop()`（覆盖 `validateSchema` 与 `importJSON` 两条路径）。对照实验：pity6 0→42、fish 0→3、使用记录 []→["2026-01-01"]；新增 5 条断言（单测 756→761） |
+| 单元测试 | `node tests/run.mjs` **761 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
@@ -29,7 +29,7 @@
 ```bash
 cd course-planner-web
 python3 build.py                # 构建（不联网，无需装依赖）
-node tests/run.mjs              # 756 条纯函数单测
+node tests/run.mjs              # 761 条纯函数单测
 python3 -m http.server 8137 &   # UI 回归需要 http 服务
 URL=http://localhost:8137/index.html node verify_build.mjs
 ```
@@ -79,7 +79,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 
 看 `ROADMAP.md`。当前明确的候选（按上一轮讨论结论）：
 
-- **（新发现，待修）旧档 `pity6` / `makeUp` 搬运失效**：`ensure()` 里「单池 pity6 → 分池」「makeUp → 摸鱼券」两处旧值搬运，会被 `validateSchema()` 抢先创建的默认值挡住——它先把 `pools.standard.pity6`、`tickets.fish` 初始化成 `0`，等迁移代码判断 `== null` 时已不成立，于是**老用户升级后保底计数与补签卡归零**。已用「重构前 vs 重构后」对照实验确认**行为一致，非本次重构引入**。修法：把这两处搬运提到 `validateSchema` 之前，或在它建空池 / 空券时先用旧值打底。
+- **（已修）旧档 `pity6` / `makeUp` 搬运失效**：`ensure()` 里「单池 pity6 → 分池」「makeUp → 摸鱼券」两处旧值搬运，会被 `validateSchema()` 抢先创建的默认值挡住——它先把 `pools.standard.pity6`、`tickets.fish` 初始化成 `0`，等迁移代码判断 `== null` 时已不成立，于是**老用户升级后保底计数与补签卡归零**。已用「重构前 vs 重构后」对照实验确认**行为一致，非本次重构引入**。修法（已落地）：① 新增 `hoistLegacy()`，在 `ensure()` 最开头（**早于 `validateSchema`**）把旧 `pity6` 搬进 `pools.standard`；② `makeUp → 摸鱼券` 的抢救放进 `mergeShop()`——它是 shop 的唯一规范化入口，`validateSchema` 与 `importJSON` 两条路径都覆盖得到。两处都是「搬完即删旧字段」保证幂等。对照实验：修复前 `pity6=0 / fish=0 / log=[]` → 修复后 `42 / 3 / ["2026-01-01"]`；`verify_breath.mjs` 22 项、`verify_pools.mjs` 25 项、`verify_shop.mjs` 33 项全过。
 
 - **新抽卡体系（多卡池/UP）**：**已实施**（见 `ROADMAP.md` §十一，`verify_pools.mjs`）。当时的决策记录：
   - **三个池**：标准池（轮换 UP）/ 中坚池 / 限定只出不进（不参与轮换，靠歪或定向券，UI 明示「定向券专供」）；4★/3★ 两池共用，仅 6★/5★ 分池。

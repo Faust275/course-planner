@@ -69,7 +69,7 @@ course-planner-web/
 ├── verify_b_records.mjs      记录类发分（睡眠/饮食/活动）+ KR 发分
 ├── verify_bg.mjs             板块联动 B–G：目标今日卡 / 本周考试 / 消费构成 / 健康提示 / 课程投入 / GPA KR / 专注里程
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（756 条，Palette / CourseException / TaskNLP 直读源文件）
+└── tests/run.mjs             纯函数单测（761 条，Palette / CourseException / TaskNLP 直读源文件）
 ```
 
 ## 构建

@@ -5825,6 +5825,17 @@ window.AK_OPS = [
    */
   function mergeShop(def, src) {
     var s = (src && typeof src === 'object') ? src : {};
+    // 旧档抢救：补签卡 makeUp → 摸鱼券 fish，使用记录 makeUpLog → fishLog。
+    // 必须在这个函数里做：一旦先用默认值打底，tickets.fish 就变成 0，
+    // 后面「fish == null 才搬运」的判断就永远不成立，老用户手里的券会凭空消失；
+    // fishLog 同理——只认 s.fishLog 的话，旧的使用记录会被直接丢掉。
+    var tickets = Object.assign({}, def.tickets, s.tickets || {});
+    if (s.tickets && s.tickets.makeUp != null) {
+      if (!(Number(tickets.fish) > 0)) tickets.fish = Number(s.tickets.makeUp) || 0;
+      delete tickets.makeUp;                       // 搬完即删，保证幂等
+    }
+    var fishLog = Array.isArray(s.fishLog) ? s.fishLog
+      : (Array.isArray(s.makeUpLog) ? s.makeUpLog : []);
     return {
       card: s.card === undefined ? def.card : s.card,
       activeDays: Object.assign({}, s.activeDays || {}),
@@ -5832,8 +5843,8 @@ window.AK_OPS = [
       validDays: Object.assign({}, s.validDays || {}),
       growth: typeof s.growth === 'number' ? s.growth : (def.growth || 0),
       streak: Object.assign({}, def.streak, s.streak || {}),
-      tickets: Object.assign({}, def.tickets, s.tickets || {}),
-      fishLog: Array.isArray(s.fishLog) ? s.fishLog : [],
+      tickets: tickets,
+      fishLog: fishLog,
       log: Array.isArray(s.log) ? s.log : []
     };
   }
@@ -5946,6 +5957,36 @@ window.AK_OPS = [
    * 代价是每次启动要空转遍历一次（树 ≤4、池 2、课程 <20），量级可忽略；
    * 换来的是「任何来源的旧档都能被正确迁移」这个确定性。
    * ========================================================== */
+
+  /**
+   * 旧值抢救：**必须在 validateSchema 之前跑**（ensure 的第一行）。
+   *
+   * validateSchema 会按默认结构把 pools / tickets 的字段初始化成 0，
+   * 等下面的 migrate* 再判断「旧字段存在吗」时，新字段已经不是 null 了，
+   * 搬运条件永远不成立——老用户的保底计数（pity6）和补签卡（makeUp）
+   * 就是这么丢的。所以先把旧值搬到新字段位上、删掉旧字段，再走正常流程。
+   *
+   * 搬完即删旧字段，保证幂等：第二次进入时旧字段已不在，不会重复搬运。
+   *
+   * 注：shop 那侧（makeUp → 摸鱼券）不在这里做——shop 只经 mergeShop 规范化，
+   * 抢救逻辑已放在 mergeShop 内部，importJSON 与 validateSchema 两条路径都覆盖得到。
+   */
+  function hoistLegacy(st) {
+    if (!st || typeof st !== 'object') return;
+
+    // 单池 pity6 → 标准池（分池改造前的老档）
+    var gc = st.pomodoro && st.pomodoro.gacha;
+    if (gc && typeof gc === 'object') {
+      var legacy = Number(gc.pity6) || 0;
+      var pools = (gc.pools && typeof gc.pools === 'object') ? gc.pools : null;
+      if (legacy > 0 && !(pools && pools.standard)) {
+        gc.pools = Object.assign({}, pools || {}, {
+          standard: { pity6: legacy, total: Number(gc.total) || 0, spark: 0, guaranteed: false }
+        });
+        if (!gc.pools.classic) gc.pools.classic = { pity6: 0, total: 0, spark: 0, guaranteed: false };
+      }
+    }
+  }
 
   /** 旧树（按 growth 成长值）→ 新模型：阶段 + 阶段内记数 */
   function migrateTrees(trees) {
@@ -7766,6 +7807,7 @@ window.AK_OPS = [
 
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
+      hoistLegacy(state);        // 旧值抢救：必须早于 validateSchema，否则旧值会被默认值覆盖、再也搬不动
       state = validateSchema(state);
       var ds = defaultState();
       if (!state) state = ds;
