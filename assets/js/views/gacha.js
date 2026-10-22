@@ -171,7 +171,7 @@
         text: (rec ? rec.r + '★ ' : '') + x.n +
               (x.periodsAgo === 0 ? '（本期）' : '（' + x.periodsAgo + ' 期前）'),
         onclick: function () {
-          var w = this.closest('.modal-wrap');
+          var w = this.closest('.cp-modal-wrap');
           if (w) w.remove();
           V.confirm({
             title: '井兑换',
@@ -196,7 +196,7 @@
         box
       ],
       footer: el('div', { class: 'modal-foot' }, [
-        el('button', { class: 'btn', text: '关闭', onclick: function () { this.closest('.modal-wrap').remove(); } })
+        el('button', { class: 'btn', text: '关闭', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
       ])
     });
   }
@@ -467,7 +467,7 @@
       width: '380px',
       body: [body],
       footer: el('div', { class: 'modal-foot' }, [
-        el('button', { class: 'btn btn-primary', text: '关闭', onclick: function () { this.closest('.modal-wrap').remove(); } })
+        el('button', { class: 'btn btn-primary', text: '关闭', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
       ])
     });
   }
@@ -504,7 +504,7 @@
         box
       ],
       footer: el('div', { class: 'modal-foot' }, [
-        el('button', { class: 'btn btn-primary', text: '关闭', onclick: function () { this.closest('.modal-wrap').remove(); } })
+        el('button', { class: 'btn btn-primary', text: '关闭', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
       ])
     });
   }

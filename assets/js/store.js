@@ -282,6 +282,25 @@
     };
   }
 
+  /**
+   * 商城状态逐项合并：老备份没有 shop 整块缺失，新备份也可能缺某个子键。
+   * importJSON 必须走这里，不能裸 `obj.shop` —— 否则 ensure 里取 tickets 直接崩。
+   */
+  function mergeShop(def, src) {
+    var s = (src && typeof src === 'object') ? src : {};
+    return {
+      card: s.card === undefined ? def.card : s.card,
+      activeDays: Object.assign({}, s.activeDays || {}),
+      dupPool: Array.isArray(s.dupPool) ? s.dupPool : [],
+      validDays: Object.assign({}, s.validDays || {}),
+      growth: typeof s.growth === 'number' ? s.growth : (def.growth || 0),
+      streak: Object.assign({}, def.streak, s.streak || {}),
+      tickets: Object.assign({}, def.tickets, s.tickets || {}),
+      fishLog: Array.isArray(s.fishLog) ? s.fishLog : [],
+      log: Array.isArray(s.log) ? s.log : []
+    };
+  }
+
   /** 时间工具：HH:MM <-> 分钟 */
   var TimeUtil = {
     toMin: function (hhmm) {
@@ -1786,6 +1805,8 @@
         if (p.guaranteed == null) p.guaranteed = false;
       });
       // 摸鱼券：旧档的 makeUp 搬运过来，使用记录改名
+      // shop 兜底必须放在取值之前：导入/恢复路径可能带着没有 shop 的对象进来
+      if (!state.shop || typeof state.shop !== 'object') state.shop = {};
       var sh = state.shop;
       if (!sh.tickets) sh.tickets = { selection: 0, fish: 0 };
       if (sh.tickets.fish == null) sh.tickets.fish = sh.tickets.makeUp || 0;
@@ -1824,8 +1845,7 @@
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
-      // 商城：老版本没有这块，逐项补默认（dupPool 不回溯老数据，避免重复发放）
-      if (!state.shop || typeof state.shop !== 'object') state.shop = {};
+      // 商城：上方已兜底 shop 对象本身，这里只补子键（dupPool 不回溯老数据，避免重复发放）
       if (!state.shop.activeDays || typeof state.shop.activeDays !== 'object') state.shop.activeDays = {};
       if (!Array.isArray(state.shop.dupPool)) state.shop.dupPool = [];
       if (!Array.isArray(state.shop.log)) state.shop.log = [];
@@ -5929,41 +5949,52 @@
         throw new Error('没有找到可恢复的数据');
       }
       var ds = defaultState();
-      state = {
-        version: 2,
-        model: obj.model || 2,
-        semesters: (obj.semesters && obj.semesters.length) ? obj.semesters : [
-          Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
-        ],
-        currentSemesterId: obj.currentSemesterId || '',
-        grades: obj.grades || {},
-        periods: (obj.periods && obj.periods.length) ? obj.periods : ds.periods,
-        courses: obj.courses || [],
-        courseExceptions: Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [],
-        tasks: obj.tasks || [],
-        taskSeq: obj.taskSeq || {},
-        settings: Object.assign({}, ds.settings, obj.settings || {}),
-        pomodoro: Object.assign({}, ds.pomodoro, obj.pomodoro || {}),
-        plans: obj.plans || [],
-        goals: Array.isArray(obj.goals) ? obj.goals : [],
-        achievements: obj.achievements || { done: {} },
-        ledger: obj.ledger || [],
-        notes: obj.notes || [],
-        // 日记特殊处理：同步码里根本没有 diaries 这个键。
-        // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
-        // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
-        diaries: Array.isArray(obj.diaries) ? obj.diaries : (state && state.diaries) || [],
-        events: obj.events || [],
-        activities: obj.activities || [],
-        meals: obj.meals || [],
-        sleeps: obj.sleeps || [],
-        usage: obj.usage || {}
-      };
+      var prev = state;
+      // 以默认结构打底再逐项覆盖：defaultState 里的每个顶层键都保证存在，
+      // 以后新增顶层字段（如 shop）不会因为这份清单漏登记而在导入时凭空消失。
+      var next = Object.assign({}, ds, obj);
+      next.version = 2;
+      next.model = obj.model || 2;
+      next.semesters = (obj.semesters && obj.semesters.length) ? obj.semesters : [
+        Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
+      ];
+      next.currentSemesterId = obj.currentSemesterId || '';
+      next.grades = obj.grades || {};
+      next.periods = (obj.periods && obj.periods.length) ? obj.periods : ds.periods;
+      next.courses = obj.courses || [];
+      next.courseExceptions = Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [];
+      next.tasks = obj.tasks || [];
+      next.taskSeq = obj.taskSeq || {};
+      next.settings = Object.assign({}, ds.settings, obj.settings || {});
+      next.pomodoro = Object.assign({}, ds.pomodoro, obj.pomodoro || {});
+      next.plans = obj.plans || [];
+      next.goals = Array.isArray(obj.goals) ? obj.goals : [];
+      next.achievements = obj.achievements || { done: {} };
+      next.ledger = obj.ledger || [];
+      next.notes = obj.notes || [];
+      // 日记特殊处理：同步码里根本没有 diaries 这个键。
+      // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
+      // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
+      next.diaries = Array.isArray(obj.diaries) ? obj.diaries : (prev && prev.diaries) || [];
+      next.events = obj.events || [];
+      next.activities = obj.activities || [];
+      next.meals = obj.meals || [];
+      next.sleeps = obj.sleeps || [];
+      next.usage = obj.usage || {};
+      next.shop = mergeShop(ds.shop, obj.shop);
       // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
-      state.settings.subtask = Object.assign({}, ds.settings.subtask, state.settings.subtask || {});
+      next.settings.subtask = Object.assign({}, ds.settings.subtask, next.settings.subtask || {});
       // 日记同理：旧备份没有 diary 设置，逐项补，不整块覆盖
-      state.settings.diary = Object.assign({}, ds.settings.diary, state.settings.diary || {});
-      this.ensure();
+      next.settings.diary = Object.assign({}, ds.settings.diary, next.settings.diary || {});
+      // 先挂上再校验（ensure 读的是模块级 state）；校验失败整体回滚，
+      // 绝不让半成品状态留下来被 save() 落盘 —— 否则刷新后连启动都过不去。
+      state = next;
+      try {
+        this.ensure();
+      } catch (e) {
+        state = prev;
+        throw e;
+      }
       this.emit();
     },
 

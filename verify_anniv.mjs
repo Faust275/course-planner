@@ -20,8 +20,8 @@ const out = await p.evaluate(() => {
   const today = D.toStr(D.today());
   const y = D.today().getFullYear();
 
-  // 1) 今天就是纪念日
-  S.addEvent({ title: '在一起纪念日', date: y + '-10-21', repeat: 'yearly', kind: 'anniversary' });
+  // 1) 今天就是纪念日（日期跟随当天，避免脚本跨日后失效）
+  S.addEvent({ title: '在一起纪念日', date: today, repeat: 'yearly', kind: 'anniversary' });
   // 2) 未来 5 天
   const d5 = D.toStr(D.addDays(D.today(), 5));
   S.addEvent({ title: '妈妈生日', date: d5.slice(0, 4) + '-01-01', repeat: 'yearly', kind: 'birthday', lunar: false });

@@ -127,13 +127,13 @@ check('手动关联的记录也计入', B5.minutes === 210 && B5.count === 2, B5
  * C. 月历时间块
  * ========================================================== */
 console.log('C. 月历时间块');
-await p.evaluate(() => {
+const DAY = await p.evaluate(() => DateUtil.toStr(DateUtil.today()));   // 日期跟随当天，避免脚本跨日后失效
+await p.evaluate((day) => {
   // 只读层：睡眠 + 一条手动记的活动（时间块只管「补录」这一层）
-  const day = '2026-10-21';
   Store.addSleep({ date: day, start: '23:00', end: '07:00' });
   Store.addActivity({ date: day, start: '10:00', end: '11:00', name: '手动记的自习', type: 'study' });
   App.go('calendar');
-});
+}, DAY);
 await wait(700);
 const C0 = await p.evaluate(() => ({
   cells: document.querySelectorAll('.cp-tb-cell').length,
@@ -147,10 +147,10 @@ await p.locator('.cp-tb-cell').nth(36).click();
 await wait(400);
 await p.locator('.cp-tb-type', { hasText: '学习' }).click();
 await wait(600);
-const C1 = await p.evaluate(() => ({
-  blocks: Store.activitiesOf('2026-10-21').filter(a => a.from === 'block').map(a => a.start + '-' + a.end + ':' + a.type),
+const C1 = await p.evaluate((day) => ({
+  blocks: Store.activitiesOf(day).filter(a => a.from === 'block').map(a => a.start + '-' + a.end + ':' + a.type),
   info: (document.querySelector('.cp-tb-info') || {}).textContent
-}));
+}), DAY);
 check('涂一格 = 生成半小时的活动记录', C1.blocks.length === 1 && C1.blocks[0] === '18:00-18:30:study', C1.blocks);
 check('提示行更新', /时间块已记 30 分钟/.test(C1.info || ''), C1.info);
 
@@ -161,11 +161,11 @@ await p.locator('.cp-modal .cp-segment button', { hasText: '2 小时' }).click()
 await wait(250);
 await p.locator('.cp-tb-type', { hasText: '运动' }).click();
 await wait(600);
-const C2 = await p.evaluate(() => Store.activitiesOf('2026-10-21').filter(a => a.from === 'block').map(a => a.start + '-' + a.end + ':' + a.type));
+const C2 = await p.evaluate((day) => Store.activitiesOf(day).filter(a => a.from === 'block').map(a => a.start + '-' + a.end + ':' + a.type), DAY);
 check('多格自动合并成一条记录', C2.some(x => x === '19:00-21:00:exercise'), C2);
 
 // 象限/统计口径能看到时间块
-const C3 = await p.evaluate(() => Store.dayStat('2026-10-21').segments.find(s => s.key === 'activity'));
+const C3 = await p.evaluate((day) => Store.dayStat(day).segments.find(s => s.key === 'activity'), DAY);
 check('时间块进入当日统计', C3 && C3.minutes >= 210, C3);
 
 // 清除一段
@@ -173,27 +173,27 @@ await p.locator('.cp-tb-cell').nth(36).click();
 await wait(400);
 await p.locator('.cp-modal-foot button', { hasText: '清除这段' }).click();
 await wait(600);
-const C4 = await p.evaluate(() => Store.activitiesOf('2026-10-21').filter(a => a.from === 'block').map(a => a.start + '-' + a.end));
+const C4 = await p.evaluate((day) => Store.activitiesOf(day).filter(a => a.from === 'block').map(a => a.start + '-' + a.end), DAY);
 check('清除后只剩另一段', C4.length === 1 && C4[0] === '19:00-21:00', C4);
 
 // 手动记录不被时间块冲掉
-const C5 = await p.evaluate(() => {
-  Store.addActivity({ date: '2026-10-21', start: '18:00', end: '19:00', name: '手动记的跑步', type: 'exercise' });
+const C5 = await p.evaluate((day) => {
+  Store.addActivity({ date: day, start: '18:00', end: '19:00', name: '手动记的跑步', type: 'exercise' });
   App.go('calendar');
   return true;
-});
+}, DAY);
 await wait(700);
 await p.locator('.cp-tb-cell').nth(44).click();     // 22:00
 await wait(400);
 await p.locator('.cp-tb-type', { hasText: '学习' }).click();
 await wait(600);
-const C6 = await p.evaluate(() => {
-  const acts = Store.activitiesOf('2026-10-21');
+const C6 = await p.evaluate((day) => {
+  const acts = Store.activitiesOf(day);
   return {
     manual: acts.some(a => a.name === '手动记的跑步'),
     blocks: acts.filter(a => a.from === 'block').length
   };
-});
+}, DAY);
 check('补录不会冲掉手动记的活动', C6.manual === true && C6.blocks >= 2, C6);
 
 // 清空这天的时间块
@@ -201,10 +201,10 @@ await p.locator('.cp-tb-acts button', { hasText: '清空这天的时间块' }).c
 await wait(400);
 await p.locator('.cp-modal-foot button', { hasText: '清空' }).click();
 await wait(600);
-const C7 = await p.evaluate(() => {
-  const acts = Store.activitiesOf('2026-10-21');
+const C7 = await p.evaluate((day) => {
+  const acts = Store.activitiesOf(day);
   return { blocks: acts.filter(a => a.from === 'block').length, manual: acts.some(a => a.name === '手动记的跑步') };
-});
+}, DAY);
 check('清空只动时间块那一层', C7.blocks === 0 && C7.manual === true, C7);
 
 /* ==========================================================

@@ -111,7 +111,7 @@
           class: 'btn btn-block limited-pick' + (owned[o.n] ? ' owned' : ''),
           text: o.r + '★ ' + o.n + (owned[o.n] ? '（已拥有）' : ''),
           onclick: function () {
-            var w = this.closest('.modal-wrap');
+            var w = this.closest('.cp-modal-wrap');
             if (w) w.remove();
             cb(o.n);
           }
@@ -122,7 +122,7 @@
         width: '420px',
         body: [body],
         footer: el('div', { class: 'modal-foot' }, [
-          el('button', { class: 'btn', text: '取消', onclick: function () { this.closest('.modal-wrap').remove(); } })
+          el('button', { class: 'btn', text: '取消', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
         ])
       });
     },

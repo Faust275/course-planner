@@ -825,3 +825,24 @@ StatsCalc.rangeDates('week', { util: DateUtil, ranges: RANGES, today, semester }
 - **老用户的全勤连续天数从 0 开始**：旧 `activeDays` 是「打开过」口径，直接迁移等于把「点开就算」的日子洗成有效日，故不迁移；月卡的 30 天全勤（`card.days`）不受影响。
 - **免费暂停仍存在**：专注中本来就能随时「暂停」且树不枯，因此「休整」的价值在**结束本次专注**（而非挂起），文案按此表述。
 - **连续天数有「今天未完成」宽限**：`validStreak` 在今天还不是有效日时从昨天起算，避免早上打开就看到 0 天；全勤判定仍要求窗口内每天都真实有效，不会因此误发奖。
+
+## §十三 备份导入崩溃修复：shop 缺失 + 整体回滚（已实施，2026-10-22）
+
+### 1. 问题（P0，导入/恢复全线不可用且会毁档）
+- `importJSON` 手写的字段清单**漏了 `shop`**，恢复后月卡、摸鱼券、定向券、成长值、有效日、全勤窗口全部静默归零。
+- `ensure()` 里 `var sh = state.shop`（取 `tickets`）写在 `state.shop = {}` 兜底**之前**：任何没有 `shop` 的状态进来（旧备份、旧 localStorage）都会抛 `TypeError: reading 'tickets'`。
+- 连锁反应：失败时 `state` 已被替换成残缺对象，下一次 `save()` 把它落盘，**刷新后启动即抛错，应用打不开**（实测复现）。
+- 影响入口：导入备份、粘贴同步码、自动备份恢复，三条路全挂；`verify_backup.mjs` 自商城上线起就没人跑过，一直红着。
+
+### 2. 修法
+- `importJSON` 改为「**默认结构打底 + 逐项覆盖**」：`Object.assign({}, defaultState(), obj)` 保证以后新增顶层字段不会因清单漏登记而消失；`shop` 走 `mergeShop` 逐子键合并（老备份整块缺失 → 落默认值，视为旧档迁移）。
+- **失败整体回滚**：先拼好 `next`，`state = next` 后 `ensure()` 抛错则 `state = prev` 再 rethrow，绝不让半成品被 `save()` 落盘。
+- `ensure()` 的 shop 兜底提到取值之前，容错任何缺失形态。
+- 导入/同步失败提示改为「已保留原数据」。
+
+### 3. 回归
+- `verify_backup.mjs` 扩到 10 组断言：手动备份/清空自动备份/恢复/上限裁剪/删除/空数据 + **export→import 往返逐字段**（tasks/diaries/fish/selection/growth/validDays/streak/pity6）+ 旧备份无 shop 可导入 + `ensure` 容错 + 坏 JSON 回滚。
+- 顺手修两个**跨日失效**的脚本：`verify_anniv.mjs`（纪念日写死 10-21）、`verify_tasklink.mjs`（时间块写死 10-21）改为动态当天。
+
+### 4. 同批小修
+- 7 处 `closest('.modal-wrap')` 改 `.cp-modal-wrap`（el() 自动加前缀，旧写法永远匹配不上）：导出备份的「知道了」、抽卡 4 处、收藏兑换 2 处弹窗按钮此前点击即抛错、弹窗关不掉。

@@ -8,13 +8,13 @@
 
 **核心交付物只有一个 `index.html`**（约 2MB，CSS/JS/语料全部内联）。双击即用、可直接转发；配合 `manifest.webmanifest` + `sw.js` + 图标可装到桌面并离线使用。开发期源码在 `src/` 和 `assets/`，用 `build.py` 打包回单文件。
 
-## 二、当前状态快照（2026-10-21 交接时）
+## 二、当前状态快照（2026-10-22 更新）
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 工作区含未提交改动：**商城 + 侧栏折叠 + 合成玉/应用图标 + 机制主题皮肤（浅色/深色）+ 成就/积分经济与种树重构**（详见 ROADMAP 末节）；上一提交 `e5e8386` |
+| 最后提交 | 备份导入崩溃修复（shop 缺失 + 整体回滚）+ 弹窗关闭按钮失效修复，见 ROADMAP §十三；此前：三池抽卡/摸鱼券（`41c059a`） |
 | 单元测试 | `node tests/run.mjs` **597 条全过**（Palette / CourseException 直读源文件） |
-| UI 回归 | 29 个 `verify_*.mjs` 全部通过（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
+| UI 回归 | 30 个 `verify_*.mjs` 全部通过（`verify_backup.mjs` 扩到 10 组断言，含 export→import 往返）（需 Playwright；多数用 `URL` 环境变量指定地址，部分脚本自带/占位端口）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
 | 远程 | 已同步到 `github.com/Faust275/course-planner`（2026-10-21） |

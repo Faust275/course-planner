@@ -1889,7 +1889,7 @@
             })
           ],
           footer: el('div', { class: 'modal-foot' }, [
-            el('button', { class: 'btn btn-primary', text: '知道了', onclick: function () { this.closest('.modal-wrap').remove(); } })
+            el('button', { class: 'btn btn-primary', text: '知道了', onclick: function () { this.closest('.cp-modal-wrap').remove(); } })
           ])
         });
       }
@@ -1923,7 +1923,8 @@
                 UI.toast('导入成功（已自动备份原数据）');
                 App.go('schedule');
               } catch (err) {
-                UI.toast('导入失败：' + err.message, 'err');
+                // importJSON 内部失败会整体回滚，原数据原样还在
+                UI.toast('导入失败，已保留原数据：' + err.message, 'err');
               }
             });
           });
@@ -2282,10 +2283,15 @@
       }).then(function (ok) {
         if (!ok) return;
         Store.backupNow('同步覆盖前').then(function () {
-          Store.importJSON(json);
-          m.close();
-          UI.toast('同步完成（已自动备份原数据）');
-          App.go('schedule');
+          try {
+            Store.importJSON(json);
+            m.close();
+            UI.toast('同步完成（已自动备份原数据）');
+            App.go('schedule');
+          } catch (err) {
+            // importJSON 内部失败会整体回滚，原数据原样还在
+            UI.toast('同步失败，已保留原数据：' + err.message, 'err');
+          }
         });
       });
     }).catch(function (e) {
