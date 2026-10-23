@@ -40,7 +40,7 @@ check('分类卡带项数', s.cats.every(x => /\d+ 项/.test(x)), s.cats);
 await p.locator('.cp-set-cat', { hasText: '基础设置' }).click();
 await p.waitForTimeout(250);
 s = await snap();
-check('基础设置分类页 4 项', s.items.length === 4, s.items);
+check('基础设置分类页 5 项', s.items.length === 5, s.items);
 check('分类页地址 #/settings/basic', s.hash === '#/settings/basic', s.hash);
 check('分类页标题', s.head === '基础设置', s.head);
 
@@ -56,7 +56,7 @@ check('具体页地址 #/settings/look', s.hash === '#/settings/look', s.hash);
 await p.locator('.cp-set-head .cp-btn').click();
 await p.waitForTimeout(250);
 s = await snap();
-check('返回到分类页', s.head === '基础设置' && s.items.length === 4, { head: s.head, n: s.items.length });
+check('返回到分类页', s.head === '基础设置' && s.items.length === 5, { head: s.head, n: s.items.length });
 check('返回后地址 #/settings/basic', s.hash === '#/settings/basic', s.hash);
 
 // 返回首页
@@ -66,9 +66,9 @@ s = await snap();
 check('返回到首页', s.cats.length === 6, s.cats.length);
 check('首页地址 #/settings', s.hash === '#/settings', s.hash);
 
-// 遍历 22 项：每个分类都能进入每一项
+// 遍历 24 项：每个分类都能进入每一项
 const groups = [
-  ['基础设置', 4], ['首页与模块', 4], ['记录与统计', 5],
+  ['基础设置', 5], ['首页与模块', 4], ['记录与统计', 6],
   ['奖励与目标', 4], ['识别与数据', 3], ['帮助', 2]
 ];
 let allNames = [];
@@ -95,7 +95,7 @@ for (const [name, n] of groups) {
   await p.locator('.cp-set-head .cp-btn').click();
   await p.waitForTimeout(160);
 }
-check('合计 22 项无遗漏', allNames.length === 22, allNames);
+check('合计 24 项无遗漏', allNames.length === 24, allNames);
 
 // 深链
 const p2 = await fresh('#/settings/look');
@@ -111,7 +111,7 @@ const s3 = await p3.evaluate(() => ({
   head: (document.querySelector('.cp-set-head-title b') || {}).textContent || '',
   n: document.querySelectorAll('.cp-set-item').length
 }));
-check('深链 #/settings/record 进分类页', s3.head === '记录与统计' && s3.n === 5, s3);
+check('深链 #/settings/record 进分类页', s3.head === '记录与统计' && s3.n === 6, s3);
 
 // 汉堡已移除
 const ham = await p.evaluate(() => !!document.querySelector('#btnDrawer'));
