@@ -20,6 +20,8 @@
   var showCompare = false;
   /** 积分曲线模式：daily 每日获得 / cumulative 累计 */
   var curveMode = 'daily';
+  /** 热力图关联计划筛选：'all' 或具体 plan.id */
+  var heatPlanId = 'all';
 
   function hmText(min) {
     min = Math.round(min);
@@ -595,13 +597,45 @@
 
   function heatCard(st) {
     var card = el('div', { class: 'card cp-chart-card' });
-    var days = st.cur.daily;
+    var allPlans = (Store.state.plans || []).filter(function (p) { return p && p.id; });
+    var activePlan = heatPlanId !== 'all' ? allPlans.filter(function (p) { return p.id === heatPlanId; })[0] : null;
+    if (heatPlanId !== 'all' && !activePlan) heatPlanId = 'all';
+
+    var planRecMap = {};
+    if (activePlan && Array.isArray(activePlan.records)) {
+      activePlan.records.forEach(function (rec) {
+        if (!rec || !rec.date) return;
+        planRecMap[rec.date] = (planRecMap[rec.date] || 0) + (Number(rec.value) || 1);
+      });
+    }
+
+    var days = st.cur.daily.map(function (d) {
+      if (!activePlan) return d;
+      var val = planRecMap[d.date] || 0;
+      // 映射到热力刻度分钟当量（有打卡至少 1 级，按计划单日均值或固定梯度着色）
+      var eqMin = val <= 0 ? 0 : (activePlan.type === 'checkin' ? 16 * 60 : Math.min(16 * 60, Math.max(200, val * 12)));
+      return { date: d.date, d: d.d, recorded: eqMin, planVal: val };
+    });
+
     var byMonth = days.length >= 120;   // 半年以上：一格一个月，52 个周格子挤在一起没法看
     var byWeek = !byMonth && days.length >= 14;
 
-    card.appendChild(el('div', { class: 'section-title' }, [
+    var headEl = el('div', { class: 'section-title', style: { flexWrap: 'wrap', gap: '6px' } }, [
       byMonth ? '每月记录了多少' : (byWeek ? '每周记录了多少' : '每天记录了多少')
-    ]));
+    ]);
+    if (allPlans.length) {
+      var tabs = [{ id: 'all', title: '全部记录' }].concat(allPlans.slice(0, 4).map(function (p) {
+        return { id: p.id, title: '🎯 ' + (p.title || '计划').slice(0, 8) };
+      }));
+      headEl.appendChild(el('div', { class: 'dim-tabs' }, tabs.map(function (t) {
+        return el('button', {
+          class: 'dim-tab' + (heatPlanId === t.id ? ' active' : ''),
+          text: t.title,
+          onclick: function () { heatPlanId = t.id; StatsPane.render(sHost); }
+        });
+      })));
+    }
+    card.appendChild(headEl);
 
     var groups = [];
     if (byMonth) {

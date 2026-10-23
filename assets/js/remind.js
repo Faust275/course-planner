@@ -123,6 +123,18 @@
     lines.push('CALSCALE:GREGORIAN');
     lines.push('METHOD:PUBLISH');
     lines.push('X-WR-CALNAME:' + icsEscape(o.semesterName || '课程表'));
+    if (o.tz) {
+      lines.push('X-WR-TIMEZONE:Asia/Shanghai');
+      lines.push('BEGIN:VTIMEZONE');
+      lines.push('TZID:Asia/Shanghai');
+      lines.push('BEGIN:STANDARD');
+      lines.push('DTSTART:19700101T000000');
+      lines.push('TZOFFSETFROM:+0800');
+      lines.push('TZOFFSETTO:+0800');
+      lines.push('TZNAME:CST');
+      lines.push('END:STANDARD');
+      lines.push('END:VTIMEZONE');
+    }
 
     function dateOfWeekDay(weekNo, day) {
       return DateUtil.toStr(DateUtil.addDays(base, (weekNo - 1) * 7 + (day - 1)));
@@ -535,6 +547,47 @@
    * 与上课提醒共用同一套页面内策略（零权限、零兼容问题），见文件头说明。
    * 明天以后的一概不打扰——那属于计划，不属于提醒。
    */
+
+  /** 检测当前环境是否支持 Web Notification（需 HTTPS/localhost，file:// 下通常不可用） */
+  function canSysNotify() {
+    if (typeof Notification === 'undefined') return false;
+    if (typeof location !== 'undefined' && location.protocol === 'file:') return false;
+    return true;
+  }
+
+  /** 请求系统通知权限，返回 Promise<'granted'|'denied'|'default'|'unsupported'> */
+  function requestSysPermission() {
+    if (!canSysNotify()) return Promise.resolve('unsupported');
+    if (Notification.permission === 'granted') return Promise.resolve('granted');
+    try {
+      var p = Notification.requestPermission();
+      if (p && typeof p.then === 'function') return p;
+      return Promise.resolve(Notification.permission);
+    } catch (_) {
+      return Promise.resolve('denied');
+    }
+  }
+
+  /** 发送系统级通知（若已开启 sysNotify 且已获授权），失败静默回退不抛错 */
+  function fireSysNotify(title, body, tag) {
+    var o = opts();
+    if (!o.sysNotify || !canSysNotify() || Notification.permission !== 'granted') return false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(function (reg) {
+          if (reg && reg.showNotification) {
+            reg.showNotification(title, { body: body || '', tag: tag || 'cp-remind', icon: 'icon-192.png' });
+          }
+        }).catch(function () {});
+      } else {
+        new Notification(title, { body: body || '', tag: tag || 'cp-remind' });
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function checkTaskDue(o, dk, nowMin) {
     if (!o.taskDue) return;
     var lead = +o.lead || 0;
@@ -563,6 +616,7 @@
       if (it.t.dueTime) txt += '（' + it.t.dueTime + '）';
       if (it.left < 0) txt += ' · 逾期 ' + Math.abs(it.left) + ' 天';
       UI.toast(txt);
+      fireSysNotify(it.left < 0 ? '待办已逾期' : '今日待办到期', txt, key);
       n++;
     });
     if (n && o.sound) beep();
@@ -595,6 +649,7 @@
       var where = it.slot.location || it.course.location;
       if (where) txt += ' · ' + where;
       UI.toast(txt);
+      fireSysNotify('上课提醒', txt, key);
       if (o.sound) beep();
     });
 
@@ -617,6 +672,9 @@
     exportICS: exportICS,
     exportDialog: exportDialog,
     todayLessons: todayLessons,
+    canSysNotify: canSysNotify,
+    requestSysPermission: requestSysPermission,
+    fireSysNotify: fireSysNotify,
     check: check,
 
     start: function () {

@@ -3494,7 +3494,7 @@
       state.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) {
+        Store.expandCourse(c, weekNo).forEach(function (p) {
           if ((p.timeMode || 'period') === 'custom') return; // 自定义时间由 customAt 处理
           var key = p.day + '|' + p.periodId;
           (map[key] = map[key] || []).push(p);
@@ -3795,7 +3795,7 @@
       state.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) { if (p.day === day) out.push(p); });
+        Store.expandCourse(c, weekNo).forEach(function (p) { if (p.day === day) out.push(p); });
       });
       return out.sort(function (a, b) {
         var ta = Store.courseTime(a), tb = Store.courseTime(b);
@@ -7112,6 +7112,118 @@
         throw e;
       }
       this.emit();
+    },
+
+    exportSkeleton: function () {
+      var sem = this.currentSemester ? this.currentSemester() : state.semesters[0];
+      var sid = state.currentSemesterId;
+      var wtMap = { all: 0, odd: 1, even: 2 };
+      var courses = state.courses.filter(function (c) {
+        return !c.semesterId || c.semesterId === sid;
+      }).map(function (c) {
+        var slots = Store.courseSlots(c).map(function (sl) {
+          if (sl.timeMode === "custom") {
+            return [sl.day || 1, 1, sl.startTime || "", sl.endTime || "", sl.location || ""];
+          }
+          return [sl.day || 1, 0, sl.periodId || "p1", sl.location || ""];
+        });
+        var ex = (c.exam && c.exam.date) ? [c.exam.date, c.exam.start || "", c.exam.end || ""] : null;
+        var rots = (Array.isArray(c.rotations) && c.rotations.length) ? c.rotations.map(function (r) {
+          return [r.startWeek || 1, r.endWeek || 1, r.location || "", r.topic || ""];
+        }) : null;
+        var item = [
+          c.name || "",
+          c.teacher || "",
+          c.location || "",
+          c.color || "#4f46e5",
+          c.startWeek || 1,
+          c.endWeek || (sem && sem.weeks) || 20,
+          wtMap[c.weekType] || 0,
+          Number(c.credit) || 0,
+          slots
+        ];
+        if (ex || rots) item.push(ex);
+        if (rots) item.push(rots);
+        return item;
+      });
+      var defP = defaultState().periods || [];
+      var isDefP = (state.periods || []).length === defP.length && (state.periods || []).every(function (pr, i) {
+        return defP[i] && pr.id === defP[i].id && pr.start === defP[i].start && pr.end === defP[i].end;
+      });
+      var out = {
+        v: 1,
+        s: [sem ? sem.name : "当前学期", sem ? sem.startDate : "", sem ? (sem.weeks || 20) : 20],
+        c: courses
+      };
+      if (!isDefP) {
+        out.p = (state.periods || []).map(function (pr) {
+          return [pr.id, pr.name, pr.start, pr.end];
+        });
+      }
+      return out;
+    },
+
+    importSkeleton: function (data, mode) {
+      var obj = typeof data === "string" ? JSON.parse(data) : data;
+      if (!obj || !Array.isArray(obj.c)) throw new Error("无效的课表二维码数据");
+      var wtRev = ["all", "odd", "even"];
+      var sid = state.currentSemesterId;
+      var sem = this.currentSemester ? this.currentSemester() : state.semesters[0];
+      if (obj.s && Array.isArray(obj.s) && sem) {
+        if (obj.s[0] && mode === "replace") sem.name = String(obj.s[0]);
+        if (obj.s[1] && /^\d{4}-\d{2}-\d{2}$/.test(obj.s[1]) && mode === "replace") sem.startDate = obj.s[1];
+        if (obj.s[2] && Number(obj.s[2]) >= 1 && Number(obj.s[2]) <= 36 && mode === "replace") sem.weeks = Number(obj.s[2]);
+      }
+      if (mode === "replace" && Array.isArray(obj.p) && obj.p.length >= 4) {
+        state.periods = obj.p.map(function (pr, idx) {
+          return {
+            id: String(pr[0] || ("p" + (idx + 1))),
+            name: String(pr[1] || ("第" + (idx + 1) + "节")),
+            start: String(pr[2] || "08:00"),
+            end: String(pr[3] || "08:45")
+          };
+        });
+      }
+      if (mode === "replace") {
+        state.courses = state.courses.filter(function (c) {
+          return c.semesterId && c.semesterId !== sid;
+        });
+      }
+      var added = 0;
+      var self = this;
+      obj.c.forEach(function (arr) {
+        if (!Array.isArray(arr) || !arr[0]) return;
+        var slotsRaw = Array.isArray(arr[8]) ? arr[8] : [];
+        var slots = slotsRaw.map(function (sr) {
+          if (sr[1] === 1) {
+            return { day: Number(sr[0]) || 1, timeMode: "custom", startTime: sr[2] || "08:00", endTime: sr[3] || "09:40", location: sr[4] || "" };
+          }
+          return { day: Number(sr[0]) || 1, timeMode: "period", periodId: sr[2] || "p1", location: sr[3] || "" };
+        });
+        var exRaw = arr[9];
+        var exam = (Array.isArray(exRaw) && exRaw[0]) ? { date: exRaw[0], start: exRaw[1] || "", end: exRaw[2] || "" } : null;
+        var rotRaw = arr[10];
+        var rotations = Array.isArray(rotRaw) ? rotRaw.map(function (rr) {
+          return { startWeek: Number(rr[0]) || 1, endWeek: Number(rr[1]) || 1, location: rr[2] || "", topic: rr[3] || "" };
+        }) : [];
+        self.addCourse({
+          name: String(arr[0]),
+          teacher: String(arr[1] || ""),
+          location: String(arr[2] || ""),
+          color: String(arr[3] || "#4f46e5"),
+          startWeek: Number(arr[4]) || 1,
+          endWeek: Number(arr[5]) || (sem && sem.weeks) || 20,
+          weekType: wtRev[Number(arr[6])] || "all",
+          credit: Number(arr[7]) || 0,
+          slots: slots,
+          exam: exam,
+          rotations: rotations
+        });
+        added++;
+      });
+      this.save();
+      this.emit();
+      return { added: added, semesterName: (obj.s && obj.s[0]) || (sem && sem.name) || "当前学期" };
     },
 
     reset: function () {

@@ -59,6 +59,7 @@ def classify(b):
     if "每日一句" in b or "古诗" in b:                return "assets/js/quotes.js"
     if "语音输入" in b:                              return "assets/js/speech.js"
     if "预设主题" in b or "颜色工具" in b:            return "assets/js/theme.js"
+    if "global.QrSync =" in b:                       return "assets/js/qr-sync.js"
     if "OTSU" in b and "图片缩放" in b:              return "assets/js/ocr.js"
     if "选图" in b and "识别中" in b:                return "assets/js/views/ocr-dialog.js"
     if "干员元数据" in b or "OP_META" in b:          return "assets/js/views/gacha.js"

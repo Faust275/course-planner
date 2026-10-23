@@ -62,6 +62,242 @@
     });
   }
 
+  /** 旋转 Canvas（支持 90 / -90 / 180 度，用于修正横拍照片） */
+  function rotateCanvas(srcCanvas, deg) {
+    var d = ((deg % 360) + 360) % 360;
+    if (d === 0) return srcCanvas;
+    var sw = srcCanvas.width, sh = srcCanvas.height;
+    var dst = document.createElement('canvas');
+    dst.width = (d === 90 || d === 270) ? sh : sw;
+    dst.height = (d === 90 || d === 270) ? sw : sh;
+    var ctx = dst.getContext('2d', { willReadFrequently: true });
+    ctx.save();
+    ctx.translate(dst.width / 2, dst.height / 2);
+    ctx.rotate(d * Math.PI / 180);
+    ctx.drawImage(srcCanvas, -sw / 2, -sh / 2);
+    ctx.restore();
+    return dst;
+  }
+
+  /**
+   * 求解 4 点透视单应性矩阵 H (3x3，满足 H[8]=1)：将目标矩形 (u,v) 逆映射到源图四边形 (x,y)
+   * dstPts: [[0,0],[W,0],[W,H],[0,H]], srcPts: [[x0,y0],[x1,y1],[x2,y2],[x3,y3]]
+   */
+  function solveHomography(dstPts, srcPts) {
+    var A = [];
+    var B = [];
+    for (var i = 0; i < 4; i++) {
+      var u = dstPts[i][0], v = dstPts[i][1];
+      var x = srcPts[i][0], y = srcPts[i][1];
+      A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]);
+      B.push(x);
+      A.push([0, 0, 0, u, v, 1, -u * y, -v * y]);
+      B.push(y);
+    }
+    // 高斯消元（列主元）求解 8x8 线性方程组
+    var n = 8;
+    for (var col = 0; col < n; col++) {
+      var maxRow = col;
+      var maxVal = Math.abs(A[col][col]);
+      for (var r = col + 1; r < n; r++) {
+        if (Math.abs(A[r][col]) > maxVal) {
+          maxVal = Math.abs(A[r][col]);
+          maxRow = r;
+        }
+      }
+      if (maxVal < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      var tmpRow = A[col]; A[col] = A[maxRow]; A[maxRow] = tmpRow;
+      var tmpB = B[col]; B[col] = B[maxRow]; B[maxRow] = tmpB;
+
+      var pivot = A[col][col];
+      for (var j = col; j < n; j++) A[col][j] /= pivot;
+      B[col] /= pivot;
+
+      for (var r2 = 0; r2 < n; r2++) {
+        if (r2 === col) continue;
+        var factor = A[r2][col];
+        if (factor === 0) continue;
+        for (var j2 = col; j2 < n; j2++) A[r2][j2] -= factor * A[col][j2];
+        B[r2] -= factor * B[col];
+      }
+    }
+    return [B[0], B[1], B[2], B[3], B[4], B[5], B[6], B[7], 1];
+  }
+
+  /**
+   * 四角透视矫正拉直（Perspective Rectification）
+   * @param {HTMLCanvasElement} srcCanvas 原始画布
+   * @param {Array<{x:number, y:number}>} corners 四个角点 [左上, 右上, 右下, 左下]（像素坐标或 0..1 归一化坐标）
+   * @param {number} [outW] 输出宽度
+   * @param {number} [outH] 输出高度
+   */
+  function warpPerspective(srcCanvas, corners, outW, outH) {
+    if (!srcCanvas || !corners || corners.length !== 4) return srcCanvas;
+    var sw = srcCanvas.width, sh = srcCanvas.height;
+    var pts = corners.map(function (c) {
+      var x = Array.isArray(c) ? c[0] : c.x;
+      var y = Array.isArray(c) ? c[1] : c.y;
+      if (x <= 1.0 && y <= 1.0 && (sw > 2 && sh > 2)) {
+        return [x * sw, y * sh];
+      }
+      return [x, y];
+    });
+
+    var topW = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+    var botW = Math.hypot(pts[2][0] - pts[3][0], pts[2][1] - pts[3][1]);
+    var leftH = Math.hypot(pts[3][0] - pts[0][0], pts[3][1] - pts[0][1]);
+    var rightH = Math.hypot(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1]);
+
+    var W = Math.max(64, Math.round(outW || Math.max(topW, botW)));
+    var H = Math.max(64, Math.round(outH || Math.max(leftH, rightH)));
+
+    var Hmat = solveHomography([[0, 0], [W, 0], [W, H], [0, H]], pts);
+    var dstCanvas = document.createElement('canvas');
+    dstCanvas.width = W;
+    dstCanvas.height = H;
+    var sCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+    var dCtx = dstCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sCtx || !dCtx) return srcCanvas;
+
+    var sImg = sCtx.getImageData(0, 0, sw, sh);
+    var sData = sImg.data;
+    var dImg = dCtx.createImageData(W, H);
+    var dData = dImg.data;
+
+    var h0 = Hmat[0], h1 = Hmat[1], h2 = Hmat[2],
+        h3 = Hmat[3], h4 = Hmat[4], h5 = Hmat[5],
+        h6 = Hmat[6], h7 = Hmat[7];
+
+    for (var v = 0; v < H; v++) {
+      for (var u = 0; u < W; u++) {
+        var denom = h6 * u + h7 * v + 1;
+        if (Math.abs(denom) < 1e-8) continue;
+        var sx = (h0 * u + h1 * v + h2) / denom;
+        var sy = (h3 * u + h4 * v + h5) / denom;
+        var dstIdx = (v * W + u) * 4;
+        if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) {
+          dData[dstIdx] = dData[dstIdx + 1] = dData[dstIdx + 2] = 255;
+          dData[dstIdx + 3] = 255;
+          continue;
+        }
+        var x0 = sx | 0, y0 = sy | 0;
+        var dx = sx - x0, dy = sy - y0;
+        var w00 = (1 - dx) * (1 - dy),
+            w10 = dx * (1 - dy),
+            w01 = (1 - dx) * dy,
+            w11 = dx * dy;
+        var i00 = (y0 * sw + x0) * 4,
+            i10 = i00 + 4,
+            i01 = i00 + sw * 4,
+            i11 = i01 + 4;
+        dData[dstIdx]     = (sData[i00] * w00 + sData[i10] * w10 + sData[i01] * w01 + sData[i11] * w11) | 0;
+        dData[dstIdx + 1] = (sData[i00 + 1] * w00 + sData[i10 + 1] * w10 + sData[i01 + 1] * w01 + sData[i11 + 1] * w11) | 0;
+        dData[dstIdx + 2] = (sData[i00 + 2] * w00 + sData[i10 + 2] * w10 + sData[i01 + 2] * w01 + sData[i11 + 2] * w11) | 0;
+        dData[dstIdx + 3] = 255;
+      }
+    }
+    dCtx.putImageData(dImg, 0, 0);
+    return dstCanvas;
+  }
+
+  /** 自动估计课表外框四角（返回归一化坐标 [{x,y} x 4: TL, TR, BR, BL]） */
+  function detectCorners(canvas) {
+    if (!canvas) {
+      return [{ x: 0.04, y: 0.04 }, { x: 0.96, y: 0.04 }, { x: 0.96, y: 0.96 }, { x: 0.04, y: 0.96 }];
+    }
+    var lines = detectLines(canvas);
+    var w = canvas.width || 1, h = canvas.height || 1;
+    var vl = lines.vlines || [], hl = lines.hlines || [];
+    var x0 = vl.length >= 2 ? Math.max(0.01, vl[0] / w) : 0.04;
+    var x1 = vl.length >= 2 ? Math.min(0.99, vl[vl.length - 1] / w) : 0.96;
+    var y0 = hl.length >= 2 ? Math.max(0.01, hl[0] / h) : 0.04;
+    var y1 = hl.length >= 2 ? Math.min(0.99, hl[hl.length - 1] / h) : 0.96;
+    if (x1 - x0 < 0.4) { x0 = 0.04; x1 = 0.96; }
+    if (y1 - y0 < 0.4) { y0 = 0.04; y1 = 0.96; }
+    return [
+      { x: Number(x0.toFixed(3)), y: Number(y0.toFixed(3)) },
+      { x: Number(x1.toFixed(3)), y: Number(y0.toFixed(3)) },
+      { x: Number(x1.toFixed(3)), y: Number(y1.toFixed(3)) },
+      { x: Number(x0.toFixed(3)), y: Number(y1.toFixed(3)) }
+    ];
+  }
+
+
+
+  /**
+   * 彩色课表卡片底纹剥离（Color Card Background Stripping）
+   * 解决 WakeUp / 超级课程表 / 教务系统彩色课表截图中：
+   * 1) 饱和色块（粉/蓝/绿/紫/橙底纹）转灰度后与文字对比度低；
+   * 2) 深色卡片内白字与浅色背景黑字混排，导致固定 64x64 分块反相把汉字切碎。
+   */
+  function stripColorCardBg(canvas) {
+    if (!canvas || !canvas.getContext) return canvas;
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
+    var d = img.data, n = w * h;
+
+    // 先拷贝一份原始 RGB 供邻域采样，避免原地修改互相污染
+    var orig = new Uint8ClampedArray(d);
+    var step = Math.max(2, Math.min(6, (w / 200) | 0));
+
+    for (var i = 0; i < n; i++) {
+      var o = i * 4;
+      var r = orig[o], g = orig[o + 1], b = orig[o + 2];
+      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+      var sat = maxC - minC;
+      var lum = (0.299 * r + 0.587 * g + 0.114 * b) | 0;
+
+      if (sat >= 38 && lum >= 75 && lum <= 245) {
+        d[o] = d[o + 1] = d[o + 2] = 248;
+      } else if (lum >= 235 && sat <= 30) {
+        var x = i % w, y = (i / w) | 0;
+        var nbColor = 0;
+        var dirs = [[-step, 0], [step, 0], [0, -step], [0, step]];
+        for (var k = 0; k < 4; k++) {
+          var nx = x + dirs[k][0], ny = y + dirs[k][1];
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            var no = (ny * w + nx) * 4;
+            var nr = orig[no], ng = orig[no + 1], nb = orig[no + 2];
+            var nSat = Math.max(nr, ng, nb) - Math.min(nr, ng, nb);
+            var nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+        }
+        if (nbColor >= 2) {
+          d[o] = d[o + 1] = d[o + 2] = 28;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  /**
+   * 沿检测到的表格网格线绘制纯白隔离带（Grid Line Isolation Gutter）
+   * 作用：在保留 lines 坐标供后续归格使用的前提下，把送给 Tesseract 的画布上的表格黑线抹白，
+   * 既防止边框线被误识为「一 / | / 1」，又物理阻断相邻两列文字被 LSTM 连成同一行。
+   */
+  function isolateGridLines(canvas, lines, gutterWidth) {
+    if (!canvas || !canvas.getContext || !lines) return canvas;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return canvas;
+    var gw = gutterWidth || 4;
+    var half = Math.ceil(gw / 2);
+    var w = canvas.width, h = canvas.height;
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    (lines.vlines || []).forEach(function (vx) {
+      ctx.fillRect(Math.max(0, vx - half), 0, gw, h);
+    });
+    (lines.hlines || []).forEach(function (hy) {
+      ctx.fillRect(0, Math.max(0, hy - half), w, gw);
+    });
+    ctx.restore();
+    return canvas;
+  }
+
   /** OTSU：由灰度直方图求最佳阈值 */
   function otsu(hist, total) {
     var sumAll = 0, i;
@@ -266,20 +502,34 @@
     return { vlines: vlines, hlines: hlines };
   }
 
-  /** 单次识别：增强图 → Tesseract（返回原始结果） */
+  /** 单次识别：增强图 → Tesseract（返回原始结果，支持直接传入已透视矫正的 opts.canvas） */
   function recognizeOnce(file, opts, onProgress) {
     opts = opts || {};
     var norm;
-    return normalizeImage(file).then(function (n) {
+    var initPromise = opts.canvas ? new Promise(function (resolve) {
+      var c = document.createElement('canvas');
+      c.width = opts.canvas.width;
+      c.height = opts.canvas.height;
+      c.getContext('2d').drawImage(opts.canvas, 0, 0);
+      c.toBlob(function (b) {
+        resolve({ blob: b, canvas: c, width: c.width, height: c.height });
+      }, 'image/png');
+    }) : normalizeImage(file);
+    var lines = null;
+    return initPromise.then(function (n) {
       norm = n;
+      if (onProgress) onProgress({ status: '正在分析表格结构与去噪…', progress: 0.05 });
+      stripColorCardBg(n.canvas);
       if (opts.binary) binarize(n.canvas);
       else enhance(n.canvas);
+      lines = detectLines(n.canvas);
+      if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
+        isolateGridLines(n.canvas, lines, 4);
+      }
       return new Promise(function (resolve) {
         n.canvas.toBlob(function (b) { norm.blob = b; resolve(); }, 'image/png');
       });
     }).then(function () {
-      if (onProgress) onProgress({ status: '正在分析表格结构…', progress: 0.05 });
-      var lines = detectLines(norm.canvas);
       return loadLib().then(function (T) {
         // createWorker 才能显式要求输出 TSV（v5+ 默认不返回坐标）
         return T.createWorker('chi_sim', 1, {
@@ -356,12 +606,13 @@
   }
 
   /** 本地识别：返回 words（含坐标），失败时自动换一种切分方式重试 */
-  function recognizeLocal(file, onProgress) {
-    return recognizeOnce(file, { psm: '4' }, onProgress).then(function (first) {
+  function recognizeLocal(file, onProgress, extraOpts) {
+    extraOpts = extraOpts || {};
+    return recognizeOnce(file, { psm: '4', canvas: extraOpts.canvas }, onProgress).then(function (first) {
       if (first.words.length >= 12 || first.words.length === 0) return first;
       // 词太少：改用二值化 + 稀疏文本模式再试一次
       if (onProgress) onProgress({ status: '换个方式再识别一次…', progress: 0.5 });
-      return recognizeOnce(file, { psm: '11', binary: true }, onProgress).then(function (second) {
+      return recognizeOnce(file, { psm: '11', binary: true, canvas: extraOpts.canvas }, onProgress).then(function (second) {
         return second.words.length > first.words.length ? second : first;
       }).catch(function () { return first; });
     });
@@ -501,6 +752,14 @@
     opts = opts || {};
     if (!words || !words.length) {
       return { cols: defaultCols(), rows: [], cells: [] };
+    }
+    if (opts.customLines && opts.customLines.vlines && opts.customLines.vlines.length >= 5 &&
+        opts.customLines.hlines && opts.customLines.hlines.length >= 3) {
+      var byCustom = buildFromLines(words, opts.customLines);
+      if (byCustom && byCustom.rows.length) {
+        byCustom.meta = { dayHeaders: 7, rowsByLines: true, customGrid: true };
+        return byCustom;
+      }
     }
 
     var list = words.map(function (w) {
@@ -926,6 +1185,139 @@
    * 把一格文字拆成 { name, location, teacher, weeks, note }
    * 支持：「高等数学\n教三301\n张老师」「大学英语(教三-301)(1-16周)」
    */
+
+  /* ==========================================================
+   * 高校课程专业词库与模糊纠偏 (Curriculum Dictionary & Fuzzy Correction)
+   * 针对本地 Tesseract chi_sim 常见形近字误识（如 高散数学→高等数学、微积今→微积分）
+   * ========================================================== */
+  var COURSE_DICT = [
+    '高等数学', '微积分', '线性代数', '概率论与数理统计', '概率论', '数理统计', '离散数学', '复变函数与积分变换',
+    '复变函数', '数学建模', '数值分析', '计算方法', '常微分方程', '偏微分方程', '数学分析', '高等代数', '抽象代数',
+    '实变函数', '泛函分析', '拓扑学', '运筹学', '最优化方法', '应用统计',
+    '大学物理', '大学物理实验', '普通物理', '理论力学', '材料力学', '结构力学', '流体力学', '弹性力学', '工程力学',
+    '电动力学', '热力学与统计物理', '量子力学', '固体物理', '光学', '原子物理学',
+    '大学英语', '综合英语', '英语听说', '英语视听说', '英语写作', '英语阅读', '学术英语', '科技英语', '大学日语', '大学德语', '大学法语',
+    '程序设计基础', 'C语言程序设计', 'Python程序设计', 'Java程序设计', '面向对象程序设计', '高级语言程序设计',
+    '数据结构', '数据结构与算法', '算法设计与分析', '操作系统', '计算机网络', '计算机组成原理', '计算机体系结构',
+    '数据库系统原理', '数据库原理及应用', '软件工程', '编译原理', '人工智能', '人工智能导论', '机器学习', '深度学习',
+    '数字图像处理', '计算机图形学', '计算机视觉', '自然语言处理', '数据挖掘', '大数据技术', '云计算技术',
+    '网络安全', '信息安全概论', '密码学', '嵌入式系统', '单片机原理及应用', '微机原理与接口技术', '汇编语言',
+    '数字逻辑', '数字电路与逻辑设计', '模拟电子技术', '数字电子技术', '电路原理', '电路分析', '电路分析基础',
+    '信号与系统', '数字信号处理', '自动控制原理', '现代控制理论', '通信原理', '电磁场与电磁波', '高频电子线路',
+    '传感器与检测技术', '电机与拖动', '电力电子技术', '工程制图', '机械制图', '画法几何及机械制图', '机械设计基础',
+    '机械原理', '互换性与测量技术', '工程材料', '金工实习', '电子工艺实习', '电工电子实习',
+    '无机化学', '有机化学', '分析化学', '物理化学', '生物化学', '仪器分析', '化工原理', '高分子化学', '普通生物学',
+    '分子生物学', '细胞生物学', '遗传学', '微生物学', '生理学', '解剖学', '病理学', '药理学', '医学统计学',
+    '马克思主义基本原理', '毛泽东思想和中国特色社会主义理论体系概论', '习近平新时代中国特色社会主义思想概论',
+    '思想道德与法治', '思想道德修养与法律基础', '中国近现代史纲要', '形势与政策', '军事理论', '军事技能',
+    '大学生心理健康教育', '大学生职业生涯规划', '就业指导', '创新创业基础', '劳动教育',
+    '大学体育', '体育', '羽毛球', '篮球', '排球', '足球', '乒乓球', '网球', '太极拳', '健美操', '游泳',
+    '微观经济学', '宏观经济学', '政治经济学', '计量经济学', '金融学', '货币银行学', '国际经济学', '国际贸易实务',
+    '财政学', '统计学', '管理学', '管理学原理', '会计学', '基础会计', '中级财务会计', '财务管理', '市场营销学',
+    '组织行为学', '人力资源管理', '战略管理', '运营管理', '经济法', '民法总论', '刑法学', '宪法学', '行政法与行政诉讼法',
+    '大学语文', '中国古代文学', '中国现当代文学', '外国文学', '传播学概论', '新闻学概论', '教育学原理', '普通心理学'
+  ];
+
+  // 高频形近字直接替换表（先做局部词根修复，再做编辑距离对齐）
+  var OCR_TYPO_RULES = [
+    [/高[散等数筹][数枚字学]学?/g, '高等数学'],
+    [/微积[今份兮分]/g, '微积分'],
+    [/[线浅][性牲形]代[数枚]/g, '线性代数'],
+    [/概[率幸][论沦]/g, '概率论'],
+    [/数理统[汁计]/g, '数理统计'],
+    [/[大太][学字]英[语捂语]/g, '大学英语'],
+    [/[大太][学字]物[理埋]/g, '大学物理'],
+    [/[大太][学字]体[育肓]/g, '大学体育'],
+    [/体[肓育]/g, '体育'],
+    [/数[据椐]结[构抅]/g, '数据结构'],
+    [/操[作怍]系[统統]/g, '操作系统'],
+    [/[计汁][算箅][机饥]网[络絡]/g, '计算机网络'],
+    [/[计汁][算箅][机饥]组成原[理埋]/g, '计算机组成原理'],
+    [/离[散撤][数枚]学/g, '离散数学'],
+    [/编译原[理埋]/g, '编译原理'],
+    [/软件工[程呈]/g, '软件工程'],
+    [/马[克兑]思主[义乂]/g, '马克思主义'],
+    [/毛[泽择][东乐]/g, '毛泽东'],
+    [/思想道[德徳]/g, '思想道德'],
+    [/近现代[史吏]纲要/g, '近现代史纲要'],
+    [/形[势努]与政[策笨]/g, '形势与政策'],
+    [/模[拟似]电子技术/g, '模拟电子技术'],
+    [/数字电子技[术木]/g, '数字电子技术'],
+    [/信[号亏]与系统/g, '信号与系统']
+  ];
+
+  // 反义/姊妹学科保护对：这几组词虽然只差 1 个字，但绝不能互相纠偏
+  var DISTINCT_PREFIXES = ['微观', '宏观', '无机', '有机', '分析', '物理', '生物', '模拟', '数字', '常微', '偏微', '实变', '复变', '古代', '现代'];
+
+  function editDistance(a, b) {
+    var m = a.length, n = b.length;
+    var dp = [];
+    for (var i = 0; i <= m; i++) {
+      dp[i] = [i];
+      for (var j = 1; j <= n; j++) {
+        dp[i][j] = i === 0 ? j : 0;
+      }
+    }
+    for (var r = 1; r <= m; r++) {
+      for (var c = 1; c <= n; c++) {
+        if (a.charAt(r - 1) === b.charAt(c - 1)) dp[r][c] = dp[r - 1][c - 1];
+        else dp[r][c] = 1 + Math.min(dp[r - 1][c], dp[r][c - 1], dp[r - 1][c - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  /**
+   * 对识别出的课程名进行高校专业词库纠偏
+   * @returns {{ name: string, corrected: boolean, original: string }}
+   */
+  function correctCourseName(rawName) {
+    var orig = String(rawName || '').trim();
+    if (!orig) return { name: '', corrected: false, original: '' };
+
+    var fixed = orig;
+    for (var i = 0; i < OCR_TYPO_RULES.length; i++) {
+      fixed = fixed.replace(OCR_TYPO_RULES[i][0], OCR_TYPO_RULES[i][1]);
+    }
+    if (fixed !== orig) {
+      return { name: fixed, corrected: true, original: orig };
+    }
+
+    // 剥离尾部常见编号后缀（如 A / B / (上) / （二） / II / 实验）后再比对词干
+    var suffixMatch = /^([一-龥A-Za-z]{3,14}?)(\s*(?:[A-Da-d1-4ⅠⅡⅢⅣ]+|[（(][上下一二三四1-4A-D][)）]|实验|实践|上|下)?)$/.exec(orig);
+    var stem = suffixMatch ? suffixMatch[1] : orig;
+    var tail = suffixMatch ? (suffixMatch[2] || '') : '';
+
+    if (COURSE_DICT.indexOf(stem) >= 0) {
+      return { name: orig, corrected: false, original: orig };
+    }
+
+    // 若词干长度 >= 3，查找编辑距离为 1 的同长度标准课程名
+    if (stem.length >= 3) {
+      for (var d = 0; d < COURSE_DICT.length; d++) {
+        var cand = COURSE_DICT[d];
+        if (cand.length !== stem.length) continue;
+        if (editDistance(stem, cand) === 1) {
+          // 检查是否触碰反义前缀保护对（如 微观经济学 vs 宏观经济学）
+          var conflict = false;
+          for (var p = 0; p < DISTINCT_PREFIXES.length; p++) {
+            var pfx = DISTINCT_PREFIXES[p];
+            if ((stem.indexOf(pfx) === 0 && cand.indexOf(pfx) !== 0) ||
+                (cand.indexOf(pfx) === 0 && stem.indexOf(pfx) !== 0)) {
+              conflict = true;
+              break;
+            }
+          }
+          if (!conflict) {
+            return { name: cand + tail, corrected: true, original: orig };
+          }
+        }
+      }
+    }
+
+    return { name: orig, corrected: false, original: orig };
+  }
+
   function parseCell(text) {
     var raw = String(text || '');
     var lines = raw.split(/[\n\r]+|\s+\/\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -944,7 +1336,10 @@
       segs.forEach(function (seg) { takeFields(seg, out, names, notes); });
     });
 
-    out.name = tidyName(names.length ? names[0] : (lines[0] || ''));
+    var rawTitle = tidyName(names.length ? names[0] : (lines[0] || ''));
+    var corr = correctCourseName(rawTitle);
+    out.name = corr.name;
+    if (corr.corrected) out.correctedFrom = corr.original;
     out.note = tidy(notes.join(' '));
     return out;
   }
@@ -1030,14 +1425,22 @@
   }
 
   function recognizeCloud(file, cfg) {
-    var prompt = '这是一张课程表截图。请只提取课程格子里的内容，' +
-      '忽略表头行（星期几、时间、节次、课程、教室这类表头文字），也不要把表头当课程。' +
-      '返回 JSON：{"courses":[{"day":1-7,"start":节次,"end":节次,' +
-      '"name":"课程名","location":"上课地点","teacher":"教师","weeks":"周次"}]}。' +
-      'day 用 1=周一 … 7=周日；start/end 是占用的节次序号（表格第几行就是第几节，连上的课写区间）。' +
-      '课程名里不要包含地点、教师和周次，这三项分别放到对应字段；没有的留空字符串。只返回 JSON，不要解释。';
+    var prompt = '你是一个高校教务系统课表结构化提取专家。请从这张课程表图片中提取所有课程安排。\n' +
+      '【核心提取规则】：\n' +
+      '1. 严格忽略表头与行列坐标文字（星期一至周日、第1-12节、08:00-09:40、上午/下午/晚上等绝不能当成课程）。\n' +
+      '2. 连堂课合并：若某门课纵向跨越多节（如第1-2节或第3-4节合并单元格），请将 start 设为起始节次序号，end 设为结束节次序号（整数 1-14）。\n' +
+      '3. 同格多课拆分：若同一个格子里上下写了两门不同周次的课（例如单周上A课、双周上B课，或1-8周上A、9-16周上B），必须拆成两条独立的课程记录！\n' +
+      '4. 字段剥离：name 只保留纯净课程名称（并自动修正明显错别字）；location 提取教学楼/教室/机房编号（如“教三-301”“理教204”）；teacher 提取任课教师姓名（去掉“老师/教授”后缀或保留原名）；weeks 提取周次描述（如“1-16周”“1-15周(单)”“2-16周(双)”）。\n' +
+      '5. 只返回严格合法的 JSON，格式为：{"courses":[{"day":1,"start":1,"end":2,"name":"高等数学A","location":"教三301","teacher":"王敏","weeks":"1-16周"}]}。day 取值 1(周一) 至 7(周日)。不要输出任何解释或 Markdown 代码块包裹以外的文字。';
     return visionJSON(file, cfg, prompt).then(function (data) {
-      return data.courses || [];
+      return (data.courses || []).map(function (c) {
+        if (c && c.name) {
+          var corr = correctCourseName(String(c.name).trim());
+          c.name = corr.name;
+          if (corr.corrected) c.correctedFrom = corr.original;
+        }
+        return c;
+      });
     });
   }
 
@@ -1106,12 +1509,22 @@
     recognizeCloudTasks: recognizeCloudTasks,
     recognizeCloudSleep: recognizeCloudSleep,
     binarize: binarize,
+    enhance: enhance,
     normalizeImage: normalizeImage,
+    rotateCanvas: rotateCanvas,
+    solveHomography: solveHomography,
+    warpPerspective: warpPerspective,
+    detectCorners: detectCorners,
+    detectLines: detectLines,
+    stripColorCardBg: stripColorCardBg,
+    isolateGridLines: isolateGridLines,
     buildGrid: buildGrid,
     buildFromLines: buildFromLines,
     parseCell: parseCell,
     parseWeeks: parseWeeks,
     splitCell: splitCell,
+    correctCourseName: correctCourseName,
+    COURSE_DICT: COURSE_DICT,
     isHeaderWord: function (t) {
       return !!dayOf(t) || !!periodOf(t) || isTime(t) || isMeta(t);
     },

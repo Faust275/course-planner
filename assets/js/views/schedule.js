@@ -777,7 +777,7 @@
       Store.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) {
+        Store.expandCourse(c, weekNo).forEach(function (p) {
           var first = -1, last = -1;
           if (p.timeMode === 'custom') {
             if (!p.startTime) return;
@@ -845,6 +845,217 @@
 
 
 
+  /** 考试周备考看板：顶部考试倒计时阵列 + 三阶段备考推进看板 */
+  function renderExamBoard(root) {
+    var exams = Store.courseExams ? Store.courseExams() : [];
+    var sid = Store.semester ? Store.semester.id : '';
+    var semCourses = Store.courses.filter(function (c) { return !c.semesterId || c.semesterId === sid; });
+
+    // 1. 顶部考试倒计时横幅卡片
+    var cdCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    cdCard.appendChild(el('div', {
+      class: 'section-title',
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }
+    }, [
+      el('span', {}, ['🎯 期末考试倒计时阵列']),
+      el('span', { style: { fontSize: '12px', color: 'var(--text-3)', fontWeight: 'normal' }, text: exams.length ? ('共 ' + exams.length + ' 门考试安排') : '在课程编辑里填写「考试日期」即可自动排入' })
+    ]));
+
+    if (!exams.length) {
+      cdCard.appendChild(el('div', {
+        style: { padding: '14px', borderRadius: '10px', background: 'var(--surface-2)', fontSize: '13px', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }
+      }, [
+        el('span', { text: '当前学期还没有登记考试时间。点任意课程「编辑」，填入考试日期和起止时间，这里会自动生成倒计时卡片。' }),
+        semCourses.length ? el('button', {
+          class: 'btn btn-sm btn-primary',
+          onclick: function () { CourseDialog.open(semCourses[0].id); }
+        }, ['去给课程填考试时间']) : null
+      ]));
+    } else {
+      var grid = el('div', {
+        style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }
+      });
+      exams.forEach(function (c) {
+        var ex = c.exam || {};
+        var left = DateUtil.daysLeft(ex.date);
+        var badgeText = left < 0 ? ('已结束 ' + Math.abs(left) + ' 天') : (left === 0 ? '🔥 今天考试' : ('还有 ' + left + ' 天'));
+        var badgeColor = left < 0 ? 'var(--text-3)' : (left <= 3 ? 'var(--red)' : (left <= 7 ? 'var(--amber)' : 'var(--primary)'));
+        var tm = ex.start ? (ex.start + (ex.end ? '–' + ex.end : '')) : '时间待定';
+        grid.appendChild(el('div', {
+          class: 'card',
+          style: {
+            padding: '12px 14px',
+            borderLeft: '4px solid ' + (c.color || 'var(--primary)'),
+            background: 'var(--surface-2)',
+            cursor: 'pointer'
+          },
+          onclick: function () { CourseDialog.detail(c.id); }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '6px' } }, [
+            el('b', { style: { fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, text: c.name }),
+            el('span', {
+              class: 'chip',
+              style: { color: badgeColor, fontWeight: '700', fontSize: '11.5px', flex: '0 0 auto' },
+              text: badgeText
+            })
+          ]),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '📅 ' + ex.date + ' · ' + tm }),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }, text: '📍 ' + (c.location || '地点待定') + (c.credit ? (' · ' + c.credit + ' 学分') : '') })
+        ]));
+      });
+      cdCard.appendChild(grid);
+    }
+    root.appendChild(cdCard);
+
+    // 2. 三阶段备考看板 (一轮复习 / 历年真题 / 考前冲刺)
+    var STAGES = [
+      { key: 'round1', next: 'papers', title: '📖 一轮复习 · 知识点梳理', desc: '教材章节通读、课堂笔记整理与重难点排雷', color: '#3b82f6' },
+      { key: 'papers', next: 'sprint', title: '✍️ 二轮强化 · 历年真题刷题', desc: '往年期末卷限时模考、错题归档与题型总结', color: '#f59e0b' },
+      { key: 'sprint', next: '', title: '🔥 考前冲刺 · 核心背诵押题', desc: '高频公式默写、简答背诵与考前查漏补缺', color: '#ef4444' }
+    ];
+
+    var boardHead = el('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }
+    }, [
+      el('div', {}, [
+        el('b', { style: { fontSize: '15px' }, text: '🗂️ 三阶段备考推进看板' }),
+        el('span', { style: { fontSize: '12px', color: 'var(--text-3)', marginLeft: '8px' }, text: '将期末复习拆解为三个阶段，点击「推进 ▸」流转至下一阶段' })
+      ]),
+      el('button', {
+        class: 'btn btn-sm btn-primary',
+        onclick: function () {
+          if (global.TaskDialog) global.TaskDialog.open(null, { examStage: 'round1', energy: 'high' });
+        }
+      }, [V.svg(V.icons.plus, 14), '新建备考任务'])
+    ]);
+    root.appendChild(boardHead);
+
+    var colsWrap = el('div', {
+      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '16px' }
+    });
+
+    STAGES.forEach(function (st) {
+      var tasks = (Store.tasks || []).filter(function (t) {
+        return !t.parentId && t.examStage === st.key;
+      });
+      var doneCount = tasks.filter(function (t) { return t.status === 'done'; }).length;
+
+      var colCard = el('div', {
+        class: 'card',
+        style: { padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '3px solid ' + st.color }
+      });
+
+      colCard.appendChild(el('div', {}, [
+        el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, [
+          el('b', { style: { fontSize: '14px' }, text: st.title }),
+          el('span', { class: 'chip', style: { fontSize: '11px' }, text: doneCount + '/' + tasks.length })
+        ]),
+        el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }, text: st.desc })
+      ]));
+
+      var qInp = V.input({ placeholder: '快速添加本阶段任务（Enter）…', style: { height: '32px', fontSize: '12.5px' } });
+      var qSel = V.select(
+        [{ value: '', label: '关联课程（可选）' }].concat(semCourses.map(function (c) { return { value: c.id, label: c.name }; })),
+        exams[0] ? exams[0].id : '',
+        { style: 'height:32px;font-size:12px;max-width:125px' }
+      );
+      function quickAddStageTask() {
+        var title = (qInp.value || '').trim();
+        if (!title) { UI.toast('请输入备考任务内容', 'err'); qInp.focus(); return; }
+        Store.addTask({
+          title: title,
+          courseId: qSel.value || '',
+          examStage: st.key,
+          energy: 'high',
+          priority: st.key === 'sprint' ? 'high' : 'normal',
+          dueDate: DateUtil.toStr(DateUtil.today())
+        });
+        qInp.value = '';
+        UI.toast('已加入「' + st.title.slice(0, 6) + '」');
+        view.render();
+      }
+      qInp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); quickAddStageTask(); }
+      });
+      colCard.appendChild(el('div', { style: { display: 'flex', gap: '6px' } }, [
+        qSel, qInp,
+        el('button', { class: 'btn btn-sm', style: { height: '32px', padding: '0 10px' }, text: '+', onclick: quickAddStageTask })
+      ]));
+
+      var listEl = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '80px' } });
+      if (!tasks.length) {
+        listEl.appendChild(el('div', {
+          style: { padding: '18px 10px', textAlign: 'center', fontSize: '12px', color: 'var(--text-3)', border: '1px dashed var(--line)', borderRadius: '8px' },
+          text: '暂无任务，在上方输入即可快速拆解复习计划'
+        }));
+      } else {
+        tasks.forEach(function (t) {
+          var course = t.courseId ? Store.getCourse(t.courseId) : null;
+          var isDone = t.status === 'done';
+          listEl.appendChild(el('div', {
+            style: {
+              padding: '9px 11px',
+              borderRadius: '8px',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--line)',
+              opacity: isDone ? 0.65 : 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }
+          }, [
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+              el('input', {
+                type: 'checkbox',
+                checked: isDone ? 'checked' : null,
+                onclick: function (e) {
+                  e.stopPropagation();
+                  Store.updateTask(t.id, { status: isDone ? 'todo' : 'done' });
+                  view.render();
+                }
+              }),
+              el('span', {
+                style: { flex: '1', fontSize: '13px', fontWeight: '500', textDecoration: isDone ? 'line-through' : 'none', cursor: 'pointer' },
+                text: t.title,
+                onclick: function () { if (global.TaskDialog) global.TaskDialog.open(t.id); }
+              })
+            ]),
+            el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, [
+              course ? el('span', {
+                class: 'chip',
+                style: { fontSize: '11px', padding: '1px 6px', background: (course.color || '#4f46e5') + '22', color: course.color || '#4f46e5' },
+                text: course.name
+              }) : el('span', { style: { fontSize: '11px', color: 'var(--text-3)' }, text: '通用备考' }),
+              el('div', { style: { display: 'flex', gap: '4px' } }, [
+                st.next ? el('button', {
+                  class: 'btn btn-sm',
+                  style: { padding: '2px 8px', fontSize: '11px' },
+                  title: '流转到下一备考阶段',
+                  onclick: function () {
+                    Store.updateTask(t.id, { examStage: st.next });
+                    UI.toast('已推进至下一阶段');
+                    view.render();
+                  }
+                }, ['推进 ▸']) : null,
+                el('button', {
+                  class: 'btn btn-sm',
+                  style: { padding: '2px 8px', fontSize: '11px' },
+                  onclick: function () {
+                    if (global.App) { App.go('pomodoro'); }
+                  }
+                }, ['🍅 专注'])
+              ])
+            ])
+          ]));
+        });
+      }
+      colCard.appendChild(listEl);
+      colsWrap.appendChild(colCard);
+    });
+
+    root.appendChild(colsWrap);
+  }
+
   var view = {
     id: 'schedule',
     name: '课程表',
@@ -855,6 +1066,7 @@
 
     root: null,
     week: null,
+    subMode: 'table',
 
     /** 当前学期的时间冲突列表（渲染提示卡与批量导入预览都用它） */
     conflicts: function () {
@@ -902,6 +1114,12 @@
       host.appendChild(
         el('button', {
           class: 'btn',
+          onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
+        }, [V.svg(V.icons.grid || V.icons.calendar, 16), '二维码分享'])
+      );
+      host.appendChild(
+        el('button', {
+          class: 'btn',
           onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); }
         }, [V.svg(V.icons.download || V.icons.upload, 16), '导出图片'])
       );
@@ -943,6 +1161,26 @@
       var self = this;
       var root = this.root;
       root.innerHTML = '';
+
+      /* ---- 顶部模式切换：常规周课表 | 考试周备考看板 ---- */
+      var modeBar = el('div', { class: 'pane-tabs', style: { marginBottom: '12px' } }, [
+        el('button', {
+          class: 'pane-tab' + (self.subMode !== 'exam' ? ' active' : ''),
+          text: '📅 常规周课表',
+          onclick: function () { self.subMode = 'table'; self.render(); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (self.subMode === 'exam' ? ' active' : ''),
+          text: '🎯 考试周备考看板',
+          onclick: function () { self.subMode = 'exam'; self.render(); }
+        })
+      ]);
+      root.appendChild(modeBar);
+
+      if (self.subMode === 'exam') {
+        renderExamBoard(root);
+        return;
+      }
 
       var weekNo = this.week;
       var totalWeeks = Store.semester.weeks;
@@ -1200,6 +1438,7 @@
       var t = Store.courseTime(p);
       var loc = p.location || '';
       var meta = [];
+      if (p.topic) meta.push('🔬' + p.topic);
       if (loc) meta.push(loc);
       if (t && t.mode === 'custom') meta.unshift(t.start + '-' + t.end);
       else if (t) meta.push(t.start);
@@ -1546,6 +1785,48 @@
       bindTimeInput(fExamStart);
       bindTimeInput(fExamEnd);
 
+      /* ---------- 实验课多地点 / 课题按周轮转 ---------- */
+      var rotBox = el('div', { class: 'rot-box', style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+      function renderRotations() {
+        rotBox.innerHTML = '';
+        if (data.rotations.length) {
+          data.rotations.forEach(function (r, idx) {
+            var swInp = V.input({ type: 'number', min: '1', max: String(Store.semester.weeks), value: r.startWeek || 1, style: { width: '58px' } });
+            var ewInp = V.input({ type: 'number', min: '1', max: String(Store.semester.weeks), value: r.endWeek || r.startWeek || 1, style: { width: '58px' } });
+            var locInp = V.input({ placeholder: '轮转教室，如：物理实验楼 204', value: r.location || '', style: { flex: '1', minWidth: '110px' } });
+            var topInp = V.input({ placeholder: '实验课题（可选），如：迈克尔逊干涉', value: r.topic || '', style: { flex: '1', minWidth: '110px' } });
+            swInp.oninput = function () { r.startWeek = Math.max(1, parseInt(swInp.value, 10) || 1); };
+            ewInp.oninput = function () { r.endWeek = Math.max(1, parseInt(ewInp.value, 10) || r.startWeek || 1); };
+            locInp.oninput = function () { r.location = locInp.value.trim(); };
+            topInp.oninput = function () { r.topic = topInp.value.trim(); };
+            rotBox.appendChild(el('div', {
+              style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', padding: '6px 8px', background: 'var(--surface-2)', borderRadius: '8px' }
+            }, [
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '第' }),
+              swInp,
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '–' }),
+              ewInp,
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '周' }),
+              locInp,
+              topInp,
+              el('button', {
+                class: 'icon-btn', type: 'button', title: '删除此条轮转',
+                onclick: function () { data.rotations.splice(idx, 1); renderRotations(); }
+              }, [V.svg(V.icons.trash, 14)])
+            ]));
+          });
+        }
+        rotBox.appendChild(el('button', {
+          class: 'btn btn-sm', type: 'button', style: { alignSelf: 'flex-start' },
+          onclick: function () {
+            var nextW = data.rotations.length ? Math.min(Store.semester.weeks, (data.rotations[data.rotations.length - 1].endWeek || 1) + 1) : 1;
+            data.rotations.push({ startWeek: nextW, endWeek: nextW, location: '', topic: '' });
+            renderRotations();
+          }
+        }, [V.svg(V.icons.plus, 14), '添加周次教室/课题轮转']));
+      }
+      renderRotations();
+
       var body = [
         V.field('课程名称', fName),
         el('div', { class: 'field-row' }, [
@@ -1553,6 +1834,7 @@
           V.field('上课地点', fLocation)
         ]),
         V.field('上课时间', el('div', { class: 'tm-box' }, [fMode, periodBox, customBox])),
+        V.field('🔬 实验课多地点/课题轮转（可选）', rotBox, '不同周次在不同实验室或做不同课题时填写，课表会随当前周次自动切换教室与课题名'),
         el('div', { class: 'field-row' }, [
           V.field('学分', fCredit, '填了会自动出现在「成绩」里'),
           V.field('考试日期', fExamDate, '会同时显示在课程表和日程上')
@@ -1705,6 +1987,12 @@
             ? '<div>考试：' + c.exam.date + (c.exam.start ? ' ' + c.exam.start + (c.exam.end ? '–' + c.exam.end : '') : '') + '</div>'
             : '') +
           (c.teacher ? '<div>教师：' + V.escapeHTML(c.teacher) + '</div>' : '') +
+          (Array.isArray(c.rotations) && c.rotations.length
+            ? '<div style="margin-top:6px"><b>🔬 轮转安排：</b><br>' + c.rotations.map(function (r) {
+                return '第 ' + r.startWeek + (r.endWeek && r.endWeek !== r.startWeek ? '–' + r.endWeek : '') + ' 周：' +
+                  V.escapeHTML(r.location || c.location || '—') + (r.topic ? '（' + V.escapeHTML(r.topic) + '）' : '');
+              }).join('<br>') + '</div>'
+            : '') +
           (c.note ? '<div style="margin-top:6px">备注：' + V.escapeHTML(c.note) + '</div>' : '')
       });
 

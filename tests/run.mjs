@@ -2596,5 +2596,161 @@ console.log('Store: 睡眠结构字段与按夜选择');
   eq('normalizeNight 在真实存储记录上可用', typeof norm.total, 'number');
 }
 
+
+console.log('\nQrSync: 二维码编解码、极简课表骨架单码与动态多帧轮播');
+{
+  const S = await initTestStore();
+  S.addCourse({
+    name: '高等数学 A',
+    teacher: '王敏',
+    location: '教三 301',
+    day: 1,
+    periodId: 'p1',
+    credit: 4,
+    startWeek: 1,
+    endWeek: 16,
+    weekType: 'all',
+    exam: { date: '2026-06-20', start: '09:00', end: '11:00' },
+    rotations: [{ startWeek: 1, endWeek: 4, location: '理教 204', topic: '极限实验' }]
+  });
+
+  // 验证 weekMatrix 与 coursesOnDay 动态传递 weekNo 给 expandCourse
+  const wm2 = S.weekMatrix(2);
+  eq('weekMatrix(2) 包含第 2 周实验轮转地点', wm2['1|p1'][0].location, '理教 204');
+  eq('weekMatrix(2) 包含第 2 周实验课题', wm2['1|p1'][0].topic, '极限实验');
+  const wm10 = S.weekMatrix(10);
+  eq('weekMatrix(10) 恢复默认地点', wm10['1|p1'][0].location, '教三 301');
+
+  const qrCodeSrc = readFileSync(new URL('../assets/js/qr-sync.js', import.meta.url), 'utf8');
+  const qrWin = {
+    Store: S,
+    UI: { el: () => ({ appendChild: () => {} }) },
+    btoa: (str) => Buffer.from(str, 'binary').toString('base64'),
+    atob: (b64) => Buffer.from(b64, 'base64').toString('binary')
+  };
+  new Function('window', 'global', 'btoa', 'atob', qrCodeSrc)(qrWin, qrWin, qrWin.btoa, qrWin.atob);
+  const QrSync = qrWin.QrSync;
+
+  // 1) 极简课表骨架导出与二维码编解码闭环
+  const skCode = QrSync.buildSkeletonCode();
+  eq('CPQR1 前缀正确', skCode.startsWith('CPQR1:'), true);
+  const mat = QrSync.encodeMatrix(skCode);
+  eq('极简骨架单码版本 <= 15', mat.version <= 15, true);
+  const decodedSkCode = QrSync.decodeFromMatrix(mat.modules, mat.size);
+  eq('QR 矩阵无损解码还原 CPQR1 串', decodedSkCode, skCode);
+
+  const parsedSk = QrSync.parseSkeletonCode(decodedSkCode);
+  eq('骨架解析出 1 门课', parsedSk.c.length, 1);
+
+  const S2 = await initTestStore();
+  const impRes = S2.importSkeleton(parsedSk, 'replace');
+  eq('importSkeleton 导入 1 门课', impRes.added, 1);
+  eq('导入后课程名称一致', S2.courses[0].name, '高等数学 A');
+  eq('导入后学分保留', S2.courses[0].credit, 4);
+  eq('导入后考试日期保留', S2.courses[0].exam.date, '2026-06-20');
+  eq('导入后实验课轮转规则保留', S2.courses[0].rotations[0].location, '理教 204');
+
+  // 2) 动态多帧轮播分片与重组闭环
+  const streamInfo = await QrSync.buildStreamFrames('lite');
+  eq('生成多帧轮播数组', Array.isArray(streamInfo.frames) && streamInfo.frames.length >= 1, true);
+  const chunksMap = {};
+  for (const frameStr of streamInfo.frames) {
+    const fMat = QrSync.encodeMatrix(frameStr);
+    const fDec = QrSync.decodeFromMatrix(fMat.modules, fMat.size);
+    eq('分片帧 QR 矩阵无损解码', fDec, frameStr);
+    const pf = QrSync.parseStreamFrame(fDec);
+    chunksMap[pf.index] = pf.chunk;
+  }
+  const assembledJson = await QrSync.assembleStreamFrames(chunksMap, streamInfo.total, streamInfo.hash);
+  const assembledObj = JSON.parse(assembledJson);
+  eq('多帧重组还原出有效同步 JSON', Array.isArray(assembledObj.courses), true);
+  eq('多帧重组课程数量一致', assembledObj.courses.length, 1);
+
+  // 3) WebDAV 地址拼装与 Basic Auth 编码验证
+  eq('WebDAV URL 自动补斜杠与文件名', QrSync.buildWebdavTargetUrl({
+    url: 'https://dav.jianguoyun.com/dav/course-planner',
+    filename: 'my-sync.json'
+  }), 'https://dav.jianguoyun.com/dav/course-planner/my-sync.json');
+  eq('WebDAV URL 支持 CORS 代理前缀替换', QrSync.buildWebdavTargetUrl({
+    url: 'https://dav.jianguoyun.com/dav',
+    filename: 'sync.json',
+    corsProxy: 'https://proxy.example.com/?target={url}'
+  }), 'https://proxy.example.com/?target=' + encodeURIComponent('https://dav.jianguoyun.com/dav/sync.json'));
+  eq('WebDAV Basic Auth 头部生成正确', QrSync.buildWebdavAuthHeader({
+    username: 'user@example.com',
+    password: 'app-secret-123'
+  }), 'Basic ' + Buffer.from('user@example.com:app-secret-123').toString('base64'));
+}
+
+console.log('\nOcr: 高校课程词库纠偏、透视单应性矩阵与自定义辅助网格');
+{
+  eq('形近字纠偏: 高散数学A -> 高等数学A', Ocr.correctCourseName('高散数学A').name, '高等数学A');
+  eq('形近字纠偏: 微积今(上) -> 微积分(上)', Ocr.correctCourseName('微积今(上)').name, '微积分(上)');
+  eq('形近字纠偏: 线牲代数 -> 线性代数', Ocr.correctCourseName('线牲代数').name, '线性代数');
+  eq('形近字纠偏: 大字英语 -> 大学英语', Ocr.correctCourseName('大字英语').name, '大学英语');
+  eq('形近字纠偏: 数椐结构 -> 数据结构', Ocr.correctCourseName('数椐结构').name, '数据结构');
+  eq('编辑距离1纠偏: 计算机网路 -> 计算机网络', Ocr.correctCourseName('计算机网路').name, '计算机网络');
+  eq('编辑距离1纠偏: 概率论与数理统汁 -> 概率论与数理统计', Ocr.correctCourseName('概率论与数理统汁').name, '概率论与数理统计');
+  eq('反义词保护: 微观经济学 不会误纠为 宏观经济学', Ocr.correctCourseName('微观经济学').name, '微观经济学');
+  eq('反义词保护: 有机化学 不会误纠为 无机化学', Ocr.correctCourseName('有机化学').name, '有机化学');
+
+  const cellParsed = Ocr.parseCell('高散数学A\n教三301\n王老师\n1-16周');
+  eq('parseCell 自动纠偏课程名', cellParsed.name, '高等数学A');
+  eq('parseCell 记录原始误识词 correctedFrom', cellParsed.correctedFrom, '高散数学A');
+  eq('parseCell 提取地点', cellParsed.location, '教三301');
+
+  // 单应性矩阵 H 验证：恒等矩形映射
+  const H = Ocr.solveHomography(
+    [[0, 0], [100, 0], [100, 50], [0, 50]],
+    [[0, 0], [200, 0], [200, 100], [0, 100]]
+  );
+  eq('Homography 水平缩放因子 2.0', Math.abs(H[0] - 2) < 1e-6, true);
+  eq('Homography 垂直缩放因子 2.0', Math.abs(H[4] - 2) < 1e-6, true);
+
+  // 自定义辅助对齐网格切分验证
+  const customLines = {
+    vlines: [100, 200, 300, 400, 500, 600, 700, 800],
+    hlines: [50, 150, 250, 350]
+  };
+  const mockWords = [
+    { text: '高等数学', conf: 95, x0: 110, y0: 70, x1: 180, y1: 100, cx: 145, cy: 85 },
+    { text: '大学英语', conf: 95, x0: 310, y0: 170, x1: 380, y1: 200, cx: 345, cy: 185 }
+  ];
+  const g = Ocr.buildGrid(mockWords, { customLines });
+  eq('自定义网格识别出周一第1节', g.cells[0][0], '高等数学');
+  eq('自定义网格识别出周三第2节', g.cells[1][2], '大学英语');
+  eq('自定义网格标记 meta.customGrid', g.meta.customGrid, true);
+
+  // 彩色卡片底纹剥离与网格线隔离带单元测试
+  const fakePixels = new Uint8ClampedArray([
+    100, 180, 240, 255,   // 高饱和度浅蓝底纹 (sat=140, lum=151) -> 应退底为 248
+    30,  30,  30,  255    // 深色文字笔画 (sat=0, lum=30) -> 保持原样 30
+  ]);
+  const fakeCanvas = {
+    width: 2,
+    height: 1,
+    getContext: () => ({
+      getImageData: () => ({ data: fakePixels }),
+      putImageData: () => {}
+    })
+  };
+  Ocr.stripColorCardBg(fakeCanvas);
+  eq('stripColorCardBg 将彩色课程底纹剥离为亮白底(248)', fakePixels[0], 248);
+  eq('stripColorCardBg 完整保留深色文字笔画(30)', fakePixels[4], 30);
+
+  const filledRects = [];
+  const isoCanvas = {
+    width: 500,
+    height: 400,
+    getContext: () => ({
+      save: () => {},
+      restore: () => {},
+      fillRect: (x, y, w, h) => filledRects.push([x, y, w, h])
+    })
+  };
+  Ocr.isolateGridLines(isoCanvas, { vlines: [100, 200], hlines: [50, 150] }, 4);
+  eq('isolateGridLines 绘制 4 条纯白隔离带', filledRects.length, 4);
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

@@ -30,7 +30,7 @@ const browserGlobals = {
   queueMicrotask: 'readonly', structuredClone: 'readonly', AbortController: 'readonly',
   AbortSignal: 'readonly', MutationObserver: 'readonly', ResizeObserver: 'readonly',
   IntersectionObserver: 'readonly', WebSocket: 'readonly', BroadcastChannel: 'readonly',
-  Worker: 'readonly', self: 'readonly', globalThis: 'readonly',
+  Worker: 'readonly', self: 'readonly', globalThis: 'readonly', BarcodeDetector: 'readonly',
 };
 
 // 应用级跨文件全局（window.X / global.X 声明处）
@@ -64,7 +64,7 @@ const appGlobals = {
   TaskDialog: 'writable', TaskNLP: 'writable', TaskRow: 'writable', TaskShot: 'writable',
   Theme: 'writable', TimeUtil: 'writable', Transcript: 'writable', TreeArt: 'writable',
   TREE_SPECIES: 'writable', treeStage: 'writable', TREE_STAGES: 'writable', UI: 'writable',
-  validateSchema: 'writable', weekBounds: 'writable', WhiteNoise: 'writable', WhitePaper: 'writable',
+  validateSchema: 'writable', weekBounds: 'writable', WhiteNoise: 'writable', WhitePaper: 'writable', QrSync: 'writable',
   renderSubtaskPage: 'writable', SettingsDialog: 'writable', drawCloud: 'writable',
 };
 

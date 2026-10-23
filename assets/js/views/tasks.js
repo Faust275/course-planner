@@ -125,6 +125,13 @@
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
             TaskRow.repChip(t),
+            t.energy === 'high' ? el('span', { class: 'chip chip-amber', text: '⚡深度', style: { padding: '0 6px', fontSize: '10.5px' }, title: '高精力消耗（建议黄金时段处理）' }) : null,
+            t.energy === 'low' ? el('span', { class: 'chip', text: '☕轻松', style: { padding: '0 6px', fontSize: '10.5px' }, title: '低精力消耗（适合午后或疲惫时处理）' }) : null,
+            t.examStage ? el('span', {
+              class: 'chip chip-blue',
+              style: { padding: '0 6px', fontSize: '10.5px' },
+              text: t.examStage === 'round1' ? '📖一轮' : (t.examStage === 'papers' ? '✍️真题' : '🔥冲刺')
+            }) : null,
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -173,7 +180,9 @@
       var t = taskId ? Store.getTask(taskId) : null;
       var data = {
         status: t ? t.status : 'todo',
-        priority: t ? t.priority : 'normal'
+        priority: t ? t.priority : 'normal',
+        energy: t ? (t.energy || 'medium') : (preset.energy || 'medium'),
+        examStage: t ? (t.examStage || '') : (preset.examStage || '')
       };
 
       /* ---- 子任务关系 ---- */
@@ -335,6 +344,19 @@
         { value: 'normal', label: '普通' },
         { value: 'high', label: '重要' }
       ], data.priority, function (v) { data.priority = v; });
+
+      var fEnergy = V.segment([
+        { value: 'high', label: '⚡ 深度专注' },
+        { value: 'medium', label: '🌤️ 常规' },
+        { value: 'low', label: '☕ 轻松杂务' }
+      ], data.energy, function (v) { data.energy = v; });
+
+      var fExamStage = V.segment([
+        { value: '', label: '普通待办' },
+        { value: 'round1', label: '📖 一轮复习' },
+        { value: 'papers', label: '✍️ 历年真题' },
+        { value: 'sprint', label: '🔥 考前冲刺' }
+      ], data.examStage, function (v) { data.examStage = v; });
 
       var impOn = t ? !!t.important : false;
       var fImp = el('button', {
@@ -557,6 +579,8 @@
         untilField,
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
+        V.field('精力消耗', fEnergy, '结合「生理精力与作息」在黄金时段优先推荐深度专注任务'),
+        V.field('期末备考阶段', fExamStage, '选择阶段后会同步出现在「课程表 → 考试周备考看板」'),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote),
@@ -658,6 +682,8 @@
                 dueTime: fTime.value,
                 status: data.status,
                 priority: data.priority,
+                energy: data.energy,
+                examStage: data.examStage,
                 important: impOn,
                 note: fNote.value,
                 tags: fTags.getValue(),
@@ -732,6 +758,7 @@
   var state = {
     status: 'all', course: 'all', tag: '', q: '', tab: 'tasks',
     sortMode: 'auto',
+    energyFilter: false,
     selectMode: false,   // 多选批量操作（仅手动排序模式）
     selected: {}         // id -> 1
   };
@@ -891,6 +918,45 @@
       ]);
       root.appendChild(summary);
 
+      /* ---- 生理精力节律匹配提示条 ---- */
+      if (Store.currentEnergyState) {
+        var egState = Store.currentEnergyState();
+        var egBanner = el('div', {
+          class: 'card',
+          style: {
+            padding: '10px 14px',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            flexWrap: 'wrap',
+            background: egState.isPeak ? 'var(--primary-weak)' : 'var(--surface-2)',
+            borderLeft: '3px solid ' + (egState.isPeak ? 'var(--primary)' : 'var(--amber)')
+          }
+        }, [
+          el('div', { style: { fontSize: '12.5px', lineHeight: '1.5' } }, [
+            el('b', { text: egState.icon + ' ' + egState.label + '：' }),
+            el('span', { style: { color: 'var(--text-2)' }, text: egState.advice })
+          ]),
+          el('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
+            el('button', {
+              class: 'btn btn-sm' + (state.energyFilter ? ' btn-primary' : ''),
+              onclick: function () {
+                state.energyFilter = !state.energyFilter;
+                view.render();
+              }
+            }, [state.energyFilter ? '⚡ 已开启精力匹配' : '⚡ 匹配当前精力']),
+            el('button', {
+              class: 'btn btn-sm',
+              title: '自定义精力高峰时段',
+              onclick: function () { if (global.SettingsView) global.SettingsView.go('energy'); }
+            }, ['作息设置'])
+          ])
+        ]);
+        root.appendChild(egBanner);
+      }
+
       /* ---- 快速添加条（支持自然语言快速录入） ---- */
       var quickInput = V.input({
         placeholder: '⚡ 快速添加，如：明天下午3点交高数作业 #作业 !重要（Enter 提交）'
@@ -1035,6 +1101,12 @@
         }
         if (state.course !== 'all' && t.courseId !== state.course) return false;
         if (state.tag && !hasTag(t.tags, state.tag)) return false;
+        if (state.energyFilter && Store.currentEnergyState) {
+          var curLv = Store.currentEnergyState().level;
+          var te = t.energy || 'medium';
+          if (curLv === 'high' && te === 'low') return false;
+          if ((curLv === 'low' || curLv === 'rest') && te === 'high') return false;
+        }
         if (kw) {
           // 父任务自己没命中时，再看它的子任务里有没有命中的
           function hit(x) {

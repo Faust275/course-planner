@@ -1385,7 +1385,23 @@
             text: '数据只存在各自设备的浏览器里，没有服务器，所以要手动同步。点「生成同步文件」导出一份 .json，用微信 / QQ 发到另一台设备，在那台设备点「导入同步文件」选文件或粘贴即可。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
-            el('button', { class: 'btn btn-primary', onclick: syncFileDialog },
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
+            }, [V.svg(V.icons.grid || V.icons.calendar, 16), '课表骨架单码']),
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('stream'); }
+            }, [V.svg(V.icons.camera || V.icons.download, 16), '全量动态轮播码']),
+            el('button', {
+              class: 'btn',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('scan'); }
+            }, [V.svg(V.icons.camera, 16), '扫码/传图接收']),
+            el('button', {
+              class: 'btn',
+              onclick: function () { if (global.QrSync && global.QrSync.openWebdavDialog) global.QrSync.openWebdavDialog(); }
+            }, [V.svg(V.icons.upload, 16), '☁️ WebDAV 云同步']),
+            el('button', { class: 'btn', onclick: syncFileDialog },
               [V.svg(V.icons.download, 16), '生成同步文件']),
             el('button', { class: 'btn', onclick: pasteSyncDialog },
               [V.svg(V.icons.upload, 16), '导入同步文件'])
@@ -1697,6 +1713,41 @@
       type: 'checkbox', checked: o.taskDue !== false,
       onchange: function (e) { o.taskDue = e.target.checked; save(); }
     })));
+    var canSys = global.Remind && global.Remind.canSysNotify ? global.Remind.canSysNotify() : false;
+    var perm = (typeof Notification !== 'undefined' && Notification.permission) ? Notification.permission : 'default';
+    inPage.appendChild(row(
+      '系统通知栏提醒（HTTPS / PWA）',
+      canSys
+        ? ('当前权限：' + (perm === 'granted' ? '已授权 ✅' : (perm === 'denied' ? '已被浏览器拒绝' : '未授权（勾选时将请求权限）')))
+        : '当前为本地 file:// 环境，浏览器禁用系统通知，自动使用页面内提醒兜底',
+      el('input', {
+        type: 'checkbox',
+        checked: !!(o.sysNotify && perm === 'granted'),
+        disabled: !canSys,
+        onchange: function (e) {
+          if (!e.target.checked) {
+            o.sysNotify = false;
+            save();
+            return;
+          }
+          if (global.Remind && global.Remind.requestSysPermission) {
+            global.Remind.requestSysPermission().then(function (res) {
+              if (res === 'granted') {
+                o.sysNotify = true;
+                save();
+                UI.toast('已开启系统级通知提醒');
+              } else {
+                e.target.checked = false;
+                o.sysNotify = false;
+                save();
+                UI.toast('未能获取系统通知权限（' + res + '），将继续使用页面内提醒', 'err');
+              }
+              view.render();
+            });
+          }
+        }
+      })
+    ));
     if (global.Remind) {
       var today = Remind.todayLessons();
       inPage.appendChild(el('div', {

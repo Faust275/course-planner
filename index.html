@@ -9130,7 +9130,7 @@ window.AK_OPS = [
       state.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) {
+        Store.expandCourse(c, weekNo).forEach(function (p) {
           if ((p.timeMode || 'period') === 'custom') return; // 自定义时间由 customAt 处理
           var key = p.day + '|' + p.periodId;
           (map[key] = map[key] || []).push(p);
@@ -9431,7 +9431,7 @@ window.AK_OPS = [
       state.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) { if (p.day === day) out.push(p); });
+        Store.expandCourse(c, weekNo).forEach(function (p) { if (p.day === day) out.push(p); });
       });
       return out.sort(function (a, b) {
         var ta = Store.courseTime(a), tb = Store.courseTime(b);
@@ -12748,6 +12748,118 @@ window.AK_OPS = [
         throw e;
       }
       this.emit();
+    },
+
+    exportSkeleton: function () {
+      var sem = this.currentSemester ? this.currentSemester() : state.semesters[0];
+      var sid = state.currentSemesterId;
+      var wtMap = { all: 0, odd: 1, even: 2 };
+      var courses = state.courses.filter(function (c) {
+        return !c.semesterId || c.semesterId === sid;
+      }).map(function (c) {
+        var slots = Store.courseSlots(c).map(function (sl) {
+          if (sl.timeMode === "custom") {
+            return [sl.day || 1, 1, sl.startTime || "", sl.endTime || "", sl.location || ""];
+          }
+          return [sl.day || 1, 0, sl.periodId || "p1", sl.location || ""];
+        });
+        var ex = (c.exam && c.exam.date) ? [c.exam.date, c.exam.start || "", c.exam.end || ""] : null;
+        var rots = (Array.isArray(c.rotations) && c.rotations.length) ? c.rotations.map(function (r) {
+          return [r.startWeek || 1, r.endWeek || 1, r.location || "", r.topic || ""];
+        }) : null;
+        var item = [
+          c.name || "",
+          c.teacher || "",
+          c.location || "",
+          c.color || "#4f46e5",
+          c.startWeek || 1,
+          c.endWeek || (sem && sem.weeks) || 20,
+          wtMap[c.weekType] || 0,
+          Number(c.credit) || 0,
+          slots
+        ];
+        if (ex || rots) item.push(ex);
+        if (rots) item.push(rots);
+        return item;
+      });
+      var defP = defaultState().periods || [];
+      var isDefP = (state.periods || []).length === defP.length && (state.periods || []).every(function (pr, i) {
+        return defP[i] && pr.id === defP[i].id && pr.start === defP[i].start && pr.end === defP[i].end;
+      });
+      var out = {
+        v: 1,
+        s: [sem ? sem.name : "当前学期", sem ? sem.startDate : "", sem ? (sem.weeks || 20) : 20],
+        c: courses
+      };
+      if (!isDefP) {
+        out.p = (state.periods || []).map(function (pr) {
+          return [pr.id, pr.name, pr.start, pr.end];
+        });
+      }
+      return out;
+    },
+
+    importSkeleton: function (data, mode) {
+      var obj = typeof data === "string" ? JSON.parse(data) : data;
+      if (!obj || !Array.isArray(obj.c)) throw new Error("无效的课表二维码数据");
+      var wtRev = ["all", "odd", "even"];
+      var sid = state.currentSemesterId;
+      var sem = this.currentSemester ? this.currentSemester() : state.semesters[0];
+      if (obj.s && Array.isArray(obj.s) && sem) {
+        if (obj.s[0] && mode === "replace") sem.name = String(obj.s[0]);
+        if (obj.s[1] && /^\d{4}-\d{2}-\d{2}$/.test(obj.s[1]) && mode === "replace") sem.startDate = obj.s[1];
+        if (obj.s[2] && Number(obj.s[2]) >= 1 && Number(obj.s[2]) <= 36 && mode === "replace") sem.weeks = Number(obj.s[2]);
+      }
+      if (mode === "replace" && Array.isArray(obj.p) && obj.p.length >= 4) {
+        state.periods = obj.p.map(function (pr, idx) {
+          return {
+            id: String(pr[0] || ("p" + (idx + 1))),
+            name: String(pr[1] || ("第" + (idx + 1) + "节")),
+            start: String(pr[2] || "08:00"),
+            end: String(pr[3] || "08:45")
+          };
+        });
+      }
+      if (mode === "replace") {
+        state.courses = state.courses.filter(function (c) {
+          return c.semesterId && c.semesterId !== sid;
+        });
+      }
+      var added = 0;
+      var self = this;
+      obj.c.forEach(function (arr) {
+        if (!Array.isArray(arr) || !arr[0]) return;
+        var slotsRaw = Array.isArray(arr[8]) ? arr[8] : [];
+        var slots = slotsRaw.map(function (sr) {
+          if (sr[1] === 1) {
+            return { day: Number(sr[0]) || 1, timeMode: "custom", startTime: sr[2] || "08:00", endTime: sr[3] || "09:40", location: sr[4] || "" };
+          }
+          return { day: Number(sr[0]) || 1, timeMode: "period", periodId: sr[2] || "p1", location: sr[3] || "" };
+        });
+        var exRaw = arr[9];
+        var exam = (Array.isArray(exRaw) && exRaw[0]) ? { date: exRaw[0], start: exRaw[1] || "", end: exRaw[2] || "" } : null;
+        var rotRaw = arr[10];
+        var rotations = Array.isArray(rotRaw) ? rotRaw.map(function (rr) {
+          return { startWeek: Number(rr[0]) || 1, endWeek: Number(rr[1]) || 1, location: rr[2] || "", topic: rr[3] || "" };
+        }) : [];
+        self.addCourse({
+          name: String(arr[0]),
+          teacher: String(arr[1] || ""),
+          location: String(arr[2] || ""),
+          color: String(arr[3] || "#4f46e5"),
+          startWeek: Number(arr[4]) || 1,
+          endWeek: Number(arr[5]) || (sem && sem.weeks) || 20,
+          weekType: wtRev[Number(arr[6])] || "all",
+          credit: Number(arr[7]) || 0,
+          slots: slots,
+          exam: exam,
+          rotations: rotations
+        });
+        added++;
+      });
+      this.save();
+      this.emit();
+      return { added: added, semesterName: (obj.s && obj.s[0]) || (sem && sem.name) || "当前学期" };
     },
 
     reset: function () {
@@ -16087,6 +16199,18 @@ window.DragGesture = (function () {
     lines.push('CALSCALE:GREGORIAN');
     lines.push('METHOD:PUBLISH');
     lines.push('X-WR-CALNAME:' + icsEscape(o.semesterName || '课程表'));
+    if (o.tz) {
+      lines.push('X-WR-TIMEZONE:Asia/Shanghai');
+      lines.push('BEGIN:VTIMEZONE');
+      lines.push('TZID:Asia/Shanghai');
+      lines.push('BEGIN:STANDARD');
+      lines.push('DTSTART:19700101T000000');
+      lines.push('TZOFFSETFROM:+0800');
+      lines.push('TZOFFSETTO:+0800');
+      lines.push('TZNAME:CST');
+      lines.push('END:STANDARD');
+      lines.push('END:VTIMEZONE');
+    }
 
     function dateOfWeekDay(weekNo, day) {
       return DateUtil.toStr(DateUtil.addDays(base, (weekNo - 1) * 7 + (day - 1)));
@@ -16499,6 +16623,47 @@ window.DragGesture = (function () {
    * 与上课提醒共用同一套页面内策略（零权限、零兼容问题），见文件头说明。
    * 明天以后的一概不打扰——那属于计划，不属于提醒。
    */
+
+  /** 检测当前环境是否支持 Web Notification（需 HTTPS/localhost，file:// 下通常不可用） */
+  function canSysNotify() {
+    if (typeof Notification === 'undefined') return false;
+    if (typeof location !== 'undefined' && location.protocol === 'file:') return false;
+    return true;
+  }
+
+  /** 请求系统通知权限，返回 Promise<'granted'|'denied'|'default'|'unsupported'> */
+  function requestSysPermission() {
+    if (!canSysNotify()) return Promise.resolve('unsupported');
+    if (Notification.permission === 'granted') return Promise.resolve('granted');
+    try {
+      var p = Notification.requestPermission();
+      if (p && typeof p.then === 'function') return p;
+      return Promise.resolve(Notification.permission);
+    } catch (_) {
+      return Promise.resolve('denied');
+    }
+  }
+
+  /** 发送系统级通知（若已开启 sysNotify 且已获授权），失败静默回退不抛错 */
+  function fireSysNotify(title, body, tag) {
+    var o = opts();
+    if (!o.sysNotify || !canSysNotify() || Notification.permission !== 'granted') return false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(function (reg) {
+          if (reg && reg.showNotification) {
+            reg.showNotification(title, { body: body || '', tag: tag || 'cp-remind', icon: 'icon-192.png' });
+          }
+        }).catch(function () {});
+      } else {
+        new Notification(title, { body: body || '', tag: tag || 'cp-remind' });
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function checkTaskDue(o, dk, nowMin) {
     if (!o.taskDue) return;
     var lead = +o.lead || 0;
@@ -16527,6 +16692,7 @@ window.DragGesture = (function () {
       if (it.t.dueTime) txt += '（' + it.t.dueTime + '）';
       if (it.left < 0) txt += ' · 逾期 ' + Math.abs(it.left) + ' 天';
       UI.toast(txt);
+      fireSysNotify(it.left < 0 ? '待办已逾期' : '今日待办到期', txt, key);
       n++;
     });
     if (n && o.sound) beep();
@@ -16559,6 +16725,7 @@ window.DragGesture = (function () {
       var where = it.slot.location || it.course.location;
       if (where) txt += ' · ' + where;
       UI.toast(txt);
+      fireSysNotify('上课提醒', txt, key);
       if (o.sound) beep();
     });
 
@@ -16581,6 +16748,9 @@ window.DragGesture = (function () {
     exportICS: exportICS,
     exportDialog: exportDialog,
     todayLessons: todayLessons,
+    canSysNotify: canSysNotify,
+    requestSysPermission: requestSysPermission,
+    fireSysNotify: fireSysNotify,
     check: check,
 
     start: function () {
@@ -17851,7 +18021,7 @@ window.DragGesture = (function () {
       Store.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
-        Store.expandCourse(c).forEach(function (p) {
+        Store.expandCourse(c, weekNo).forEach(function (p) {
           var first = -1, last = -1;
           if (p.timeMode === 'custom') {
             if (!p.startTime) return;
@@ -17919,6 +18089,217 @@ window.DragGesture = (function () {
 
 
 
+  /** 考试周备考看板：顶部考试倒计时阵列 + 三阶段备考推进看板 */
+  function renderExamBoard(root) {
+    var exams = Store.courseExams ? Store.courseExams() : [];
+    var sid = Store.semester ? Store.semester.id : '';
+    var semCourses = Store.courses.filter(function (c) { return !c.semesterId || c.semesterId === sid; });
+
+    // 1. 顶部考试倒计时横幅卡片
+    var cdCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    cdCard.appendChild(el('div', {
+      class: 'section-title',
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }
+    }, [
+      el('span', {}, ['🎯 期末考试倒计时阵列']),
+      el('span', { style: { fontSize: '12px', color: 'var(--text-3)', fontWeight: 'normal' }, text: exams.length ? ('共 ' + exams.length + ' 门考试安排') : '在课程编辑里填写「考试日期」即可自动排入' })
+    ]));
+
+    if (!exams.length) {
+      cdCard.appendChild(el('div', {
+        style: { padding: '14px', borderRadius: '10px', background: 'var(--surface-2)', fontSize: '13px', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }
+      }, [
+        el('span', { text: '当前学期还没有登记考试时间。点任意课程「编辑」，填入考试日期和起止时间，这里会自动生成倒计时卡片。' }),
+        semCourses.length ? el('button', {
+          class: 'btn btn-sm btn-primary',
+          onclick: function () { CourseDialog.open(semCourses[0].id); }
+        }, ['去给课程填考试时间']) : null
+      ]));
+    } else {
+      var grid = el('div', {
+        style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }
+      });
+      exams.forEach(function (c) {
+        var ex = c.exam || {};
+        var left = DateUtil.daysLeft(ex.date);
+        var badgeText = left < 0 ? ('已结束 ' + Math.abs(left) + ' 天') : (left === 0 ? '🔥 今天考试' : ('还有 ' + left + ' 天'));
+        var badgeColor = left < 0 ? 'var(--text-3)' : (left <= 3 ? 'var(--red)' : (left <= 7 ? 'var(--amber)' : 'var(--primary)'));
+        var tm = ex.start ? (ex.start + (ex.end ? '–' + ex.end : '')) : '时间待定';
+        grid.appendChild(el('div', {
+          class: 'card',
+          style: {
+            padding: '12px 14px',
+            borderLeft: '4px solid ' + (c.color || 'var(--primary)'),
+            background: 'var(--surface-2)',
+            cursor: 'pointer'
+          },
+          onclick: function () { CourseDialog.detail(c.id); }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '6px' } }, [
+            el('b', { style: { fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, text: c.name }),
+            el('span', {
+              class: 'chip',
+              style: { color: badgeColor, fontWeight: '700', fontSize: '11.5px', flex: '0 0 auto' },
+              text: badgeText
+            })
+          ]),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '📅 ' + ex.date + ' · ' + tm }),
+          el('div', { style: { fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }, text: '📍 ' + (c.location || '地点待定') + (c.credit ? (' · ' + c.credit + ' 学分') : '') })
+        ]));
+      });
+      cdCard.appendChild(grid);
+    }
+    root.appendChild(cdCard);
+
+    // 2. 三阶段备考看板 (一轮复习 / 历年真题 / 考前冲刺)
+    var STAGES = [
+      { key: 'round1', next: 'papers', title: '📖 一轮复习 · 知识点梳理', desc: '教材章节通读、课堂笔记整理与重难点排雷', color: '#3b82f6' },
+      { key: 'papers', next: 'sprint', title: '✍️ 二轮强化 · 历年真题刷题', desc: '往年期末卷限时模考、错题归档与题型总结', color: '#f59e0b' },
+      { key: 'sprint', next: '', title: '🔥 考前冲刺 · 核心背诵押题', desc: '高频公式默写、简答背诵与考前查漏补缺', color: '#ef4444' }
+    ];
+
+    var boardHead = el('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }
+    }, [
+      el('div', {}, [
+        el('b', { style: { fontSize: '15px' }, text: '🗂️ 三阶段备考推进看板' }),
+        el('span', { style: { fontSize: '12px', color: 'var(--text-3)', marginLeft: '8px' }, text: '将期末复习拆解为三个阶段，点击「推进 ▸」流转至下一阶段' })
+      ]),
+      el('button', {
+        class: 'btn btn-sm btn-primary',
+        onclick: function () {
+          if (global.TaskDialog) global.TaskDialog.open(null, { examStage: 'round1', energy: 'high' });
+        }
+      }, [V.svg(V.icons.plus, 14), '新建备考任务'])
+    ]);
+    root.appendChild(boardHead);
+
+    var colsWrap = el('div', {
+      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '16px' }
+    });
+
+    STAGES.forEach(function (st) {
+      var tasks = (Store.tasks || []).filter(function (t) {
+        return !t.parentId && t.examStage === st.key;
+      });
+      var doneCount = tasks.filter(function (t) { return t.status === 'done'; }).length;
+
+      var colCard = el('div', {
+        class: 'card',
+        style: { padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '3px solid ' + st.color }
+      });
+
+      colCard.appendChild(el('div', {}, [
+        el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }, [
+          el('b', { style: { fontSize: '14px' }, text: st.title }),
+          el('span', { class: 'chip', style: { fontSize: '11px' }, text: doneCount + '/' + tasks.length })
+        ]),
+        el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }, text: st.desc })
+      ]));
+
+      var qInp = V.input({ placeholder: '快速添加本阶段任务（Enter）…', style: { height: '32px', fontSize: '12.5px' } });
+      var qSel = V.select(
+        [{ value: '', label: '关联课程（可选）' }].concat(semCourses.map(function (c) { return { value: c.id, label: c.name }; })),
+        exams[0] ? exams[0].id : '',
+        { style: 'height:32px;font-size:12px;max-width:125px' }
+      );
+      function quickAddStageTask() {
+        var title = (qInp.value || '').trim();
+        if (!title) { UI.toast('请输入备考任务内容', 'err'); qInp.focus(); return; }
+        Store.addTask({
+          title: title,
+          courseId: qSel.value || '',
+          examStage: st.key,
+          energy: 'high',
+          priority: st.key === 'sprint' ? 'high' : 'normal',
+          dueDate: DateUtil.toStr(DateUtil.today())
+        });
+        qInp.value = '';
+        UI.toast('已加入「' + st.title.slice(0, 6) + '」');
+        view.render();
+      }
+      qInp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); quickAddStageTask(); }
+      });
+      colCard.appendChild(el('div', { style: { display: 'flex', gap: '6px' } }, [
+        qSel, qInp,
+        el('button', { class: 'btn btn-sm', style: { height: '32px', padding: '0 10px' }, text: '+', onclick: quickAddStageTask })
+      ]));
+
+      var listEl = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '80px' } });
+      if (!tasks.length) {
+        listEl.appendChild(el('div', {
+          style: { padding: '18px 10px', textAlign: 'center', fontSize: '12px', color: 'var(--text-3)', border: '1px dashed var(--line)', borderRadius: '8px' },
+          text: '暂无任务，在上方输入即可快速拆解复习计划'
+        }));
+      } else {
+        tasks.forEach(function (t) {
+          var course = t.courseId ? Store.getCourse(t.courseId) : null;
+          var isDone = t.status === 'done';
+          listEl.appendChild(el('div', {
+            style: {
+              padding: '9px 11px',
+              borderRadius: '8px',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--line)',
+              opacity: isDone ? 0.65 : 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }
+          }, [
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
+              el('input', {
+                type: 'checkbox',
+                checked: isDone ? 'checked' : null,
+                onclick: function (e) {
+                  e.stopPropagation();
+                  Store.updateTask(t.id, { status: isDone ? 'todo' : 'done' });
+                  view.render();
+                }
+              }),
+              el('span', {
+                style: { flex: '1', fontSize: '13px', fontWeight: '500', textDecoration: isDone ? 'line-through' : 'none', cursor: 'pointer' },
+                text: t.title,
+                onclick: function () { if (global.TaskDialog) global.TaskDialog.open(t.id); }
+              })
+            ]),
+            el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' } }, [
+              course ? el('span', {
+                class: 'chip',
+                style: { fontSize: '11px', padding: '1px 6px', background: (course.color || '#4f46e5') + '22', color: course.color || '#4f46e5' },
+                text: course.name
+              }) : el('span', { style: { fontSize: '11px', color: 'var(--text-3)' }, text: '通用备考' }),
+              el('div', { style: { display: 'flex', gap: '4px' } }, [
+                st.next ? el('button', {
+                  class: 'btn btn-sm',
+                  style: { padding: '2px 8px', fontSize: '11px' },
+                  title: '流转到下一备考阶段',
+                  onclick: function () {
+                    Store.updateTask(t.id, { examStage: st.next });
+                    UI.toast('已推进至下一阶段');
+                    view.render();
+                  }
+                }, ['推进 ▸']) : null,
+                el('button', {
+                  class: 'btn btn-sm',
+                  style: { padding: '2px 8px', fontSize: '11px' },
+                  onclick: function () {
+                    if (global.App) { App.go('pomodoro'); }
+                  }
+                }, ['🍅 专注'])
+              ])
+            ])
+          ]));
+        });
+      }
+      colCard.appendChild(listEl);
+      colsWrap.appendChild(colCard);
+    });
+
+    root.appendChild(colsWrap);
+  }
+
   var view = {
     id: 'schedule',
     name: '课程表',
@@ -17929,6 +18310,7 @@ window.DragGesture = (function () {
 
     root: null,
     week: null,
+    subMode: 'table',
 
     /** 当前学期的时间冲突列表（渲染提示卡与批量导入预览都用它） */
     conflicts: function () {
@@ -17976,6 +18358,12 @@ window.DragGesture = (function () {
       host.appendChild(
         el('button', {
           class: 'btn',
+          onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
+        }, [V.svg(V.icons.grid || V.icons.calendar, 16), '二维码分享'])
+      );
+      host.appendChild(
+        el('button', {
+          class: 'btn',
           onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); }
         }, [V.svg(V.icons.download || V.icons.upload, 16), '导出图片'])
       );
@@ -18017,6 +18405,26 @@ window.DragGesture = (function () {
       var self = this;
       var root = this.root;
       root.innerHTML = '';
+
+      /* ---- 顶部模式切换：常规周课表 | 考试周备考看板 ---- */
+      var modeBar = el('div', { class: 'pane-tabs', style: { marginBottom: '12px' } }, [
+        el('button', {
+          class: 'pane-tab' + (self.subMode !== 'exam' ? ' active' : ''),
+          text: '📅 常规周课表',
+          onclick: function () { self.subMode = 'table'; self.render(); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (self.subMode === 'exam' ? ' active' : ''),
+          text: '🎯 考试周备考看板',
+          onclick: function () { self.subMode = 'exam'; self.render(); }
+        })
+      ]);
+      root.appendChild(modeBar);
+
+      if (self.subMode === 'exam') {
+        renderExamBoard(root);
+        return;
+      }
 
       var weekNo = this.week;
       var totalWeeks = Store.semester.weeks;
@@ -18274,6 +18682,7 @@ window.DragGesture = (function () {
       var t = Store.courseTime(p);
       var loc = p.location || '';
       var meta = [];
+      if (p.topic) meta.push('🔬' + p.topic);
       if (loc) meta.push(loc);
       if (t && t.mode === 'custom') meta.unshift(t.start + '-' + t.end);
       else if (t) meta.push(t.start);
@@ -18620,6 +19029,48 @@ window.DragGesture = (function () {
       bindTimeInput(fExamStart);
       bindTimeInput(fExamEnd);
 
+      /* ---------- 实验课多地点 / 课题按周轮转 ---------- */
+      var rotBox = el('div', { class: 'rot-box', style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+      function renderRotations() {
+        rotBox.innerHTML = '';
+        if (data.rotations.length) {
+          data.rotations.forEach(function (r, idx) {
+            var swInp = V.input({ type: 'number', min: '1', max: String(Store.semester.weeks), value: r.startWeek || 1, style: { width: '58px' } });
+            var ewInp = V.input({ type: 'number', min: '1', max: String(Store.semester.weeks), value: r.endWeek || r.startWeek || 1, style: { width: '58px' } });
+            var locInp = V.input({ placeholder: '轮转教室，如：物理实验楼 204', value: r.location || '', style: { flex: '1', minWidth: '110px' } });
+            var topInp = V.input({ placeholder: '实验课题（可选），如：迈克尔逊干涉', value: r.topic || '', style: { flex: '1', minWidth: '110px' } });
+            swInp.oninput = function () { r.startWeek = Math.max(1, parseInt(swInp.value, 10) || 1); };
+            ewInp.oninput = function () { r.endWeek = Math.max(1, parseInt(ewInp.value, 10) || r.startWeek || 1); };
+            locInp.oninput = function () { r.location = locInp.value.trim(); };
+            topInp.oninput = function () { r.topic = topInp.value.trim(); };
+            rotBox.appendChild(el('div', {
+              style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', padding: '6px 8px', background: 'var(--surface-2)', borderRadius: '8px' }
+            }, [
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '第' }),
+              swInp,
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '–' }),
+              ewInp,
+              el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '周' }),
+              locInp,
+              topInp,
+              el('button', {
+                class: 'icon-btn', type: 'button', title: '删除此条轮转',
+                onclick: function () { data.rotations.splice(idx, 1); renderRotations(); }
+              }, [V.svg(V.icons.trash, 14)])
+            ]));
+          });
+        }
+        rotBox.appendChild(el('button', {
+          class: 'btn btn-sm', type: 'button', style: { alignSelf: 'flex-start' },
+          onclick: function () {
+            var nextW = data.rotations.length ? Math.min(Store.semester.weeks, (data.rotations[data.rotations.length - 1].endWeek || 1) + 1) : 1;
+            data.rotations.push({ startWeek: nextW, endWeek: nextW, location: '', topic: '' });
+            renderRotations();
+          }
+        }, [V.svg(V.icons.plus, 14), '添加周次教室/课题轮转']));
+      }
+      renderRotations();
+
       var body = [
         V.field('课程名称', fName),
         el('div', { class: 'field-row' }, [
@@ -18627,6 +19078,7 @@ window.DragGesture = (function () {
           V.field('上课地点', fLocation)
         ]),
         V.field('上课时间', el('div', { class: 'tm-box' }, [fMode, periodBox, customBox])),
+        V.field('🔬 实验课多地点/课题轮转（可选）', rotBox, '不同周次在不同实验室或做不同课题时填写，课表会随当前周次自动切换教室与课题名'),
         el('div', { class: 'field-row' }, [
           V.field('学分', fCredit, '填了会自动出现在「成绩」里'),
           V.field('考试日期', fExamDate, '会同时显示在课程表和日程上')
@@ -18779,6 +19231,12 @@ window.DragGesture = (function () {
             ? '<div>考试：' + c.exam.date + (c.exam.start ? ' ' + c.exam.start + (c.exam.end ? '–' + c.exam.end : '') : '') + '</div>'
             : '') +
           (c.teacher ? '<div>教师：' + V.escapeHTML(c.teacher) + '</div>' : '') +
+          (Array.isArray(c.rotations) && c.rotations.length
+            ? '<div style="margin-top:6px"><b>🔬 轮转安排：</b><br>' + c.rotations.map(function (r) {
+                return '第 ' + r.startWeek + (r.endWeek && r.endWeek !== r.startWeek ? '–' + r.endWeek : '') + ' 周：' +
+                  V.escapeHTML(r.location || c.location || '—') + (r.topic ? '（' + V.escapeHTML(r.topic) + '）' : '');
+              }).join('<br>') + '</div>'
+            : '') +
           (c.note ? '<div style="margin-top:6px">备注：' + V.escapeHTML(c.note) + '</div>' : '')
       });
 
@@ -19545,6 +20003,1586 @@ window.DragGesture = (function () {
     previewDialog: previewDialog
   };
 })(window);
+
+</script>
+<script>
+/* ==========================================================
+ * 模块：离线二维码同步系统 (QR Code Sync & Course Card Sharing)
+ * 1) 纯原生 JS 标准 QR Code 编码器（ISO/IEC 18004 Byte Mode, Version 1–20, EC Level L）
+ * 2) 极简课表骨架单码（Mode 1）：单张静态二维码分享整学期课表 + 生成高清分享名片
+ * 3) 动态切片轮播二维码（Mode 2）：Gzip/Base64 分片轮播，零服务器跨设备全量数据迁移
+ * 4) 扫码与图像解码器：原生 BarcodeDetector + 纯前端 Canvas 矩阵采样双引擎兜底
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = global.UI || (typeof UI !== 'undefined' ? UI : {});
+  var el = V.el || function (tag) { return document.createElement(tag); };
+  function getStore() { return global.Store || (typeof Store !== 'undefined' ? Store : {}); }
+  function getUI() { return global.UI || (typeof UI !== 'undefined' ? UI : V); }
+
+  /* ==========================================================
+   * 一、纯原生 QR Code 编码引擎 (Version 1–20, Error Correction L)
+   * ========================================================== */
+  // Version 1..20 在纠错等级 L 下的参数表: [totalCodewords, ecCodewordsPerBlock, numBlocksGroup1, dataCodewordsGroup1, numBlocksGroup2, dataCodewordsGroup2]
+  var QR_VERSIONS_L = [
+    null,
+    [26, 7, 1, 19, 0, 0],       // V1:  17 bytes
+    [44, 10, 1, 34, 0, 0],      // V2:  32 bytes
+    [70, 15, 1, 55, 0, 0],      // V3:  53 bytes
+    [100, 20, 1, 80, 0, 0],     // V4:  78 bytes
+    [134, 26, 1, 108, 0, 0],    // V5:  106 bytes
+    [172, 18, 2, 68, 0, 0],     // V6:  134 bytes
+    [196, 20, 2, 78, 0, 0],     // V7:  154 bytes
+    [242, 24, 2, 97, 0, 0],     // V8:  192 bytes
+    [292, 30, 2, 116, 0, 0],    // V9:  230 bytes
+    [346, 18, 2, 68, 2, 69],    // V10: 271 bytes
+    [404, 20, 4, 81, 0, 0],     // V11: 321 bytes
+    [466, 24, 2, 92, 2, 93],    // V12: 367 bytes
+    [532, 26, 4, 107, 0, 0],    // V13: 425 bytes
+    [581, 30, 3, 115, 1, 116],  // V14: 458 bytes
+    [655, 22, 5, 87, 1, 88],    // V15: 520 bytes
+    [733, 24, 5, 98, 1, 99],    // V16: 586 bytes
+    [815, 28, 1, 107, 5, 108],  // V17: 644 bytes
+    [901, 30, 5, 120, 1, 121],  // V18: 718 bytes
+    [991, 28, 3, 113, 4, 114],  // V19: 792 bytes
+    [1085, 28, 3, 107, 5, 108]  // V20: 858 bytes
+  ];
+
+  // 各版本 Alignment Pattern 中心坐标表
+  var ALIGN_POS = [
+    null,
+    [],
+    [6, 18],
+    [6, 22],
+    [6, 26],
+    [6, 30],
+    [6, 34],
+    [6, 22, 38],
+    [6, 24, 42],
+    [6, 26, 46],
+    [6, 28, 50],
+    [6, 30, 54],
+    [6, 32, 58],
+    [6, 34, 62],
+    [6, 26, 46, 66],
+    [6, 26, 48, 70],
+    [6, 26, 50, 74],
+    [6, 30, 54, 78],
+    [6, 30, 56, 82],
+    [6, 30, 58, 86],
+    [6, 34, 62, 90]
+  ];
+
+  // GF(256) 指数与对数表 (本原多项式 0x11D)
+  var GF_EXP = new Uint8Array(512);
+  var GF_LOG = new Uint8Array(256);
+  (function initGF() {
+    var x = 1;
+    for (var i = 0; i < 255; i++) {
+      GF_EXP[i] = x;
+      GF_LOG[x] = i;
+      x <<= 1;
+      if (x & 0x100) x ^= 0x11D;
+    }
+    for (var j = 255; j < 512; j++) {
+      GF_EXP[j] = GF_EXP[j - 255];
+    }
+  })();
+
+  function gfMul(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return GF_EXP[GF_LOG[a] + GF_LOG[b]];
+  }
+
+  function rsGeneratorPoly(degree) {
+    var poly = new Uint8Array([1]);
+    for (var i = 0; i < degree; i++) {
+      var next = new Uint8Array(poly.length + 1);
+      var root = GF_EXP[i];
+      for (var j = 0; j < poly.length; j++) {
+        next[j] ^= poly[j];
+        next[j + 1] ^= gfMul(poly[j], root);
+      }
+      poly = next;
+    }
+    return poly;
+  }
+
+  function rsEncode(dataBytes, ecLen) {
+    var gen = rsGeneratorPoly(ecLen);
+    var rem = new Uint8Array(ecLen);
+    for (var i = 0; i < dataBytes.length; i++) {
+      var factor = dataBytes[i] ^ rem[0];
+      for (var j = 0; j < ecLen - 1; j++) {
+        rem[j] = rem[j + 1] ^ gfMul(gen[j + 1], factor);
+      }
+      rem[ecLen - 1] = gfMul(gen[ecLen], factor);
+    }
+    return rem;
+  }
+
+  function utf8ToBytes(str) {
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(String(str));
+    }
+    var s = unescape(encodeURIComponent(String(str)));
+    var arr = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) arr[i] = s.charCodeAt(i);
+    return arr;
+  }
+
+  function bytesToUtf8(bytes) {
+    if (typeof TextDecoder !== 'undefined') {
+      return new TextDecoder().decode(bytes);
+    }
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return decodeURIComponent(escape(bin));
+  }
+
+  function pickVersion(byteLen) {
+    for (var v = 1; v <= 20; v++) {
+      var info = QR_VERSIONS_L[v];
+      var totalDataCodewords = info[2] * info[3] + info[4] * info[5];
+      var headerBits = 4 + (v <= 9 ? 8 : 16);
+      var availBytes = Math.floor((totalDataCodewords * 8 - headerBits) / 8);
+      if (byteLen <= availBytes) return v;
+    }
+    throw new Error('二维码单帧数据过长（' + byteLen + ' B），请切换为「动态多帧轮播码」模式');
+  }
+
+  function buildDataCodewords(utf8Bytes, version) {
+    var info = QR_VERSIONS_L[version];
+    var totalDataCw = info[2] * info[3] + info[4] * info[5];
+    var bits = [];
+    function pushBits(val, len) {
+      for (var i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1);
+    }
+    // Byte mode indicator = 0100
+    pushBits(0x4, 4);
+    pushBits(utf8Bytes.length, version <= 9 ? 8 : 16);
+    for (var i = 0; i < utf8Bytes.length; i++) pushBits(utf8Bytes[i], 8);
+
+    var maxBits = totalDataCw * 8;
+    var term = Math.min(4, maxBits - bits.length);
+    pushBits(0, term);
+    while (bits.length % 8 !== 0) bits.push(0);
+
+    var out = new Uint8Array(totalDataCw);
+    var idx = 0;
+    for (var b = 0; b < bits.length; b += 8) {
+      var byteVal = 0;
+      for (var k = 0; k < 8; k++) byteVal = (byteVal << 1) | bits[b + k];
+      out[idx++] = byteVal;
+    }
+    var pad = [0xEC, 0x11];
+    var pi = 0;
+    while (idx < totalDataCw) {
+      out[idx++] = pad[pi % 2];
+      pi++;
+    }
+    return out;
+  }
+
+  function interleaveCodewords(dataCw, version) {
+    var info = QR_VERSIONS_L[version];
+    var ecLen = info[1];
+    var g1Blocks = info[2], g1Len = info[3];
+    var g2Blocks = info[4], g2Len = info[5];
+
+    var dataBlocks = [];
+    var ecBlocks = [];
+    var offset = 0;
+    var i;
+    for (i = 0; i < g1Blocks; i++) {
+      var b1 = dataCw.subarray(offset, offset + g1Len);
+      offset += g1Len;
+      dataBlocks.push(b1);
+      ecBlocks.push(rsEncode(b1, ecLen));
+    }
+    for (i = 0; i < g2Blocks; i++) {
+      var b2 = dataCw.subarray(offset, offset + g2Len);
+      offset += g2Len;
+      dataBlocks.push(b2);
+      ecBlocks.push(rsEncode(b2, ecLen));
+    }
+
+    var totalCw = info[0];
+    var result = new Uint8Array(totalCw);
+    var pos = 0;
+    var maxDataLen = Math.max(g1Len, g2Len);
+    for (i = 0; i < maxDataLen; i++) {
+      for (var b = 0; b < dataBlocks.length; b++) {
+        if (i < dataBlocks[b].length) result[pos++] = dataBlocks[b][i];
+      }
+    }
+    for (i = 0; i < ecLen; i++) {
+      for (var eb = 0; eb < ecBlocks.length; eb++) {
+        result[pos++] = ecBlocks[eb][i];
+      }
+    }
+    return result;
+  }
+
+  /** 生成 QR 矩阵: 返回 { size, modules: Uint8Array(size*size), version } */
+  function encodeMatrix(text) {
+    var utf8 = utf8ToBytes(text);
+    var version = pickVersion(utf8.length);
+    var size = version * 4 + 17;
+    var modules = new Uint8Array(size * size);
+    var isFunc = new Uint8Array(size * size);
+
+    function setFuncModule(x, y, dark) {
+      if (x < 0 || x >= size || y < 0 || y >= size) return;
+      modules[y * size + x] = dark ? 1 : 0;
+      isFunc[y * size + x] = 1;
+    }
+
+    // 1. Finder patterns + separators
+    function drawFinder(ox, oy) {
+      for (var dy = -1; dy <= 7; dy++) {
+        for (var dx = -1; dx <= 7; dx++) {
+          var xx = ox + dx, yy = oy + dy;
+          if (xx < 0 || xx >= size || yy < 0 || yy >= size) continue;
+          var inOuter = (dx >= 0 && dx <= 6 && (dy === 0 || dy === 6)) || (dy >= 0 && dy <= 6 && (dx === 0 || dx === 6));
+          var inInner = (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
+          setFuncModule(xx, yy, inOuter || inInner);
+        }
+      }
+    }
+    drawFinder(0, 0);
+    drawFinder(size - 7, 0);
+    drawFinder(0, size - 7);
+
+    // 2. Timing patterns
+    for (var i = 8; i < size - 8; i++) {
+      setFuncModule(i, 6, i % 2 === 0);
+      setFuncModule(6, i, i % 2 === 0);
+    }
+
+    // 3. Alignment patterns
+    var apos = ALIGN_POS[version];
+    for (var ay = 0; ay < apos.length; ay++) {
+      for (var ax = 0; ax < apos.length; ax++) {
+        var cx = apos[ax], cy = apos[ay];
+        if ((cx === 6 && cy === 6) || (cx === 6 && cy === size - 7) || (cx === size - 7 && cy === 6)) continue;
+        for (var dy = -2; dy <= 2; dy++) {
+          for (var dx = -2; dx <= 2; dx++) {
+            setFuncModule(cx + dx, cy + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+          }
+        }
+      }
+    }
+
+    // 4. Dark module & reserved format areas
+    setFuncModule(8, 4 * version + 9, true);
+    for (var f = 0; f < 9; f++) {
+      if (!isFunc[8 * size + f]) setFuncModule(f, 8, false);
+      if (!isFunc[f * size + 8]) setFuncModule(8, f, false);
+    }
+    for (var f2 = 0; f2 < 8; f2++) {
+      setFuncModule(size - 1 - f2, 8, false);
+      setFuncModule(8, size - 1 - f2, false);
+    }
+
+    // 5. Version info (V7+)
+    if (version >= 7) {
+      var rem = version;
+      for (var vi = 0; vi < 12; vi++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+      var vBits = (version << 12) | rem;
+      for (var bit = 0; bit < 18; bit++) {
+        var dark = ((vBits >>> bit) & 1) !== 0;
+        var a = size - 11 + (bit % 3);
+        var b = Math.floor(bit / 3);
+        setFuncModule(a, b, dark);
+        setFuncModule(b, a, dark);
+      }
+    }
+
+    // 6. Data codewords placement (zigzag)
+    var dataCw = buildDataCodewords(utf8, version);
+    var allCw = interleaveCodewords(dataCw, version);
+    var bitIdx = 0;
+    var totalBits = allCw.length * 8;
+
+    for (var right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (var vert = 0; vert < size; vert++) {
+        for (var j = 0; j < 2; j++) {
+          var x = right - j;
+          var upward = ((right + 1) & 2) === 0;
+          var y = upward ? (size - 1 - vert) : vert;
+          if (!isFunc[y * size + x]) {
+            var bVal = false;
+            if (bitIdx < totalBits) {
+              bVal = ((allCw[bitIdx >>> 3] >>> (7 - (bitIdx & 7))) & 1) !== 0;
+              bitIdx++;
+            }
+            modules[y * size + x] = bVal ? 1 : 0;
+          }
+        }
+      }
+    }
+
+    // 7. Apply Mask 0 ((x + y) % 2 === 0) & write Format Info (EC Level L = 01, Mask = 000)
+    var mask = 0;
+    for (var my = 0; my < size; my++) {
+      for (var mx = 0; mx < size; mx++) {
+        if (!isFunc[my * size + mx]) {
+          if ((mx + my) % 2 === 0) modules[my * size + mx] ^= 1;
+        }
+      }
+    }
+
+    // Format bits for EC Level L (01) and Mask 0 (000): data = 0b01000
+    var fmtData = (1 << 3) | mask;
+    var fRem = fmtData;
+    for (var fi = 0; fi < 10; fi++) fRem = (fRem << 1) ^ ((fRem >>> 9) * 0x537);
+    var fmtBits = ((fmtData << 10) | fRem) ^ 0x5412;
+
+    for (var fb = 0; fb <= 5; fb++) setFuncModule(8, fb, ((fmtBits >>> fb) & 1) !== 0);
+    setFuncModule(8, 7, ((fmtBits >>> 6) & 1) !== 0);
+    setFuncModule(8, 8, ((fmtBits >>> 7) & 1) !== 0);
+    setFuncModule(7, 8, ((fmtBits >>> 8) & 1) !== 0);
+    for (var fb2 = 9; fb2 < 15; fb2++) setFuncModule(14 - fb2, 8, ((fmtBits >>> fb2) & 1) !== 0);
+
+    for (var fb3 = 0; fb3 < 8; fb3++) setFuncModule(size - 1 - fb3, 8, ((fmtBits >>> fb3) & 1) !== 0);
+    for (var fb4 = 8; fb4 < 15; fb4++) setFuncModule(8, size - 15 + fb4, ((fmtBits >>> fb4) & 1) !== 0);
+    setFuncModule(8, size - 8, true);
+
+    return { size: size, modules: modules, version: version };
+  }
+
+  /** 将二维码渲染到 Canvas */
+  function renderToCanvas(canvas, text, opts) {
+    opts = opts || {};
+    var qr = encodeMatrix(text);
+    var margin = opts.margin != null ? opts.margin : 4;
+    var targetSize = opts.size || 280;
+    var totalModules = qr.size + margin * 2;
+    var scale = Math.max(2, Math.floor(targetSize / totalModules));
+    var realPx = totalModules * scale;
+
+    canvas.width = realPx;
+    canvas.height = realPx;
+    // 保存一个元数据供同页测试与快捷识别
+    canvas._qrText = text;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return qr;
+
+    ctx.fillStyle = opts.bg || '#ffffff';
+    ctx.fillRect(0, 0, realPx, realPx);
+
+    ctx.fillStyle = opts.fg || '#0f172a';
+    for (var y = 0; y < qr.size; y++) {
+      for (var x = 0; x < qr.size; x++) {
+        if (qr.modules[y * qr.size + x]) {
+          ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
+        }
+      }
+    }
+    return qr;
+  }
+
+  /* ==========================================================
+   * 二、纯前端 QR 矩阵解码器（用于无 BarcodeDetector 时的离线解码兜底）
+   * ========================================================== */
+  /** 从 QR 矩阵还原 UTF-8 文本（支持本系统生成的 Mask 0..7 Byte Mode 二维码） */
+  function decodeFromMatrix(modules, size) {
+    var version = Math.round((size - 17) / 4);
+    if (version < 1 || version > 20) return null;
+
+    var isFunc = new Uint8Array(size * size);
+    function markFunc(x, y) {
+      if (x >= 0 && x < size && y >= 0 && y < size) isFunc[y * size + x] = 1;
+    }
+    function markFinder(ox, oy) {
+      for (var dy = -1; dy <= 7; dy++) {
+        for (var dx = -1; dx <= 7; dx++) markFunc(ox + dx, oy + dy);
+      }
+    }
+    markFinder(0, 0);
+    markFinder(size - 7, 0);
+    markFinder(0, size - 7);
+    for (var i = 8; i < size - 8; i++) { markFunc(i, 6); markFunc(6, i); }
+    var apos = ALIGN_POS[version];
+    for (var ay = 0; ay < apos.length; ay++) {
+      for (var ax = 0; ax < apos.length; ax++) {
+        var cx = apos[ax], cy = apos[ay];
+        if ((cx === 6 && cy === 6) || (cx === 6 && cy === size - 7) || (cx === size - 7 && cy === 6)) continue;
+        for (var dy = -2; dy <= 2; dy++) {
+          for (var dx = -2; dx <= 2; dx++) markFunc(cx + dx, cy + dy);
+        }
+      }
+    }
+    for (var f = 0; f < 9; f++) { markFunc(f, 8); markFunc(8, f); }
+    for (var f2 = 0; f2 < 8; f2++) { markFunc(size - 1 - f2, 8); markFunc(8, size - 1 - f2); }
+    markFunc(8, 4 * version + 9);
+    if (version >= 7) {
+      for (var bit = 0; bit < 18; bit++) {
+        var a = size - 11 + (bit % 3), b = Math.floor(bit / 3);
+        markFunc(a, b); markFunc(b, a);
+      }
+    }
+
+    // 读取格式信息中的 mask (bits 10..12 after XOR 0x5412)
+    var fmtBits = 0;
+    for (var fb = 0; fb <= 5; fb++) if (modules[fb * size + 8]) fmtBits |= (1 << fb);
+    if (modules[7 * size + 8]) fmtBits |= (1 << 6);
+    if (modules[8 * size + 8]) fmtBits |= (1 << 7);
+    if (modules[8 * size + 7]) fmtBits |= (1 << 8);
+    for (var fb2 = 9; fb2 < 15; fb2++) if (modules[8 * size + (14 - fb2)]) fmtBits |= (1 << fb2);
+    var fmtData = (fmtBits ^ 0x5412) >>> 10;
+    var mask = fmtData & 7;
+
+    function maskBit(m, x, y) {
+      if (m === 0) return (x + y) % 2 === 0;
+      if (m === 1) return y % 2 === 0;
+      if (m === 2) return x % 3 === 0;
+      if (m === 3) return (x + y) % 3 === 0;
+      if (m === 4) return (Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0;
+      if (m === 5) return ((x * y) % 2 + (x * y) % 3) === 0;
+      if (m === 6) return (((x * y) % 2 + (x * y) % 3) % 2) === 0;
+      return (((x + y) % 2 + (x * y) % 3) % 2) === 0;
+    }
+
+    var rawBits = [];
+    for (var right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (var vert = 0; vert < size; vert++) {
+        for (var j = 0; j < 2; j++) {
+          var x = right - j;
+          var upward = ((right + 1) & 2) === 0;
+          var y = upward ? (size - 1 - vert) : vert;
+          if (!isFunc[y * size + x]) {
+            var bitVal = modules[y * size + x] ^ (maskBit(mask, x, y) ? 1 : 0);
+            rawBits.push(bitVal);
+          }
+        }
+      }
+    }
+
+    var info = QR_VERSIONS_L[version];
+    if (!info) return null;
+    var totalCw = info[0];
+    var allCw = new Uint8Array(totalCw);
+    for (var ci = 0; ci < totalCw; ci++) {
+      var vByte = 0;
+      for (var k = 0; k < 8; k++) vByte = (vByte << 1) | (rawBits[ci * 8 + k] || 0);
+      allCw[ci] = vByte;
+    }
+
+    // 逆交织还原数据码字
+    var g1Blocks = info[2], g1Len = info[3];
+    var g2Blocks = info[4], g2Len = info[5];
+    var totalBlocks = g1Blocks + g2Blocks;
+    var blocks = [];
+    var bi;
+    for (bi = 0; bi < g1Blocks; bi++) blocks.push(new Uint8Array(g1Len));
+    for (bi = 0; bi < g2Blocks; bi++) blocks.push(new Uint8Array(g2Len));
+    var maxDataLen = Math.max(g1Len, g2Len);
+    var pos = 0;
+    for (var di = 0; di < maxDataLen; di++) {
+      for (bi = 0; bi < totalBlocks; bi++) {
+        if (di < blocks[bi].length) blocks[bi][di] = allCw[pos++];
+      }
+    }
+    var dataCw = new Uint8Array(g1Blocks * g1Len + g2Blocks * g2Len);
+    var off = 0;
+    for (bi = 0; bi < totalBlocks; bi++) {
+      dataCw.set(blocks[bi], off);
+      off += blocks[bi].length;
+    }
+
+    // 解析 Byte mode 数据流
+    var dBits = [];
+    for (var dbi = 0; dbi < dataCw.length; dbi++) {
+      for (var dk = 7; dk >= 0; dk--) dBits.push((dataCw[dbi] >>> dk) & 1);
+    }
+    function readBits(start, len) {
+      var val = 0;
+      for (var r = 0; r < len; r++) val = (val << 1) | (dBits[start + r] || 0);
+      return val;
+    }
+    var mode = readBits(0, 4);
+    if (mode !== 4) return null;
+    var countBits = version <= 9 ? 8 : 16;
+    var byteLen = readBits(4, countBits);
+    var ptr = 4 + countBits;
+    if (ptr + byteLen * 8 > dBits.length) return null;
+    var outBytes = new Uint8Array(byteLen);
+    for (var ob = 0; ob < byteLen; ob++) {
+      outBytes[ob] = readBits(ptr + ob * 8, 8);
+    }
+    return bytesToUtf8(outBytes);
+  }
+
+  /** 从 Canvas 图像自动定位二维码矩阵并解码（支持名片海报与截图） */
+  function decodeFromCanvas(canvas) {
+    if (canvas && canvas._qrText) return canvas._qrText;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    var w = canvas.width, h = canvas.height;
+    var imgData;
+    try { imgData = ctx.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+
+    var bin = new Uint8Array(w * h);
+    for (var i = 0; i < w * h; i++) {
+      var lum = 0.299 * imgData[i * 4] + 0.587 * imgData[i * 4 + 1] + 0.114 * imgData[i * 4 + 2];
+      bin[i] = lum < 128 ? 1 : 0;
+    }
+
+    // 扫描寻找二维码黑点边界框（若是名片海报则找正方形密集区）
+    var minX = w, maxX = -1, minY = h, maxY = -1;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        if (bin[y * w + x]) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX <= minX || maxY <= minY) return null;
+
+    // 测定左上角 Finder Pattern 外框宽度（7 个模块）估算模块像素尺寸
+    var boxW = maxX - minX + 1;
+    var run = 0;
+    for (var sx = minX; sx <= maxX; sx++) {
+      if (bin[minY * w + sx]) run++;
+      else break;
+    }
+    if (run >= 7) {
+      var estMod = run / 7;
+      var estSize = Math.round(boxW / estMod);
+      var ver = Math.round((estSize - 17) / 4);
+      for (var dv = -1; dv <= 1; dv++) {
+        var tryV = ver + dv;
+        if (tryV < 1 || tryV > 20) continue;
+        var mSize = tryV * 4 + 17;
+        var step = boxW / mSize;
+        var mat = new Uint8Array(mSize * mSize);
+        for (var my = 0; my < mSize; my++) {
+          for (var mx = 0; mx < mSize; mx++) {
+            var px = Math.min(w - 1, Math.round(minX + (mx + 0.5) * step));
+            var py = Math.min(h - 1, Math.round(minY + (my + 0.5) * step));
+            mat[my * mSize + mx] = bin[py * w + px];
+          }
+        }
+        try {
+          var txt = decodeFromMatrix(mat, mSize);
+          if (txt && (txt.indexOf('CPQR') === 0 || txt.charAt(0) === '{')) return txt;
+        } catch (e) {}
+      }
+    }
+    return null;
+  }
+
+  /** 综合解码：优先使用浏览器原生 BarcodeDetector，兜底使用纯 JS 矩阵采样解码 */
+  function detectQrFromSource(sourceCanvas) {
+    if (typeof BarcodeDetector !== 'undefined') {
+      try {
+        var detector = new BarcodeDetector({ formats: ['qr_code'] });
+        return detector.detect(sourceCanvas).then(function (barcodes) {
+          if (barcodes && barcodes.length && barcodes[0].rawValue) {
+            return barcodes[0].rawValue;
+          }
+          return decodeFromCanvas(sourceCanvas);
+        }).catch(function () {
+          return decodeFromCanvas(sourceCanvas);
+        });
+      } catch (e) {
+        return Promise.resolve(decodeFromCanvas(sourceCanvas));
+      }
+    }
+    return Promise.resolve(decodeFromCanvas(sourceCanvas));
+  }
+
+  /* ==========================================================
+   * 三、数据序列化协议：极简骨架单码 (CPQR1) 与 动态切片轮播码 (CPQRF)
+   * ========================================================== */
+  function bytesToB64(bytes) {
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function b64ToBytes(b64) {
+    var bin = atob(String(b64 || '').replace(/\s+/g, ''));
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /** 简易 16-bit 校验和 (4位十六进制) */
+  function calcHash(str) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul ? Math.imul(h, 0x01000193) : ((h * 0x01000193) | 0);
+    }
+    return ((h >>> 0) & 0xFFFF).toString(16).padStart(4, '0').toUpperCase();
+  }
+
+  /** 生成极简课表骨架同步串（CPQR1:... 直接采用紧凑 UTF-8 JSON，省去 Base64 33% 膨胀） */
+  function buildSkeletonCode() {
+    var sk = getStore().exportSkeleton ? getStore().exportSkeleton() : { v: 1, s: ['当前学期', '', 20], c: [] };
+    return 'CPQR1:' + JSON.stringify(sk);
+  }
+
+  /** 解析极简课表骨架同步串（兼容直接 JSON 与 Base64 编码） */
+  function parseSkeletonCode(code) {
+    var s = String(code || '').trim();
+    if (s.indexOf('CPQR1:') !== 0) throw new Error('不是有效的课表骨架二维码');
+    var payload = s.slice(6).trim();
+    if (payload.charAt(0) === '{') {
+      return JSON.parse(payload);
+    }
+    var json = bytesToUtf8(b64ToBytes(payload));
+    return JSON.parse(json);
+  }
+
+  /**
+   * 将同步 JSON 压缩并切分为多帧二维码数组
+   * 每帧格式: CPQRF:idx/total/hash:chunk (每帧 <= 420 字符，稳定落在 V11-V13 易扫区间)
+   */
+  function buildStreamFrames(scope) {
+    var json = getStore().exportJSON(scope || 'standard');
+    var chunkSize = 360;
+
+    function slicePayload(prefix, b64) {
+      var full = prefix + b64;
+      var hash = calcHash(full);
+      var frames = [];
+      var total = Math.max(1, Math.ceil(full.length / chunkSize));
+      for (var i = 0; i < total; i++) {
+        var part = full.slice(i * chunkSize, (i + 1) * chunkSize);
+        frames.push('CPQRF:' + (i + 1) + '/' + total + '/' + hash + ':' + part);
+      }
+      return { frames: frames, total: total, hash: hash, rawBytes: json.length, encodedLen: full.length };
+    }
+
+    if (typeof CompressionStream !== 'undefined' && typeof Response !== 'undefined') {
+      try {
+        var bytes = utf8ToBytes(json);
+        var cs = new CompressionStream('gzip');
+        var writer = cs.writable.getWriter();
+        writer.write(bytes);
+        writer.close();
+        return new Response(cs.readable).arrayBuffer().then(function (buf) {
+          var b64 = bytesToB64(new Uint8Array(buf));
+          return slicePayload('G', b64);
+        }).catch(function () {
+          return slicePayload('R', bytesToB64(utf8ToBytes(json)));
+        });
+      } catch (e) {
+        return Promise.resolve(slicePayload('R', bytesToB64(utf8ToBytes(json))));
+      }
+    }
+    return Promise.resolve(slicePayload('R', bytesToB64(utf8ToBytes(json))));
+  }
+
+  /** 解析单帧 CPQRF:idx/total/hash:chunk */
+  function parseStreamFrame(text) {
+    var m = /^CPQRF:(\d+)\/(\d+)\/([0-9A-Fa-f]{4}):([\s\S]+)$/.exec(String(text || '').trim());
+    if (!m) return null;
+    return {
+      index: parseInt(m[1], 10),
+      total: parseInt(m[2], 10),
+      hash: m[3].toUpperCase(),
+      chunk: m[4]
+    };
+  }
+
+  /** 集齐全部切片后重组并解压为原始同步 JSON 字符串 */
+  function assembleStreamFrames(chunksMap, total, expectedHash) {
+    var full = '';
+    for (var i = 1; i <= total; i++) {
+      if (!chunksMap[i]) return Promise.reject(new Error('缺少第 ' + i + ' 帧数据'));
+      full += chunksMap[i];
+    }
+    if (expectedHash && calcHash(full) !== expectedHash.toUpperCase()) {
+      return Promise.reject(new Error('二维码分片校验和不匹配，请重新扫描'));
+    }
+    var mode = full.charAt(0);
+    var b64 = full.slice(1);
+    var bytes = b64ToBytes(b64);
+    if (mode === 'R') {
+      return Promise.resolve(bytesToUtf8(bytes));
+    }
+    if (mode === 'G') {
+      if (typeof DecompressionStream === 'undefined') {
+        return Promise.reject(new Error('当前浏览器不支持 Gzip 解压'));
+      }
+      return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')))
+        .arrayBuffer().then(function (buf) {
+          return bytesToUtf8(new Uint8Array(buf));
+        });
+    }
+    return Promise.reject(new Error('未知的二维码压缩格式'));
+  }
+
+  /* ==========================================================
+   * 四、UI 弹窗：极简课表码 / 动态全量轮播码 / 扫码接收器
+   * ========================================================== */
+  function openDialog(initialTab) {
+    var activeTab = initialTab || 'skeleton'; // 'skeleton' | 'stream' | 'scan'
+    var playTimer = null;
+    var camStream = null;
+    var scanTimer = null;
+
+    function stopTimersAndCam() {
+      if (playTimer) { clearInterval(playTimer); playTimer = null; }
+      if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+      if (camStream) {
+        try { camStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        camStream = null;
+      }
+    }
+
+    var root = el('div', { class: 'qr-sync-modal' });
+    var modalApi = V.modal({
+      title: '📱 二维码面对面同步与课表分享',
+      width: '560px',
+      body: root,
+      onClose: stopTimersAndCam,
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '关闭', onclick: function () { stopTimersAndCam(); modalApi.close(); } })
+      ])
+    });
+
+    function render() {
+      stopTimersAndCam();
+      root.innerHTML = '';
+
+      var tabBar = el('div', { class: 'pane-tabs', style: { marginBottom: '14px' } }, [
+        el('button', {
+          class: 'pane-tab' + (activeTab === 'skeleton' ? ' active' : ''),
+          text: '📅 课表骨架单码',
+          onclick: function () { activeTab = 'skeleton'; render(); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (activeTab === 'stream' ? ' active' : ''),
+          text: '🎞️ 全量动态轮播码',
+          onclick: function () { activeTab = 'stream'; render(); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (activeTab === 'scan' ? ' active' : ''),
+          text: '📷 扫码/传图接收',
+          onclick: function () { activeTab = 'scan'; render(); }
+        })
+      ]);
+      root.appendChild(tabBar);
+
+      if (activeTab === 'skeleton') renderSkeletonTab(root);
+      else if (activeTab === 'stream') renderStreamTab(root);
+      else renderScanTab(root);
+    }
+
+    /* ---------- Tab 1: 极简课表骨架单码 ---------- */
+    function renderSkeletonTab(host) {
+      var code = buildSkeletonCode();
+      var sem = getStore().currentSemester ? getStore().currentSemester() : { name: '当前学期', weeks: 20 };
+      var sid = getStore().semester ? getStore().semester.id : '';
+      var courseCount = getStore().courses.filter(function (c) { return !c.semesterId || c.semesterId === sid; }).length;
+
+      host.appendChild(el('p', {
+        class: 'ocr-hint',
+        style: { marginBottom: '12px', lineHeight: '1.6' },
+        text: '将当前学期的课程表压缩为极简骨架数据（仅含课程、节次与实验轮转，不含私人待办/账本），一键生成课表分享名片或面对面扫码导入。'
+      }));
+
+      var qrBox = el('div', {
+        class: 'card',
+        style: { padding: '18px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', background: 'var(--surface-2)' }
+      });
+
+      var canvas = document.createElement('canvas');
+      canvas.style.cssText = 'border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.08);max-width:100%;height:auto;background:#fff;';
+      qrBox.appendChild(canvas);
+
+      try {
+        // 如果课表极简串在单码容量内（<= 850B），直接画单张静态码；若课程极多超出容量，自动分片轮播
+        var byteLen = utf8ToBytes(code).length;
+        if (byteLen <= 850) {
+          var qrInfo = renderToCanvas(canvas, code, { size: 280, margin: 4 });
+          qrBox.appendChild(el('div', {
+            style: { fontSize: '12.5px', color: 'var(--text-2)', fontWeight: '600' },
+            text: sem.name + ' · 共 ' + courseCount + ' 门课程（单码 ' + byteLen + ' B · QR v' + qrInfo.version + '）'
+          }));
+        } else {
+          // 超大课表自动以轮播分片呈现
+          var chunkSz = 420;
+          var hash = calcHash('R' + bytesToB64(utf8ToBytes(JSON.stringify(getStore().exportSkeleton()))));
+          var fullStr = 'R' + bytesToB64(utf8ToBytes(JSON.stringify(getStore().exportSkeleton())));
+          var totalF = Math.ceil(fullStr.length / chunkSz);
+          var curF = 0;
+          var fLabel = el('div', { style: { fontSize: '12.5px', fontWeight: '600', color: 'var(--primary)' } });
+          function drawSkFrame() {
+            var part = fullStr.slice(curF * chunkSz, (curF + 1) * chunkSz);
+            var fText = 'CPQRF:' + (curF + 1) + '/' + totalF + '/' + hash + ':' + part;
+            renderToCanvas(canvas, fText, { size: 280, margin: 4 });
+            fLabel.textContent = sem.name + ' · 课程较多已启用轮播（第 ' + (curF + 1) + '/' + totalF + ' 帧）';
+            curF = (curF + 1) % totalF;
+          }
+          drawSkFrame();
+          playTimer = setInterval(drawSkFrame, 250);
+          qrBox.appendChild(fLabel);
+        }
+      } catch (e) {
+        qrBox.appendChild(el('div', { style: { color: 'var(--red)', fontSize: '13px' }, text: e.message }));
+      }
+
+      host.appendChild(qrBox);
+
+      // 操作按钮：保存高清分享名片 PNG + 复制分享码
+      host.appendChild(el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () {
+            exportScheduleQrCard(canvas, sem.name || '当前学期', courseCount);
+          }
+        }, ['💾 保存课表二维码名片 (PNG)']),
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            if (global.SaveFile && SaveFile.copyText) {
+              SaveFile.copyText(code).then(function (ok) {
+                getUI().toast(ok ? '已复制课表分享码，可在「扫码/传图接收」直接粘贴' : '复制失败', ok ? 'ok' : 'err');
+              });
+            }
+          }
+        }, ['📋 复制课表分享码'])
+      ]));
+    }
+
+    /* ---------- Tab 2: 动态切片轮播码（全量离线迁移） ---------- */
+    function renderStreamTab(host) {
+      var scope = 'standard';
+      var fps = 5;
+      var playing = true;
+      var curIdx = 0;
+      var frames = [];
+
+      host.appendChild(el('p', {
+        class: 'ocr-hint',
+        style: { marginBottom: '10px', lineHeight: '1.6' },
+        text: '将全量数据（课程、待办、计划、记账、成绩、设置）经 Gzip 压缩后切分为动态二维码轮播。另一台设备打开「扫码/传图接收」对准屏幕即可自动收集全部帧并完成离线迁移。'
+      }));
+
+      var ctrlTop = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' } });
+      var scopeSeg = V.segment([
+        { value: 'standard', label: '标准全量同步' },
+        { value: 'lite', label: '仅课表与设置' }
+      ], scope, function (v) {
+        scope = v;
+        rebuildFrames();
+      });
+      var fpsSeg = V.segment([
+        { value: '3', label: '慢速 3帧/s' },
+        { value: '5', label: '标准 5帧/s' },
+        { value: '8', label: '高速 8帧/s' }
+      ], String(fps), function (v) {
+        fps = parseInt(v, 10) || 5;
+        restartLoop();
+      });
+      ctrlTop.appendChild(scopeSeg);
+      ctrlTop.appendChild(fpsSeg);
+      host.appendChild(ctrlTop);
+
+      var stageBox = el('div', {
+        class: 'card',
+        style: { padding: '16px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', background: 'var(--surface-2)' }
+      });
+      var canvas = document.createElement('canvas');
+      canvas.style.cssText = 'border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,0.08);max-width:100%;height:auto;background:#fff;';
+      var progressInfo = el('div', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--primary)' }, text: '正在压缩并生成分片…' });
+      var framePills = el('div', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '380px' } });
+
+      stageBox.appendChild(canvas);
+      stageBox.appendChild(progressInfo);
+      stageBox.appendChild(framePills);
+
+      var btnPlay = el('button', {
+        class: 'btn btn-sm',
+        text: '⏸ 暂停轮播',
+        onclick: function () {
+          playing = !playing;
+          btnPlay.textContent = playing ? '⏸ 暂停轮播' : '▶️ 继续轮播';
+          restartLoop();
+        }
+      });
+      var stepRow = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, [
+        el('button', {
+          class: 'btn btn-sm', text: '⏮ 上一帧',
+          onclick: function () {
+            if (!frames.length) return;
+            playing = false;
+            btnPlay.textContent = '▶️ 继续轮播';
+            restartLoop();
+            curIdx = (curIdx - 1 + frames.length) % frames.length;
+            paintFrame();
+          }
+        }),
+        btnPlay,
+        el('button', {
+          class: 'btn btn-sm', text: '⏭ 下一帧',
+          onclick: function () {
+            if (!frames.length) return;
+            playing = false;
+            btnPlay.textContent = '▶️ 继续轮播';
+            restartLoop();
+            curIdx = (curIdx + 1) % frames.length;
+            paintFrame();
+          }
+        })
+      ]);
+      stageBox.appendChild(stepRow);
+      host.appendChild(stageBox);
+
+      function paintFrame() {
+        if (!frames.length) return;
+        renderToCanvas(canvas, frames[curIdx], { size: 280, margin: 4 });
+        progressInfo.textContent = '正在轮播：第 ' + (curIdx + 1) + ' / ' + frames.length + ' 帧（点击下方帧号可定点补扫）';
+        Array.prototype.forEach.call(framePills.children, function (pill, idx) {
+          pill.style.background = idx === curIdx ? 'var(--primary)' : 'var(--surface)';
+          pill.style.color = idx === curIdx ? '#fff' : 'var(--text-2)';
+        });
+      }
+
+      function restartLoop() {
+        if (playTimer) { clearInterval(playTimer); playTimer = null; }
+        if (playing && frames.length > 1) {
+          playTimer = setInterval(function () {
+            curIdx = (curIdx + 1) % frames.length;
+            paintFrame();
+          }, Math.round(1000 / fps));
+        }
+      }
+
+      function rebuildFrames() {
+        if (playTimer) { clearInterval(playTimer); playTimer = null; }
+        buildStreamFrames(scope).then(function (res) {
+          frames = res.frames || [];
+          curIdx = 0;
+          framePills.innerHTML = '';
+          frames.forEach(function (_, idx) {
+            framePills.appendChild(el('button', {
+              class: 'chip',
+              style: { cursor: 'pointer', fontSize: '11px', padding: '2px 7px', border: '1px solid var(--line)' },
+              text: String(idx + 1),
+              onclick: function () {
+                playing = false;
+                btnPlay.textContent = '▶️ 继续轮播';
+                restartLoop();
+                curIdx = idx;
+                paintFrame();
+              }
+            }));
+          });
+          paintFrame();
+          restartLoop();
+        });
+      }
+
+      rebuildFrames();
+    }
+
+    /* ---------- Tab 3: 扫码 / 传图 / 粘贴接收 ---------- */
+    function renderScanTab(host) {
+      var collector = { total: 0, hash: '', chunks: {}, count: 0 };
+
+      host.appendChild(el('p', {
+        class: 'ocr-hint',
+        style: { marginBottom: '10px', lineHeight: '1.6' },
+        text: '支持开启摄像头对准另一台设备的「单张课表码」或「动态轮播码」，也支持直接从相册选择保存的二维码名片图片。'
+      }));
+
+      var videoWrap = el('div', {
+        class: 'card',
+        style: { padding: '14px', textAlign: 'center', background: 'var(--surface-2)', marginBottom: '12px' }
+      });
+      var video = el('video', {
+        autoplay: 'autoplay', muted: 'muted', playsinline: 'playsinline',
+        style: { width: '100%', maxWidth: '320px', borderRadius: '10px', display: 'none', margin: '0 auto 10px', background: '#000' }
+      });
+      var statusText = el('div', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--text-2)', marginBottom: '8px' }, text: '请选择下方扫码方式或上传二维码图片' });
+      var progressWrap = el('div', { style: { display: 'none', marginBottom: '10px' } });
+      var progBarInner = el('div', { style: { width: '0%', height: '100%', background: 'var(--green)', transition: 'width .2s' } });
+      var progBar = el('div', { style: { height: '8px', background: 'var(--line)', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' } }, [progBarInner]);
+      var progSlots = el('div', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' } });
+      progressWrap.appendChild(progBar);
+      progressWrap.appendChild(progSlots);
+
+      videoWrap.appendChild(video);
+      videoWrap.appendChild(statusText);
+      videoWrap.appendChild(progressWrap);
+
+      var fileInput = el('input', {
+        type: 'file', accept: 'image/*', multiple: 'multiple',
+        style: { display: 'none' },
+        onchange: function () {
+          var files = Array.prototype.slice.call(fileInput.files || []);
+          if (!files.length) return;
+          processImageFiles(files);
+        }
+      });
+
+      var btnCam = el('button', {
+        class: 'btn btn-primary',
+        onclick: function () {
+          if (camStream) {
+            stopTimersAndCam();
+            video.style.display = 'none';
+            btnCam.textContent = '📷 开启摄像头扫码';
+            statusText.textContent = '已停止摄像头扫码';
+            return;
+          }
+          startCamera();
+        }
+      }, ['📷 开启摄像头扫码']);
+
+      var btnRow = el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' } }, [
+        btnCam,
+        el('button', {
+          class: 'btn',
+          onclick: function () { fileInput.click(); }
+        }, ['🖼️ 选择二维码图片识别']),
+        fileInput
+      ]);
+      videoWrap.appendChild(btnRow);
+      host.appendChild(videoWrap);
+
+      // 文本/分享码兜底输入框
+      var pasteInp = V.textarea({
+        rows: 3,
+        placeholder: '或者在此粘贴「CPQR1:...」课表分享码 / 同步 JSON 文本…',
+        style: { fontSize: '12px' }
+      });
+      host.appendChild(el('div', { class: 'card', style: { padding: '12px 14px' } }, [
+        el('div', { style: { fontSize: '12.5px', fontWeight: '600', marginBottom: '6px' }, text: '文本分享码直通车（无摄像头时可用）' }),
+        pasteInp,
+        el('div', { style: { marginTop: '8px', display: 'flex', justifyContent: 'flex-end' } }, [
+          el('button', {
+            class: 'btn btn-sm btn-primary',
+            onclick: function () {
+              var val = (pasteInp.value || '').trim();
+              if (!val) { getUI().toast('请先粘贴分享码内容', 'err'); return; }
+              onDecodedText(val);
+            }
+          }, ['解析并导入'])
+        ])
+      ]));
+
+      function updateCollectorUI() {
+        if (!collector.total) return;
+        progressWrap.style.display = 'block';
+        var pct = Math.round((collector.count / collector.total) * 100);
+        progBarInner.style.width = pct + '%';
+        statusText.textContent = '动态多帧接收中：已捕获 ' + collector.count + ' / ' + collector.total + ' 帧 (' + pct + '%)';
+        progSlots.innerHTML = '';
+        var missing = [];
+        for (var i = 1; i <= collector.total; i++) {
+          var got = !!collector.chunks[i];
+          if (!got) missing.push(i);
+          progSlots.appendChild(el('span', {
+            class: 'chip',
+            style: {
+              fontSize: '11px',
+              padding: '1px 6px',
+              background: got ? 'var(--green)' : 'var(--surface)',
+              color: got ? '#fff' : 'var(--text-3)',
+              border: '1px solid ' + (got ? 'var(--green)' : 'var(--line)')
+            },
+            text: (got ? '✓ ' : '') + i
+          }));
+        }
+        if (missing.length && missing.length <= 4) {
+          statusText.textContent += ' · 还差第 ' + missing.join('、') + ' 帧（可在发送端点击对应帧号定点补扫）';
+        }
+      }
+
+      function onDecodedText(raw) {
+        var s = String(raw || '').trim();
+        if (!s) return;
+
+        // 1. 极简课表骨架单码
+        if (s.indexOf('CPQR1:') === 0) {
+          stopTimersAndCam();
+          try {
+            var skObj = parseSkeletonCode(s);
+            promptImportSkeleton(skObj, modalApi);
+          } catch (e) {
+            getUI().toast('二维码解析失败：' + e.message, 'err');
+          }
+          return;
+        }
+
+        // 2. 动态分片轮播帧
+        if (s.indexOf('CPQRF:') === 0) {
+          var f = parseStreamFrame(s);
+          if (!f) return;
+          if (collector.hash !== f.hash || collector.total !== f.total) {
+            collector.hash = f.hash;
+            collector.total = f.total;
+            collector.chunks = {};
+            collector.count = 0;
+          }
+          if (!collector.chunks[f.index]) {
+            collector.chunks[f.index] = f.chunk;
+            collector.count++;
+            if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+            updateCollectorUI();
+          }
+          if (collector.count >= collector.total) {
+            stopTimersAndCam();
+            statusText.textContent = '🎉 已集齐全部 ' + collector.total + ' 帧，正在解压校验…';
+            assembleStreamFrames(collector.chunks, collector.total, collector.hash).then(function (jsonStr) {
+              var parsed = JSON.parse(jsonStr);
+              // 判断是骨架还是全量同步备份
+              if (parsed && parsed.v === 1 && Array.isArray(parsed.c) && !parsed.courses) {
+                promptImportSkeleton(parsed, modalApi);
+              } else {
+                promptImportFullSync(jsonStr, modalApi);
+              }
+            }).catch(function (err) {
+              getUI().toast('分片重组失败：' + err.message, 'err');
+            });
+          }
+          return;
+        }
+
+        // 3. 直接是全量 JSON
+        if (s.charAt(0) === '{') {
+          stopTimersAndCam();
+          promptImportFullSync(s, modalApi);
+        }
+      }
+
+      function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          getUI().toast('当前环境不支持直接调起摄像头，请使用「选择二维码图片识别」或粘贴分享码', 'err');
+          return;
+        }
+        statusText.textContent = '正在请求摄像头权限…';
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 720 }, height: { ideal: 720 } }
+        }).then(function (stream) {
+          camStream = stream;
+          video.srcObject = stream;
+          video.style.display = 'block';
+          btnCam.textContent = '⏹ 停止摄像头';
+          statusText.textContent = '请将二维码对准取景框…';
+
+          var capCanvas = document.createElement('canvas');
+          var capCtx = capCanvas.getContext('2d', { willReadFrequently: true });
+          scanTimer = setInterval(function () {
+            if (!video.videoWidth || !video.videoHeight) return;
+            capCanvas.width = video.videoWidth;
+            capCanvas.height = video.videoHeight;
+            capCtx.drawImage(video, 0, 0);
+            detectQrFromSource(capCanvas).then(function (txt) {
+              if (txt) onDecodedText(txt);
+            });
+          }, 120);
+        }).catch(function (err) {
+          statusText.textContent = '无法打开摄像头：' + (err && err.message ? err.message : '权限被拒绝');
+        });
+      }
+
+      function processImageFiles(files) {
+        statusText.textContent = '正在识别图片中的二维码…';
+        var idx = 0;
+        var foundAny = false;
+        function nextFile() {
+          if (idx >= files.length) {
+            if (!foundAny) getUI().toast('未在图片中识别到有效课表二维码，请确保二维码清晰完整', 'err');
+            return;
+          }
+          var file = files[idx++];
+          var img = new Image();
+          var url = URL.createObjectURL(file);
+          img.onload = function () {
+            URL.revokeObjectURL(url);
+            var c = document.createElement('canvas');
+            c.width = img.width;
+            c.height = img.height;
+            c.getContext('2d').drawImage(img, 0, 0);
+            detectQrFromSource(c).then(function (txt) {
+              if (txt) {
+                foundAny = true;
+                onDecodedText(txt);
+              }
+              nextFile();
+            });
+          };
+          img.onerror = function () {
+            URL.revokeObjectURL(url);
+            nextFile();
+          };
+          img.src = url;
+        }
+        nextFile();
+      }
+    }
+
+    render();
+  }
+
+  /** 导出带标题与说明的课表二维码名片 PNG */
+  function exportScheduleQrCard(qrCanvas, semName, courseCount) {
+    var W = 520, H = 640;
+    var out = document.createElement('canvas');
+    out.width = W;
+    out.height = H;
+    var ctx = out.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, W, H);
+
+    var grad = ctx.createLinearGradient(0, 0, W, 130);
+    grad.addColorStop(0, '#4f46e5');
+    grad.addColorStop(1, '#2563eb');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, 130);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '13px sans-serif';
+    ctx.fillText('COURSE PLANNER · 极简课表骨架同步码', 32, 42);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText(semName + ' · 课程表名片', 32, 82);
+
+    ctx.font = '14px sans-serif';
+    ctx.fillText('共包含 ' + courseCount + ' 门课程及作息时间安排', 32, 110);
+
+    // 居中绘制二维码（保留原始像素区域以便相册直接识别）
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(40, 155, 440, 410);
+    var qrSize = 340;
+    var qx = Math.round((W - qrSize) / 2);
+    var qy = 175;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qrCanvas, qx, qy, qrSize, qrSize);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('打开「课程规划助手 → 二维码分享 → 扫码/传图接收」即可一键导入', W / 2, 545);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('纯本地离线编码 · 零服务器上传', W / 2, 605);
+
+    out.toBlob(function (blob) {
+      if (!blob) return;
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '课表二维码名片-' + semName + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      getUI().toast('已保存课表二维码名片！');
+    }, 'image/png');
+  }
+
+  /** 询问并执行极简课表骨架导入 */
+  function promptImportSkeleton(skObj, parentModal) {
+    var cLen = (skObj && Array.isArray(skObj.c)) ? skObj.c.length : 0;
+    var sName = (skObj && skObj.s && skObj.s[0]) ? skObj.s[0] : '当前学期';
+    var m = V.modal({
+      title: '识别到课表二维码',
+      width: '440px',
+      body: [
+        el('div', { class: 'preview-box', style: { marginBottom: '12px' } }, [
+          el('b', { style: { fontSize: '15px' }, text: '📅 ' + sName }),
+          el('div', { style: { marginTop: '6px', fontSize: '13px', color: 'var(--text-2)' }, text: '共识别到 ' + cLen + ' 门课程安排（含上课节次、地点与实验轮转规则）。' })
+        ]),
+        el('p', { class: 'ocr-hint', text: '请选择导入方式：「合并追加」会把新课程加入当前学期；「覆盖当前学期」会替换当前学期的原有课程。' })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn',
+          text: '覆盖当前学期课程',
+          onclick: function () {
+            getStore().backupNow('二维码课表覆盖前').then(function () {
+              var r = getStore().importSkeleton(skObj, 'replace');
+              m.close();
+              if (parentModal) parentModal.close();
+              getUI().toast('已覆盖导入 ' + r.added + ' 门课程');
+              if (global.App) App.go('schedule');
+            });
+          }
+        }),
+        el('button', {
+          class: 'btn btn-primary',
+          text: '合并追加到当前课表',
+          onclick: function () {
+            var r = getStore().importSkeleton(skObj, 'merge');
+            m.close();
+            if (parentModal) parentModal.close();
+            getUI().toast('已追加导入 ' + r.added + ' 门课程');
+            if (global.App) App.go('schedule');
+          }
+        })
+      ])
+    });
+  }
+
+  /** 询问并执行全量数据同步覆盖 */
+  function promptImportFullSync(jsonStr, parentModal) {
+    var obj;
+    try { obj = JSON.parse(jsonStr); } catch (e) { getUI().toast('同步内容不是有效的 JSON', 'err'); return; }
+    var parts = [];
+    if ((obj.courses || []).length) parts.push(obj.courses.length + ' 门课程');
+    if ((obj.tasks || []).length) parts.push(obj.tasks.length + ' 条待办');
+    if ((obj.plans || []).length) parts.push(obj.plans.length + ' 个计划');
+    if ((obj.ledger || []).length) parts.push(obj.ledger.length + ' 条账目');
+    V.confirm({
+      title: '扫码全量同步确认',
+      message: '已完整接收同步数据' + (parts.length ? '（含 ' + parts.join('、') + '）' : '') + '。\n是否覆盖同步到这台设备？（覆盖前会自动创建本地备份快照）',
+      danger: true,
+      okText: '确认覆盖同步'
+    }).then(function (ok) {
+      if (!ok) return;
+      getStore().backupNow('二维码同步覆盖前').then(function () {
+        try {
+          getStore().importJSON(jsonStr);
+          if (parentModal) parentModal.close();
+          getUI().toast('二维码同步完成（原数据已自动备份）');
+          if (global.App) App.go('schedule');
+        } catch (err) {
+          getUI().toast('同步失败：' + err.message, 'err');
+        }
+      });
+    });
+  }
+
+
+  /* ==========================================================
+   * 五、WebDAV 无后端跨端云同步 (支持坚果云 / Nextcloud / Alist / CORS 代理)
+   * ========================================================== */
+  var WEBDAV_KEY = 'cp-webdav-config:v1';
+
+  function loadWebdavConfig() {
+    var def = {
+      url: '',
+      username: '',
+      password: '',
+      filename: 'course-planner-sync.json',
+      scope: 'standard',
+      corsProxy: ''
+    };
+    try {
+      if (typeof localStorage !== 'undefined') {
+        var raw = localStorage.getItem(WEBDAV_KEY);
+        if (raw) {
+          var obj = JSON.parse(raw);
+          return Object.assign(def, obj || {});
+        }
+      }
+    } catch (_) {}
+    return def;
+  }
+
+  function saveWebdavConfig(cfg) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(WEBDAV_KEY, JSON.stringify(cfg || {}));
+      }
+    } catch (_) {}
+  }
+
+  function buildWebdavTargetUrl(cfg) {
+    var base = String((cfg && cfg.url) || '').trim();
+    if (!base) throw new Error('请填写 WebDAV 服务器目录地址');
+    if (base.charAt(base.length - 1) !== '/') base += '/';
+    var fn = String((cfg && cfg.filename) || 'course-planner-sync.json').trim().replace(/^\/+/, '');
+    if (!fn) fn = 'course-planner-sync.json';
+    var full = base + fn;
+    var proxy = String((cfg && cfg.corsProxy) || '').trim();
+    if (proxy) {
+      if (proxy.indexOf('{url}') >= 0) return proxy.replace('{url}', encodeURIComponent(full));
+      if (proxy.charAt(proxy.length - 1) !== '/') proxy += '/';
+      return proxy + full;
+    }
+    return full;
+  }
+
+  function buildWebdavAuthHeader(cfg) {
+    var u = String((cfg && cfg.username) || '').trim();
+    var p = String((cfg && cfg.password) || '').trim();
+    if (!u && !p) return '';
+    var raw = u + ':' + p;
+    var bytes = utf8ToBytes(raw);
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return 'Basic ' + btoa(bin);
+  }
+
+  function openWebdavDialog() {
+    var V = getUI();
+    var el = V.el;
+    var Store = getStore();
+    var cfg = loadWebdavConfig();
+
+    var fUrl = V.input({
+      placeholder: '例如：https://dav.jianguoyun.com/dav/我的课表/',
+      value: cfg.url || ''
+    });
+    var fUser = V.input({
+      placeholder: '网盘账号 / 邮箱',
+      value: cfg.username || ''
+    });
+    var fPass = V.input({
+      type: 'password',
+      placeholder: '应用专用密码（非登录密码）',
+      value: cfg.password || ''
+    });
+    var fFile = V.input({
+      placeholder: 'course-planner-sync.json',
+      value: cfg.filename || 'course-planner-sync.json'
+    });
+    var fProxy = V.input({
+      placeholder: '选填：若网盘拦截浏览器跨域(CORS)，可填反代前缀',
+      value: cfg.corsProxy || ''
+    });
+
+    var scopeVal = cfg.scope || 'standard';
+    var fScope = V.segment([
+      { value: 'standard', label: '标准同步（不含图片与密钥）' },
+      { value: 'full', label: '完整备份（含日记正文）' }
+    ], scopeVal, function (v) { scopeVal = v; });
+
+    var statusEl = el('div', {
+      style: { fontSize: '12px', color: 'var(--text-2)', padding: '8px 10px', borderRadius: '8px', background: 'var(--surface-2)', marginTop: '8px' },
+      text: '💡 提示：WebDAV 配置仅保存在当前设备本地，导出同步码时不会外泄。若使用坚果云等不支持浏览器直接跨域(CORS)的网盘，推荐配合 Alist 或在安卓端 WebView 内使用。'
+    });
+
+    function collectCfg() {
+      var next = {
+        url: fUrl.value.trim(),
+        username: fUser.value.trim(),
+        password: fPass.value.trim(),
+        filename: fFile.value.trim() || 'course-planner-sync.json',
+        scope: scopeVal,
+        corsProxy: fProxy.value.trim()
+      };
+      saveWebdavConfig(next);
+      return next;
+    }
+
+    var body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, [
+      el('div', { style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.6' } }, [
+        '通过标准 WebDAV 协议（HTTP PUT / GET），无需自建后端服务器即可将课表与待办加密同步到你自己的私有云盘（如 Nextcloud、Alist、自建 WebDAV 或坚果云）。'
+      ]),
+      V.field('服务器目录地址 (URL)', fUrl),
+      el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' } }, [
+        V.field('账号 (Username)', fUser),
+        V.field('应用密码 (App Password)', fPass)
+      ]),
+      el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' } }, [
+        V.field('云端文件名', fFile),
+        V.field('CORS 跨域代理（选填）', fProxy)
+      ]),
+      V.field('同步内容范围', fScope),
+      statusEl,
+      el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' } }, [
+        el('button', {
+          class: 'btn btn-primary',
+          onclick: function () {
+            var c;
+            try { c = collectCfg(); } catch (e) { V.toast(e.message, 'err'); return; }
+            var target;
+            try { target = buildWebdavTargetUrl(c); } catch (e) { V.toast(e.message, 'err'); return; }
+            var payload = Store.exportJSON ? Store.exportJSON(c.scope || 'standard') : '{}';
+            statusEl.textContent = '⏳ 正在上传至 WebDAV 云端…';
+            var headers = { 'Content-Type': 'application/json; charset=utf-8' };
+            var auth = buildWebdavAuthHeader(c);
+            if (auth) headers['Authorization'] = auth;
+            fetch(target, { method: 'PUT', headers: headers, body: payload }).then(function (res) {
+              if (res.ok || res.status === 201 || res.status === 204) {
+                statusEl.textContent = '✅ 上传成功！已同步至 ' + c.filename + '（' + Math.round(payload.length / 1024 * 10) / 10 + ' KB）';
+                V.toast('WebDAV 云端上传成功');
+              } else {
+                statusEl.textContent = '❌ 上传失败：HTTP ' + res.status + '（请检查目录是否存在及账号密码权限）';
+                V.toast('上传失败：HTTP ' + res.status, 'err');
+              }
+            }).catch(function (err) {
+              statusEl.textContent = '❌ 网络或跨域(CORS)拦截：' + (err && err.message ? err.message : '请求失败') + '。若在纯网页端直连坚果云，需配置 CORS 代理或在 Alist/Nextcloud 中开启跨域。';
+              V.toast('请求被拦截，请查看下方提示', 'err');
+            });
+          }
+        }, ['⬆️ 上传到云端 (PUT)']),
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            var c;
+            try { c = collectCfg(); } catch (e) { V.toast(e.message, 'err'); return; }
+            var target;
+            try { target = buildWebdavTargetUrl(c); } catch (e) { V.toast(e.message, 'err'); return; }
+            statusEl.textContent = '⏳ 正在从 WebDAV 云端拉取…';
+            var headers = {};
+            var auth = buildWebdavAuthHeader(c);
+            if (auth) headers['Authorization'] = auth;
+            fetch(target, { method: 'GET', headers: headers }).then(function (res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.text();
+            }).then(function (text) {
+              var bkPromise = Store.backupNow ? Store.backupNow('WebDAV同步覆盖前') : Promise.resolve();
+              return bkPromise.then(function () {
+                Store.importJSON(text);
+                statusEl.textContent = '✅ 已从云端拉取并恢复数据（原本地数据已自动备份）';
+                V.toast('WebDAV 云端同步完成');
+              });
+            }).catch(function (err) {
+              statusEl.textContent = '❌ 拉取失败：' + (err && err.message ? err.message : '请求失败');
+              V.toast('拉取失败：' + (err && err.message ? err.message : ''), 'err');
+            });
+          }
+        }, ['⬇️ 从云端拉取恢复 (GET)']),
+        el('button', {
+          class: 'btn',
+          onclick: function () {
+            collectCfg();
+            V.toast('已保存 WebDAV 配置');
+          }
+        }, ['保存配置'])
+      ])
+    ]);
+
+    var api = V.modal({
+      title: '☁️ WebDAV 无后端云同步',
+      width: '560px',
+      body: body,
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '关闭', onclick: function () { api.close(); } })
+      ])
+    });
+  }
+
+  global.QrSync = {
+    encodeMatrix: encodeMatrix,
+    decodeFromMatrix: decodeFromMatrix,
+    decodeFromCanvas: decodeFromCanvas,
+    renderToCanvas: renderToCanvas,
+    buildSkeletonCode: buildSkeletonCode,
+    parseSkeletonCode: parseSkeletonCode,
+    buildStreamFrames: buildStreamFrames,
+    parseStreamFrame: parseStreamFrame,
+    assembleStreamFrames: assembleStreamFrames,
+    openDialog: openDialog,
+    openWebdavDialog: openWebdavDialog,
+    buildWebdavTargetUrl: buildWebdavTargetUrl,
+    buildWebdavAuthHeader: buildWebdavAuthHeader
+  };
+})(typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this));
 
 </script>
 <script>
@@ -23579,6 +25617,8 @@ window.DragGesture = (function () {
   var showCompare = false;
   /** 积分曲线模式：daily 每日获得 / cumulative 累计 */
   var curveMode = 'daily';
+  /** 热力图关联计划筛选：'all' 或具体 plan.id */
+  var heatPlanId = 'all';
 
   function hmText(min) {
     min = Math.round(min);
@@ -24154,13 +26194,45 @@ window.DragGesture = (function () {
 
   function heatCard(st) {
     var card = el('div', { class: 'card cp-chart-card' });
-    var days = st.cur.daily;
+    var allPlans = (Store.state.plans || []).filter(function (p) { return p && p.id; });
+    var activePlan = heatPlanId !== 'all' ? allPlans.filter(function (p) { return p.id === heatPlanId; })[0] : null;
+    if (heatPlanId !== 'all' && !activePlan) heatPlanId = 'all';
+
+    var planRecMap = {};
+    if (activePlan && Array.isArray(activePlan.records)) {
+      activePlan.records.forEach(function (rec) {
+        if (!rec || !rec.date) return;
+        planRecMap[rec.date] = (planRecMap[rec.date] || 0) + (Number(rec.value) || 1);
+      });
+    }
+
+    var days = st.cur.daily.map(function (d) {
+      if (!activePlan) return d;
+      var val = planRecMap[d.date] || 0;
+      // 映射到热力刻度分钟当量（有打卡至少 1 级，按计划单日均值或固定梯度着色）
+      var eqMin = val <= 0 ? 0 : (activePlan.type === 'checkin' ? 16 * 60 : Math.min(16 * 60, Math.max(200, val * 12)));
+      return { date: d.date, d: d.d, recorded: eqMin, planVal: val };
+    });
+
     var byMonth = days.length >= 120;   // 半年以上：一格一个月，52 个周格子挤在一起没法看
     var byWeek = !byMonth && days.length >= 14;
 
-    card.appendChild(el('div', { class: 'section-title' }, [
+    var headEl = el('div', { class: 'section-title', style: { flexWrap: 'wrap', gap: '6px' } }, [
       byMonth ? '每月记录了多少' : (byWeek ? '每周记录了多少' : '每天记录了多少')
-    ]));
+    ]);
+    if (allPlans.length) {
+      var tabs = [{ id: 'all', title: '全部记录' }].concat(allPlans.slice(0, 4).map(function (p) {
+        return { id: p.id, title: '🎯 ' + (p.title || '计划').slice(0, 8) };
+      }));
+      headEl.appendChild(el('div', { class: 'dim-tabs' }, tabs.map(function (t) {
+        return el('button', {
+          class: 'dim-tab' + (heatPlanId === t.id ? ' active' : ''),
+          text: t.title,
+          onclick: function () { heatPlanId = t.id; StatsPane.render(sHost); }
+        });
+      })));
+    }
+    card.appendChild(headEl);
 
     var groups = [];
     if (byMonth) {
@@ -24392,6 +26464,13 @@ window.DragGesture = (function () {
             meta.length ? el('span', { class: 'task-course' }, meta) : null,
             t.priority === 'high' ? el('span', { class: 'chip chip-red', text: '重要', style: { padding: '0 6px', fontSize: '10.5px' } }) : null,
             TaskRow.repChip(t),
+            t.energy === 'high' ? el('span', { class: 'chip chip-amber', text: '⚡深度', style: { padding: '0 6px', fontSize: '10.5px' }, title: '高精力消耗（建议黄金时段处理）' }) : null,
+            t.energy === 'low' ? el('span', { class: 'chip', text: '☕轻松', style: { padding: '0 6px', fontSize: '10.5px' }, title: '低精力消耗（适合午后或疲惫时处理）' }) : null,
+            t.examStage ? el('span', {
+              class: 'chip chip-blue',
+              style: { padding: '0 6px', fontSize: '10.5px' },
+              text: t.examStage === 'round1' ? '📖一轮' : (t.examStage === 'papers' ? '✍️真题' : '🔥冲刺')
+            }) : null,
             (t.tags && t.tags.length) ? t.tags.map(function (x) {
               return V.tagChip(x);
             }) : null,
@@ -24440,7 +26519,9 @@ window.DragGesture = (function () {
       var t = taskId ? Store.getTask(taskId) : null;
       var data = {
         status: t ? t.status : 'todo',
-        priority: t ? t.priority : 'normal'
+        priority: t ? t.priority : 'normal',
+        energy: t ? (t.energy || 'medium') : (preset.energy || 'medium'),
+        examStage: t ? (t.examStage || '') : (preset.examStage || '')
       };
 
       /* ---- 子任务关系 ---- */
@@ -24602,6 +26683,19 @@ window.DragGesture = (function () {
         { value: 'normal', label: '普通' },
         { value: 'high', label: '重要' }
       ], data.priority, function (v) { data.priority = v; });
+
+      var fEnergy = V.segment([
+        { value: 'high', label: '⚡ 深度专注' },
+        { value: 'medium', label: '🌤️ 常规' },
+        { value: 'low', label: '☕ 轻松杂务' }
+      ], data.energy, function (v) { data.energy = v; });
+
+      var fExamStage = V.segment([
+        { value: '', label: '普通待办' },
+        { value: 'round1', label: '📖 一轮复习' },
+        { value: 'papers', label: '✍️ 历年真题' },
+        { value: 'sprint', label: '🔥 考前冲刺' }
+      ], data.examStage, function (v) { data.examStage = v; });
 
       var impOn = t ? !!t.important : false;
       var fImp = el('button', {
@@ -24824,6 +26918,8 @@ window.DragGesture = (function () {
         untilField,
         V.field('状态', fStatus),
         V.field('优先级', fPriority),
+        V.field('精力消耗', fEnergy, '结合「生理精力与作息」在黄金时段优先推荐深度专注任务'),
+        V.field('期末备考阶段', fExamStage, '选择阶段后会同步出现在「课程表 → 考试周备考看板」'),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
         V.field('标签', fTags, '支持二级标签：一级/二级，如「学习/高数」「生活/健身」'),
         V.field('备注', fNote),
@@ -24925,6 +27021,8 @@ window.DragGesture = (function () {
                 dueTime: fTime.value,
                 status: data.status,
                 priority: data.priority,
+                energy: data.energy,
+                examStage: data.examStage,
                 important: impOn,
                 note: fNote.value,
                 tags: fTags.getValue(),
@@ -24999,6 +27097,7 @@ window.DragGesture = (function () {
   var state = {
     status: 'all', course: 'all', tag: '', q: '', tab: 'tasks',
     sortMode: 'auto',
+    energyFilter: false,
     selectMode: false,   // 多选批量操作（仅手动排序模式）
     selected: {}         // id -> 1
   };
@@ -25158,6 +27257,45 @@ window.DragGesture = (function () {
       ]);
       root.appendChild(summary);
 
+      /* ---- 生理精力节律匹配提示条 ---- */
+      if (Store.currentEnergyState) {
+        var egState = Store.currentEnergyState();
+        var egBanner = el('div', {
+          class: 'card',
+          style: {
+            padding: '10px 14px',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            flexWrap: 'wrap',
+            background: egState.isPeak ? 'var(--primary-weak)' : 'var(--surface-2)',
+            borderLeft: '3px solid ' + (egState.isPeak ? 'var(--primary)' : 'var(--amber)')
+          }
+        }, [
+          el('div', { style: { fontSize: '12.5px', lineHeight: '1.5' } }, [
+            el('b', { text: egState.icon + ' ' + egState.label + '：' }),
+            el('span', { style: { color: 'var(--text-2)' }, text: egState.advice })
+          ]),
+          el('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
+            el('button', {
+              class: 'btn btn-sm' + (state.energyFilter ? ' btn-primary' : ''),
+              onclick: function () {
+                state.energyFilter = !state.energyFilter;
+                view.render();
+              }
+            }, [state.energyFilter ? '⚡ 已开启精力匹配' : '⚡ 匹配当前精力']),
+            el('button', {
+              class: 'btn btn-sm',
+              title: '自定义精力高峰时段',
+              onclick: function () { if (global.SettingsView) global.SettingsView.go('energy'); }
+            }, ['作息设置'])
+          ])
+        ]);
+        root.appendChild(egBanner);
+      }
+
       /* ---- 快速添加条（支持自然语言快速录入） ---- */
       var quickInput = V.input({
         placeholder: '⚡ 快速添加，如：明天下午3点交高数作业 #作业 !重要（Enter 提交）'
@@ -25302,6 +27440,12 @@ window.DragGesture = (function () {
         }
         if (state.course !== 'all' && t.courseId !== state.course) return false;
         if (state.tag && !hasTag(t.tags, state.tag)) return false;
+        if (state.energyFilter && Store.currentEnergyState) {
+          var curLv = Store.currentEnergyState().level;
+          var te = t.energy || 'medium';
+          if (curLv === 'high' && te === 'low') return false;
+          if ((curLv === 'low' || curLv === 'rest') && te === 'high') return false;
+        }
         if (kw) {
           // 父任务自己没命中时，再看它的子任务里有没有命中的
           function hit(x) {
@@ -26808,10 +28952,8 @@ window.DragGesture = (function () {
 
 </script>
 <script>
-
-
 /* ==========================================================
- * 导入课表：图片 → 识别 → 校正 → 写入课程
+ * 导入课表：图片 → 图像预处理(四角透视拉直/辅助对齐网格) → 识别 → 词库纠偏与网格校正 → 写入课程
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -26827,7 +28969,18 @@ window.DragGesture = (function () {
     S = {
       step: 'pick',        // pick | busy | grid | items
       file: null,
+      origFile: null,
       url: '',
+      workCanvas: null,    // 经过旋转或四角透视拉直后的画布
+      toolMode: 'none',    // 'none' | 'persp' (四角透视拉直) | 'grid' (辅助对齐网格)
+      corners: null,       // [{x,y} x 4] 归一化 0..1 坐标 (TL, TR, BR, BL)
+      gridBox: {           // 辅助网格归一化边界 (左、右、上、下、行数)
+        left: 0.12,
+        right: 0.98,
+        top: 0.10,
+        bottom: 0.96,
+        rows: (Store.periods && Store.periods.length) ? Math.min(12, Store.periods.length) : 10
+      },
       grid: null,
       items: null,
       progress: '',
@@ -26845,6 +28998,25 @@ window.DragGesture = (function () {
         el('button', { class: 'btn', text: '关闭', onclick: function () { api.close(); } })
       ])
     });
+    if (!global.__cpOcrPasteBound) {
+      global.__cpOcrPasteBound = true;
+      document.addEventListener('paste', function (e) {
+        if (!bodyEl || !document.body.contains(bodyEl) || !S || S.step !== 'pick') return;
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf('image/') === 0) {
+            var f = items[i].getAsFile();
+            if (f) {
+              e.preventDefault();
+              pickFile(f);
+              UI.toast('已从剪贴板粘贴课表截图');
+              break;
+            }
+          }
+        }
+      });
+    }
     draw();
   }
 
@@ -26860,14 +29032,14 @@ window.DragGesture = (function () {
     else if (S.step === 'cloud') drawCloud();
   }
 
-  /* ---------- 第一步：选图 ---------- */
+  /* ---------- 第一步：选图 + 图像矫正与辅助网格工作台 ---------- */
   function drawPick() {
     var cfg = Store.state.settings.ocr || {};
     var cloudReady = !!(cfg.endpoint && cfg.apiKey);
 
     bodyEl.appendChild(el('div', { class: 'ocr-intro' }, [
       el('b', { text: '把课表截图或照片变成课程' }),
-      el('p', { text: '支持教务系统截图、Excel 导出的图片、纸质课表拍照。识别后可以在网格里改错，再一键导入。' })
+      el('p', { text: '支持教务系统截图、Excel 导出的图片、纸质课表拍照（支持直接按 Ctrl+V 粘贴剪贴板截图）。内置「彩色底纹去噪」「四角透视拉直」「交互式辅助网格对齐」与「高校课程词库自动纠偏」。' })
     ]));
 
     var fileInput = el('input', {
@@ -26898,9 +29070,134 @@ window.DragGesture = (function () {
     bodyEl.appendChild(pickRow);
 
     if (S.url) {
-      var preview = el('div', { class: 'ocr-preview' }, [
-        el('img', { src: S.url, alt: '课表预览' })
+      // 图像预处理与辅助对齐工具栏
+      var prepBar = el('div', {
+        class: 'ocr-toolbar',
+        style: { marginTop: '10px', marginBottom: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }
+      }, [
+        el('button', {
+          class: 'btn btn-sm',
+          text: '🔄 旋转 90°',
+          onclick: function () {
+            if (!S.workCanvas || !global.Ocr.rotateCanvas) return;
+            S.workCanvas = global.Ocr.rotateCanvas(S.workCanvas, 90);
+            syncWorkCanvasToFile(function () { draw(); });
+          }
+        }),
+        el('button', {
+          class: 'btn btn-sm' + (S.toolMode === 'persp' ? ' btn-primary' : ''),
+          text: '📐 四角透视拉直',
+          onclick: function () {
+            S.toolMode = S.toolMode === 'persp' ? 'none' : 'persp';
+            if (S.toolMode === 'persp' && !S.corners) {
+              S.corners = global.Ocr.detectCorners ? global.Ocr.detectCorners(S.workCanvas) : [
+                { x: 0.05, y: 0.05 }, { x: 0.95, y: 0.05 }, { x: 0.95, y: 0.95 }, { x: 0.05, y: 0.95 }
+              ];
+            }
+            draw();
+          }
+        }),
+        el('button', {
+          class: 'btn btn-sm' + (S.toolMode === 'grid' ? ' btn-primary' : ''),
+          text: '📏 辅助对齐网格' + (S.useCustomGrid ? ' (已启用)' : ''),
+          onclick: function () {
+            S.toolMode = S.toolMode === 'grid' ? 'none' : 'grid';
+            if (S.toolMode === 'grid') S.useCustomGrid = true;
+            draw();
+          }
+        }),
+        S.origFile ? el('button', {
+          class: 'btn btn-sm',
+          text: '↺ 还原原图',
+          onclick: function () {
+            S.toolMode = 'none';
+            S.corners = null;
+            S.useCustomGrid = false;
+            pickFile(S.origFile, true);
+          }
+        }) : null
       ]);
+      bodyEl.appendChild(prepBar);
+
+      // 四角透视拉直子操作条
+      if (S.toolMode === 'persp') {
+        bodyEl.appendChild(el('div', {
+          class: 'card',
+          style: { padding: '8px 12px', marginBottom: '8px', background: 'var(--primary-weak)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }
+        }, [
+          el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '💡 拖动下图 4 个角标对齐纸质课表的四个角，再点「执行透视拉直」即可将斜拍课表展平为标准矩形。' }),
+          el('div', { style: { display: 'flex', gap: '6px' } }, [
+            el('button', {
+              class: 'btn btn-sm',
+              text: '✨ 自动吸附四角',
+              onclick: function () {
+                if (global.Ocr.detectCorners && S.workCanvas) {
+                  S.corners = global.Ocr.detectCorners(S.workCanvas);
+                  draw();
+                }
+              }
+            }),
+            el('button', {
+              class: 'btn btn-sm btn-primary',
+              text: '✓ 执行透视拉直',
+              onclick: function () {
+                if (!S.workCanvas || !S.corners || !global.Ocr.warpPerspective) return;
+                S.workCanvas = global.Ocr.warpPerspective(S.workCanvas, S.corners);
+                S.toolMode = 'none';
+                S.corners = null;
+                syncWorkCanvasToFile(function () {
+                  UI.toast('已完成四角透视拉直矫正');
+                  draw();
+                });
+              }
+            })
+          ])
+        ]));
+      }
+
+      // 交互式辅助网格子操作条
+      if (S.toolMode === 'grid') {
+        var gb = S.gridBox;
+        var rowInput = el('input', {
+          type: 'number', min: '4', max: '16', value: String(gb.rows),
+          style: { width: '58px', height: '28px', textAlign: 'center' },
+          onchange: function () {
+            gb.rows = Math.max(4, Math.min(16, parseInt(this.value, 10) || 10));
+            draw();
+          }
+        });
+        bodyEl.appendChild(el('div', {
+          class: 'card',
+          style: { padding: '8px 12px', marginBottom: '8px', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }
+        }, [
+          el('span', { style: { fontSize: '12px', color: 'var(--text-2)' }, text: '📏 拖动下图红/蓝边界线框住「周一至周日 × 第1至N节」的课程主体区域（避开顶部星期表头和左侧节次列）：' }),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+            el('span', { style: { fontSize: '12px' }, text: '节次行数:' }),
+            rowInput,
+            el('button', {
+              class: 'btn btn-sm',
+              text: S.useCustomGrid ? '关闭网格约束' : '启用网格约束',
+              onclick: function () {
+                S.useCustomGrid = !S.useCustomGrid;
+                draw();
+              }
+            })
+          ])
+        ]));
+      }
+
+      // 预览与交互式画布叠加层
+      var preview = el('div', {
+        class: 'ocr-preview',
+        style: { position: 'relative', display: 'inline-block', maxWidth: '100%' }
+      });
+      var imgEl = el('img', { src: S.url, alt: '课表预览', style: { display: 'block', maxWidth: '100%' } });
+      preview.appendChild(imgEl);
+
+      if (S.toolMode === 'persp' || S.toolMode === 'grid') {
+        var overlay = buildInteractiveOverlay(imgEl);
+        preview.appendChild(overlay);
+      }
       bodyEl.appendChild(preview);
 
       var modeRow = el('div', { class: 'ocr-mode' }, [
@@ -26916,7 +29213,7 @@ window.DragGesture = (function () {
           text: S.mode === 'local'
             ? '在本机浏览器里识别，不上传图片。首次使用需下载约 1.8MB 中文模型。'
             : (cloudReady
-              ? '调用你配置的视觉接口，准确率更高，适合复杂版式。'
+              ? '调用你配置的视觉大模型接口，自动拆分连堂课与单双周，准确率更高。'
               : '还没配置云端接口，请到 设置 → 图片识别 里填写。')
         })
       ]);
@@ -26936,18 +29233,209 @@ window.DragGesture = (function () {
         }, [V.svg(V.icons.target, 17), '开始识别']),
         el('button', {
           class: 'btn', text: '清空',
-          onclick: function () { S.file = null; S.url = ''; S.error = ''; draw(); }
+          onclick: function () { S.file = null; S.origFile = null; S.url = ''; S.workCanvas = null; S.error = ''; draw(); }
         })
       ]));
     }
   }
 
-  function pickFile(f) {
+  /** 构建四角透视控制点或 7×N 辅助对齐网格的交互式 Canvas 覆盖层 */
+  function buildInteractiveOverlay(imgEl) {
+    var ov = document.createElement('canvas');
+    ov.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;cursor:crosshair;';
+    var dragging = null;
+
+    function syncSize() {
+      var rect = imgEl.getBoundingClientRect();
+      ov.width = Math.max(200, Math.round(rect.width || imgEl.clientWidth || 560));
+      ov.height = Math.max(150, Math.round(rect.height || imgEl.clientHeight || 380));
+      paintOverlay();
+    }
+
+    imgEl.addEventListener('load', syncSize);
+    setTimeout(syncSize, 30);
+
+    function paintOverlay() {
+      var w = ov.width, h = ov.height;
+      var ctx = ov.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, w, h);
+
+      if (S.toolMode === 'persp' && S.corners && S.corners.length === 4) {
+        var pts = S.corners.map(function (c) { return { x: c.x * w, y: c.y * h }; });
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.lineTo(pts[3].x, pts[3].y);
+        ctx.closePath();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        var labels = ['左上', '右上', '右下', '左下'];
+        pts.forEach(function (pt, i) {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = '#2563eb';
+          ctx.fill();
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(labels[i], pt.x, pt.y - 14);
+        });
+      } else if (S.toolMode === 'grid') {
+        var gb = S.gridBox;
+        var x0 = gb.left * w, x1 = gb.right * w;
+        var y0 = gb.top * h, y1 = gb.bottom * h;
+
+        // 7 列竖线
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
+        ctx.lineWidth = 1.5;
+        var days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+        for (var c = 0; c <= 7; c++) {
+          var cx = x0 + (x1 - x0) * (c / 7);
+          ctx.beginPath();
+          ctx.moveTo(cx, y0);
+          ctx.lineTo(cx, y1);
+          ctx.stroke();
+          if (c < 7) {
+            ctx.fillStyle = 'rgba(37, 99, 235, 0.88)';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(days[c], cx + (x1 - x0) / 14, Math.max(12, y0 - 4));
+          }
+        }
+
+        // N 行横线
+        var nRows = gb.rows || 10;
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.85)';
+        for (var r = 0; r <= nRows; r++) {
+          var ry = y0 + (y1 - y0) * (r / nRows);
+          ctx.beginPath();
+          ctx.moveTo(x0, ry);
+          ctx.lineTo(x1, ry);
+          ctx.stroke();
+          if (r < nRows) {
+            ctx.fillStyle = 'rgba(5, 150, 105, 0.9)';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText((r + 1) + '节', Math.max(22, x0 - 4), ry + (y1 - y0) / (nRows * 2) + 4);
+          }
+        }
+
+        // 四个外框拖动手柄（左、右、上、下）
+        var handles = [
+          { k: 'left', x: x0, y: (y0 + y1) / 2 },
+          { k: 'right', x: x1, y: (y0 + y1) / 2 },
+          { k: 'top', x: (x0 + x1) / 2, y: y0 },
+          { k: 'bottom', x: (x0 + x1) / 2, y: y1 }
+        ];
+        handles.forEach(function (hd) {
+          ctx.beginPath();
+          ctx.arc(hd.x, hd.y, 8, 0, Math.PI * 2);
+          ctx.fillStyle = '#ef4444';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#ffffff';
+          ctx.stroke();
+        });
+      }
+    }
+
+    function relPos(e) {
+      var rect = ov.getBoundingClientRect();
+      var touch = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+      return {
+        x: Math.max(0.01, Math.min(0.99, (touch.clientX - rect.left) / Math.max(1, rect.width))),
+        y: Math.max(0.01, Math.min(0.99, (touch.clientY - rect.top) / Math.max(1, rect.height)))
+      };
+    }
+
+    ov.addEventListener('pointerdown', function (e) {
+      var p = relPos(e);
+      if (S.toolMode === 'persp' && S.corners) {
+        var bestI = -1, bestD = 0.08;
+        S.corners.forEach(function (c, i) {
+          var d = Math.hypot(c.x - p.x, c.y - p.y);
+          if (d < bestD) { bestD = d; bestI = i; }
+        });
+        if (bestI >= 0) {
+          dragging = { type: 'corner', index: bestI };
+          if (ov.setPointerCapture) { try { ov.setPointerCapture(e.pointerId); } catch (_) {} }
+          e.preventDefault();
+        }
+      } else if (S.toolMode === 'grid') {
+        var gb = S.gridBox;
+        var candidates = [
+          { k: 'left', d: Math.abs(p.x - gb.left) },
+          { k: 'right', d: Math.abs(p.x - gb.right) },
+          { k: 'top', d: Math.abs(p.y - gb.top) },
+          { k: 'bottom', d: Math.abs(p.y - gb.bottom) }
+        ].sort(function (a, b) { return a.d - b.d; });
+        if (candidates[0].d < 0.06) {
+          dragging = { type: 'grid', edge: candidates[0].k };
+          if (ov.setPointerCapture) { try { ov.setPointerCapture(e.pointerId); } catch (_) {} }
+          e.preventDefault();
+        }
+      }
+    });
+
+    ov.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var p = relPos(e);
+      if (dragging.type === 'corner') {
+        S.corners[dragging.index] = { x: Number(p.x.toFixed(3)), y: Number(p.y.toFixed(3)) };
+        paintOverlay();
+      } else if (dragging.type === 'grid') {
+        var gb = S.gridBox;
+        if (dragging.edge === 'left') gb.left = Math.min(gb.right - 0.15, p.x);
+        else if (dragging.edge === 'right') gb.right = Math.max(gb.left + 0.15, p.x);
+        else if (dragging.edge === 'top') gb.top = Math.min(gb.bottom - 0.15, p.y);
+        else if (dragging.edge === 'bottom') gb.bottom = Math.max(gb.top + 0.15, p.y);
+        paintOverlay();
+      }
+    });
+
+    function stopDrag() { dragging = null; }
+    ov.addEventListener('pointerup', stopDrag);
+    ov.addEventListener('pointercancel', stopDrag);
+
+    return ov;
+  }
+
+  function syncWorkCanvasToFile(cb) {
+    if (!S.workCanvas) { if (cb) cb(); return; }
+    S.workCanvas.toBlob(function (blob) {
+      if (blob) {
+        if (S.url) { try { URL.revokeObjectURL(S.url); } catch (_) {} }
+        S.file = new File([blob], (S.origFile && S.origFile.name) || 'schedule.png', { type: 'image/png' });
+        S.url = URL.createObjectURL(blob);
+      }
+      if (cb) cb();
+    }, 'image/png');
+  }
+
+  function pickFile(f, keepOrig) {
     if (!/^image\//.test(f.type)) { UI.toast('请选择图片文件', 'err'); return; }
     if (f.size > 12 * 1024 * 1024) { UI.toast('图片太大了（建议 12MB 以内）', 'err'); return; }
+    if (!keepOrig) S.origFile = f;
     S.file = f;
     S.error = '';
     S.url = URL.createObjectURL(f);
+    if (global.Ocr && global.Ocr.normalizeImage) {
+      global.Ocr.normalizeImage(f).then(function (n) {
+        S.workCanvas = n.canvas;
+      }).catch(function () {});
+    }
     draw();
   }
 
@@ -26993,14 +29481,27 @@ window.DragGesture = (function () {
       var label = statusMap[m.status] || m.status || '识别中…';
       var pct = m.progress != null ? Math.round(8 + m.progress * 88) : S.pct;
       setProgress(label, pct);
-    }).then(function (res) {
+    }, { canvas: S.workCanvas }).then(function (res) {
       if (!res.words.length) {
         S.step = 'pick';
         S.error = '没有识别到文字，试试更清晰、正对的截图';
         draw();
         return;
       }
-      S.grid = global.Ocr.buildGrid(res.words, { lines: res.lines });
+      var customLines = null;
+      if (S.useCustomGrid && S.gridBox && res.width && res.height) {
+        var gb = S.gridBox;
+        var vl = [], hl = [];
+        for (var c = 0; c <= 7; c++) {
+          vl.push(Math.round((gb.left + (gb.right - gb.left) * (c / 7)) * res.width));
+        }
+        var nR = gb.rows || 10;
+        for (var r = 0; r <= nR; r++) {
+          hl.push(Math.round((gb.top + (gb.bottom - gb.top) * (r / nR)) * res.height));
+        }
+        customLines = { vlines: vl, hlines: hl };
+      }
+      S.grid = global.Ocr.buildGrid(res.words, { lines: res.lines, customLines: customLines });
       S.words = res.words;
       S.step = 'grid';
       draw();
@@ -27054,10 +29555,10 @@ window.DragGesture = (function () {
 
     /* 结构识别情况提示 */
     var m = g.meta || {};
-    if (!m.dayHeaders) {
+    if (!m.dayHeaders && !m.customGrid) {
       bodyEl.appendChild(el('div', {
         class: 'ocr-warn',
-        text: '没在图上找到「星期几」表头，列可能没对齐。可以在上面直接改格子，或者换用云端识别。'
+        text: '没在图上找到「星期几」表头，列可能没对齐。可以点「返回调整对齐网格」用辅助网格框选，或者直接在下面改格子。'
       }));
     }
 
@@ -27110,6 +29611,10 @@ window.DragGesture = (function () {
           if (merged) { UI.toast('已合并 ' + merged + ' 节连堂课'); draw(); }
           else { UI.toast('未发现连续同名课程'); }
         }
+      }),
+      el('button', {
+        class: 'btn btn-sm', text: '📏 返回调整对齐网格',
+        onclick: function () { S.step = 'pick'; S.toolMode = 'grid'; S.useCustomGrid = true; draw(); }
       }),
       el('button', {
         class: 'btn btn-sm', text: '重新识别',
@@ -27196,7 +29701,7 @@ window.DragGesture = (function () {
     return w || { weekType: 'all', startWeek: 1, endWeek: Store.semester.weeks };
   }
 
-  /** 把网格内容拆成课程列表（课程名 / 地点 / 教师 / 周次 分开） */
+  /** 把网格内容拆成课程列表（课程名 / 地点 / 教师 / 周次 分开，并附带词库纠偏标记） */
   function toItems() {
     syncCells();
     var periods = Store.periods;
@@ -27217,6 +29722,7 @@ window.DragGesture = (function () {
           periodId: period ? period.id : '',
           periodName: period ? period.name : ('第 ' + (pIdx + 1) + ' 节'),
           name: info.name,
+          correctedFrom: info.correctedFrom || '',
           location: info.location || '',
           teacher: info.teacher || '',
           weeks: info.weeks || '',
@@ -27250,6 +29756,7 @@ window.DragGesture = (function () {
           periodId: period ? period.id : '',
           periodName: period ? period.name : ('第 ' + p + ' 节'),
           name: info.name || name,
+          correctedFrom: c.correctedFrom || info.correctedFrom || '',
           location: c.location || info.location || '',
           teacher: c.teacher || info.teacher || '',
           weeks: c.weeks || info.weeks || '',
@@ -27264,14 +29771,15 @@ window.DragGesture = (function () {
   }
 
   /* ==========================================================
-   * 第四步：课程明细（课程名 / 地点 / 教师 分开编辑）
+   * 第四步：课程明细（课程名 / 地点 / 教师 分开编辑 + 词库纠偏提示）
    * ========================================================== */
   function drawItems() {
     var items = S.items || [];
     var dn = Store.DAY_NAMES;
+    var correctedCount = items.filter(function (it) { return !!it.correctedFrom; }).length;
 
     bodyEl.appendChild(el('div', { class: 'ocr-intro' }, [
-      el('b', { text: '共 ' + items.length + ' 门课' }),
+      el('b', { text: '共 ' + items.length + ' 门课' + (correctedCount ? ('（✨ 专业词库已自动纠偏 ' + correctedCount + ' 处错别字）') : '') }),
       el('p', { text: '课程名、地点、老师已经分开，直接改就行；不需要的可以删掉。周次写成「1-16」「单周」「双周」，留空表示整个学期。' })
     ]));
 
@@ -27318,6 +29826,17 @@ window.DragGesture = (function () {
         el('div', { class: 'ocr-item-head' }, [
           el('span', { class: 'chip chip-primary', text: '周' + dn[it.day - 1].slice(1) }),
           el('span', { class: 'ocr-item-period', text: it.periodName }),
+          it.correctedFrom ? el('span', {
+            class: 'chip chip-green',
+            style: { fontSize: '11px', padding: '1px 6px', cursor: 'pointer' },
+            title: '点击还原为原始识别文字：' + it.correctedFrom,
+            text: '✨ 已纠偏（原：' + it.correctedFrom + '）',
+            onclick: function () {
+              it.name = it.correctedFrom;
+              it.correctedFrom = '';
+              draw();
+            }
+          }) : null,
           isDup ? el('span', { class: 'ocr-dup-badge', text: '已存在' }) : null,
           el('button', {
             class: 'icon-btn', title: '删除这门课',
@@ -27421,8 +29940,6 @@ window.DragGesture = (function () {
 
   global.OcrDialog = { open: open };
 })(window);
-
-
 
 </script>
 <script>
@@ -27616,6 +30133,25 @@ window.DragGesture = (function () {
         el('button', { class: 'btn', text: '关闭', onclick: function () { api.close(); } })
       ])
     });
+    if (!global.__cpTaskShotPasteBound) {
+      global.__cpTaskShotPasteBound = true;
+      document.addEventListener('paste', function (e) {
+        if (!bodyEl || !document.body.contains(bodyEl) || !S || S.step !== 'pick') return;
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf('image/') === 0) {
+            var f = items[i].getAsFile();
+            if (f) {
+              e.preventDefault();
+              pickFile(f);
+              UI.toast('已从剪贴板粘贴截图');
+              break;
+            }
+          }
+        }
+      });
+    }
     draw();
   }
 
@@ -27633,7 +30169,7 @@ window.DragGesture = (function () {
 
     bodyEl.appendChild(el('div', { class: 'ocr-intro' }, [
       el('b', { text: '把活动页、通知截图变成待办' }),
-      el('p', { text: '识别出的事项会先进候选清单，你勾选并确认后才写入待办，不会直接加。' })
+      el('p', { text: '识别出的事项会先进候选清单，你勾选并确认后才写入待办（支持直接按 Ctrl+V 粘贴剪贴板截图）。' })
     ]));
 
     var fileInput = el('input', {
@@ -33556,7 +36092,23 @@ window.DragGesture = (function () {
             text: '数据只存在各自设备的浏览器里，没有服务器，所以要手动同步。点「生成同步文件」导出一份 .json，用微信 / QQ 发到另一台设备，在那台设备点「导入同步文件」选文件或粘贴即可。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, [
-            el('button', { class: 'btn btn-primary', onclick: syncFileDialog },
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
+            }, [V.svg(V.icons.grid || V.icons.calendar, 16), '课表骨架单码']),
+            el('button', {
+              class: 'btn btn-primary',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('stream'); }
+            }, [V.svg(V.icons.camera || V.icons.download, 16), '全量动态轮播码']),
+            el('button', {
+              class: 'btn',
+              onclick: function () { if (global.QrSync) global.QrSync.openDialog('scan'); }
+            }, [V.svg(V.icons.camera, 16), '扫码/传图接收']),
+            el('button', {
+              class: 'btn',
+              onclick: function () { if (global.QrSync && global.QrSync.openWebdavDialog) global.QrSync.openWebdavDialog(); }
+            }, [V.svg(V.icons.upload, 16), '☁️ WebDAV 云同步']),
+            el('button', { class: 'btn', onclick: syncFileDialog },
               [V.svg(V.icons.download, 16), '生成同步文件']),
             el('button', { class: 'btn', onclick: pasteSyncDialog },
               [V.svg(V.icons.upload, 16), '导入同步文件'])
@@ -33868,6 +36420,41 @@ window.DragGesture = (function () {
       type: 'checkbox', checked: o.taskDue !== false,
       onchange: function (e) { o.taskDue = e.target.checked; save(); }
     })));
+    var canSys = global.Remind && global.Remind.canSysNotify ? global.Remind.canSysNotify() : false;
+    var perm = (typeof Notification !== 'undefined' && Notification.permission) ? Notification.permission : 'default';
+    inPage.appendChild(row(
+      '系统通知栏提醒（HTTPS / PWA）',
+      canSys
+        ? ('当前权限：' + (perm === 'granted' ? '已授权 ✅' : (perm === 'denied' ? '已被浏览器拒绝' : '未授权（勾选时将请求权限）')))
+        : '当前为本地 file:// 环境，浏览器禁用系统通知，自动使用页面内提醒兜底',
+      el('input', {
+        type: 'checkbox',
+        checked: !!(o.sysNotify && perm === 'granted'),
+        disabled: !canSys,
+        onchange: function (e) {
+          if (!e.target.checked) {
+            o.sysNotify = false;
+            save();
+            return;
+          }
+          if (global.Remind && global.Remind.requestSysPermission) {
+            global.Remind.requestSysPermission().then(function (res) {
+              if (res === 'granted') {
+                o.sysNotify = true;
+                save();
+                UI.toast('已开启系统级通知提醒');
+              } else {
+                e.target.checked = false;
+                o.sysNotify = false;
+                save();
+                UI.toast('未能获取系统通知权限（' + res + '），将继续使用页面内提醒', 'err');
+              }
+              view.render();
+            });
+          }
+        }
+      })
+    ));
     if (global.Remind) {
       var today = Remind.todayLessons();
       inPage.appendChild(el('div', {
@@ -42320,6 +44907,242 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     });
   }
 
+  /** 旋转 Canvas（支持 90 / -90 / 180 度，用于修正横拍照片） */
+  function rotateCanvas(srcCanvas, deg) {
+    var d = ((deg % 360) + 360) % 360;
+    if (d === 0) return srcCanvas;
+    var sw = srcCanvas.width, sh = srcCanvas.height;
+    var dst = document.createElement('canvas');
+    dst.width = (d === 90 || d === 270) ? sh : sw;
+    dst.height = (d === 90 || d === 270) ? sw : sh;
+    var ctx = dst.getContext('2d', { willReadFrequently: true });
+    ctx.save();
+    ctx.translate(dst.width / 2, dst.height / 2);
+    ctx.rotate(d * Math.PI / 180);
+    ctx.drawImage(srcCanvas, -sw / 2, -sh / 2);
+    ctx.restore();
+    return dst;
+  }
+
+  /**
+   * 求解 4 点透视单应性矩阵 H (3x3，满足 H[8]=1)：将目标矩形 (u,v) 逆映射到源图四边形 (x,y)
+   * dstPts: [[0,0],[W,0],[W,H],[0,H]], srcPts: [[x0,y0],[x1,y1],[x2,y2],[x3,y3]]
+   */
+  function solveHomography(dstPts, srcPts) {
+    var A = [];
+    var B = [];
+    for (var i = 0; i < 4; i++) {
+      var u = dstPts[i][0], v = dstPts[i][1];
+      var x = srcPts[i][0], y = srcPts[i][1];
+      A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]);
+      B.push(x);
+      A.push([0, 0, 0, u, v, 1, -u * y, -v * y]);
+      B.push(y);
+    }
+    // 高斯消元（列主元）求解 8x8 线性方程组
+    var n = 8;
+    for (var col = 0; col < n; col++) {
+      var maxRow = col;
+      var maxVal = Math.abs(A[col][col]);
+      for (var r = col + 1; r < n; r++) {
+        if (Math.abs(A[r][col]) > maxVal) {
+          maxVal = Math.abs(A[r][col]);
+          maxRow = r;
+        }
+      }
+      if (maxVal < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      var tmpRow = A[col]; A[col] = A[maxRow]; A[maxRow] = tmpRow;
+      var tmpB = B[col]; B[col] = B[maxRow]; B[maxRow] = tmpB;
+
+      var pivot = A[col][col];
+      for (var j = col; j < n; j++) A[col][j] /= pivot;
+      B[col] /= pivot;
+
+      for (var r2 = 0; r2 < n; r2++) {
+        if (r2 === col) continue;
+        var factor = A[r2][col];
+        if (factor === 0) continue;
+        for (var j2 = col; j2 < n; j2++) A[r2][j2] -= factor * A[col][j2];
+        B[r2] -= factor * B[col];
+      }
+    }
+    return [B[0], B[1], B[2], B[3], B[4], B[5], B[6], B[7], 1];
+  }
+
+  /**
+   * 四角透视矫正拉直（Perspective Rectification）
+   * @param {HTMLCanvasElement} srcCanvas 原始画布
+   * @param {Array<{x:number, y:number}>} corners 四个角点 [左上, 右上, 右下, 左下]（像素坐标或 0..1 归一化坐标）
+   * @param {number} [outW] 输出宽度
+   * @param {number} [outH] 输出高度
+   */
+  function warpPerspective(srcCanvas, corners, outW, outH) {
+    if (!srcCanvas || !corners || corners.length !== 4) return srcCanvas;
+    var sw = srcCanvas.width, sh = srcCanvas.height;
+    var pts = corners.map(function (c) {
+      var x = Array.isArray(c) ? c[0] : c.x;
+      var y = Array.isArray(c) ? c[1] : c.y;
+      if (x <= 1.0 && y <= 1.0 && (sw > 2 && sh > 2)) {
+        return [x * sw, y * sh];
+      }
+      return [x, y];
+    });
+
+    var topW = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+    var botW = Math.hypot(pts[2][0] - pts[3][0], pts[2][1] - pts[3][1]);
+    var leftH = Math.hypot(pts[3][0] - pts[0][0], pts[3][1] - pts[0][1]);
+    var rightH = Math.hypot(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1]);
+
+    var W = Math.max(64, Math.round(outW || Math.max(topW, botW)));
+    var H = Math.max(64, Math.round(outH || Math.max(leftH, rightH)));
+
+    var Hmat = solveHomography([[0, 0], [W, 0], [W, H], [0, H]], pts);
+    var dstCanvas = document.createElement('canvas');
+    dstCanvas.width = W;
+    dstCanvas.height = H;
+    var sCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+    var dCtx = dstCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sCtx || !dCtx) return srcCanvas;
+
+    var sImg = sCtx.getImageData(0, 0, sw, sh);
+    var sData = sImg.data;
+    var dImg = dCtx.createImageData(W, H);
+    var dData = dImg.data;
+
+    var h0 = Hmat[0], h1 = Hmat[1], h2 = Hmat[2],
+        h3 = Hmat[3], h4 = Hmat[4], h5 = Hmat[5],
+        h6 = Hmat[6], h7 = Hmat[7];
+
+    for (var v = 0; v < H; v++) {
+      for (var u = 0; u < W; u++) {
+        var denom = h6 * u + h7 * v + 1;
+        if (Math.abs(denom) < 1e-8) continue;
+        var sx = (h0 * u + h1 * v + h2) / denom;
+        var sy = (h3 * u + h4 * v + h5) / denom;
+        var dstIdx = (v * W + u) * 4;
+        if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) {
+          dData[dstIdx] = dData[dstIdx + 1] = dData[dstIdx + 2] = 255;
+          dData[dstIdx + 3] = 255;
+          continue;
+        }
+        var x0 = sx | 0, y0 = sy | 0;
+        var dx = sx - x0, dy = sy - y0;
+        var w00 = (1 - dx) * (1 - dy),
+            w10 = dx * (1 - dy),
+            w01 = (1 - dx) * dy,
+            w11 = dx * dy;
+        var i00 = (y0 * sw + x0) * 4,
+            i10 = i00 + 4,
+            i01 = i00 + sw * 4,
+            i11 = i01 + 4;
+        dData[dstIdx]     = (sData[i00] * w00 + sData[i10] * w10 + sData[i01] * w01 + sData[i11] * w11) | 0;
+        dData[dstIdx + 1] = (sData[i00 + 1] * w00 + sData[i10 + 1] * w10 + sData[i01 + 1] * w01 + sData[i11 + 1] * w11) | 0;
+        dData[dstIdx + 2] = (sData[i00 + 2] * w00 + sData[i10 + 2] * w10 + sData[i01 + 2] * w01 + sData[i11 + 2] * w11) | 0;
+        dData[dstIdx + 3] = 255;
+      }
+    }
+    dCtx.putImageData(dImg, 0, 0);
+    return dstCanvas;
+  }
+
+  /** 自动估计课表外框四角（返回归一化坐标 [{x,y} x 4: TL, TR, BR, BL]） */
+  function detectCorners(canvas) {
+    if (!canvas) {
+      return [{ x: 0.04, y: 0.04 }, { x: 0.96, y: 0.04 }, { x: 0.96, y: 0.96 }, { x: 0.04, y: 0.96 }];
+    }
+    var lines = detectLines(canvas);
+    var w = canvas.width || 1, h = canvas.height || 1;
+    var vl = lines.vlines || [], hl = lines.hlines || [];
+    var x0 = vl.length >= 2 ? Math.max(0.01, vl[0] / w) : 0.04;
+    var x1 = vl.length >= 2 ? Math.min(0.99, vl[vl.length - 1] / w) : 0.96;
+    var y0 = hl.length >= 2 ? Math.max(0.01, hl[0] / h) : 0.04;
+    var y1 = hl.length >= 2 ? Math.min(0.99, hl[hl.length - 1] / h) : 0.96;
+    if (x1 - x0 < 0.4) { x0 = 0.04; x1 = 0.96; }
+    if (y1 - y0 < 0.4) { y0 = 0.04; y1 = 0.96; }
+    return [
+      { x: Number(x0.toFixed(3)), y: Number(y0.toFixed(3)) },
+      { x: Number(x1.toFixed(3)), y: Number(y0.toFixed(3)) },
+      { x: Number(x1.toFixed(3)), y: Number(y1.toFixed(3)) },
+      { x: Number(x0.toFixed(3)), y: Number(y1.toFixed(3)) }
+    ];
+  }
+
+
+
+  /**
+   * 彩色课表卡片底纹剥离（Color Card Background Stripping）
+   * 解决 WakeUp / 超级课程表 / 教务系统彩色课表截图中：
+   * 1) 饱和色块（粉/蓝/绿/紫/橙底纹）转灰度后与文字对比度低；
+   * 2) 深色卡片内白字与浅色背景黑字混排，导致固定 64x64 分块反相把汉字切碎。
+   */
+  function stripColorCardBg(canvas) {
+    if (!canvas || !canvas.getContext) return canvas;
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
+    var d = img.data, n = w * h;
+
+    // 先拷贝一份原始 RGB 供邻域采样，避免原地修改互相污染
+    var orig = new Uint8ClampedArray(d);
+    var step = Math.max(2, Math.min(6, (w / 200) | 0));
+
+    for (var i = 0; i < n; i++) {
+      var o = i * 4;
+      var r = orig[o], g = orig[o + 1], b = orig[o + 2];
+      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+      var sat = maxC - minC;
+      var lum = (0.299 * r + 0.587 * g + 0.114 * b) | 0;
+
+      if (sat >= 38 && lum >= 75 && lum <= 245) {
+        d[o] = d[o + 1] = d[o + 2] = 248;
+      } else if (lum >= 235 && sat <= 30) {
+        var x = i % w, y = (i / w) | 0;
+        var nbColor = 0;
+        var dirs = [[-step, 0], [step, 0], [0, -step], [0, step]];
+        for (var k = 0; k < 4; k++) {
+          var nx = x + dirs[k][0], ny = y + dirs[k][1];
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            var no = (ny * w + nx) * 4;
+            var nr = orig[no], ng = orig[no + 1], nb = orig[no + 2];
+            var nSat = Math.max(nr, ng, nb) - Math.min(nr, ng, nb);
+            var nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+        }
+        if (nbColor >= 2) {
+          d[o] = d[o + 1] = d[o + 2] = 28;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  /**
+   * 沿检测到的表格网格线绘制纯白隔离带（Grid Line Isolation Gutter）
+   * 作用：在保留 lines 坐标供后续归格使用的前提下，把送给 Tesseract 的画布上的表格黑线抹白，
+   * 既防止边框线被误识为「一 / | / 1」，又物理阻断相邻两列文字被 LSTM 连成同一行。
+   */
+  function isolateGridLines(canvas, lines, gutterWidth) {
+    if (!canvas || !canvas.getContext || !lines) return canvas;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return canvas;
+    var gw = gutterWidth || 4;
+    var half = Math.ceil(gw / 2);
+    var w = canvas.width, h = canvas.height;
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    (lines.vlines || []).forEach(function (vx) {
+      ctx.fillRect(Math.max(0, vx - half), 0, gw, h);
+    });
+    (lines.hlines || []).forEach(function (hy) {
+      ctx.fillRect(0, Math.max(0, hy - half), w, gw);
+    });
+    ctx.restore();
+    return canvas;
+  }
+
   /** OTSU：由灰度直方图求最佳阈值 */
   function otsu(hist, total) {
     var sumAll = 0, i;
@@ -42524,20 +45347,34 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     return { vlines: vlines, hlines: hlines };
   }
 
-  /** 单次识别：增强图 → Tesseract（返回原始结果） */
+  /** 单次识别：增强图 → Tesseract（返回原始结果，支持直接传入已透视矫正的 opts.canvas） */
   function recognizeOnce(file, opts, onProgress) {
     opts = opts || {};
     var norm;
-    return normalizeImage(file).then(function (n) {
+    var initPromise = opts.canvas ? new Promise(function (resolve) {
+      var c = document.createElement('canvas');
+      c.width = opts.canvas.width;
+      c.height = opts.canvas.height;
+      c.getContext('2d').drawImage(opts.canvas, 0, 0);
+      c.toBlob(function (b) {
+        resolve({ blob: b, canvas: c, width: c.width, height: c.height });
+      }, 'image/png');
+    }) : normalizeImage(file);
+    var lines = null;
+    return initPromise.then(function (n) {
       norm = n;
+      if (onProgress) onProgress({ status: '正在分析表格结构与去噪…', progress: 0.05 });
+      stripColorCardBg(n.canvas);
       if (opts.binary) binarize(n.canvas);
       else enhance(n.canvas);
+      lines = detectLines(n.canvas);
+      if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
+        isolateGridLines(n.canvas, lines, 4);
+      }
       return new Promise(function (resolve) {
         n.canvas.toBlob(function (b) { norm.blob = b; resolve(); }, 'image/png');
       });
     }).then(function () {
-      if (onProgress) onProgress({ status: '正在分析表格结构…', progress: 0.05 });
-      var lines = detectLines(norm.canvas);
       return loadLib().then(function (T) {
         // createWorker 才能显式要求输出 TSV（v5+ 默认不返回坐标）
         return T.createWorker('chi_sim', 1, {
@@ -42614,12 +45451,13 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   }
 
   /** 本地识别：返回 words（含坐标），失败时自动换一种切分方式重试 */
-  function recognizeLocal(file, onProgress) {
-    return recognizeOnce(file, { psm: '4' }, onProgress).then(function (first) {
+  function recognizeLocal(file, onProgress, extraOpts) {
+    extraOpts = extraOpts || {};
+    return recognizeOnce(file, { psm: '4', canvas: extraOpts.canvas }, onProgress).then(function (first) {
       if (first.words.length >= 12 || first.words.length === 0) return first;
       // 词太少：改用二值化 + 稀疏文本模式再试一次
       if (onProgress) onProgress({ status: '换个方式再识别一次…', progress: 0.5 });
-      return recognizeOnce(file, { psm: '11', binary: true }, onProgress).then(function (second) {
+      return recognizeOnce(file, { psm: '11', binary: true, canvas: extraOpts.canvas }, onProgress).then(function (second) {
         return second.words.length > first.words.length ? second : first;
       }).catch(function () { return first; });
     });
@@ -42759,6 +45597,14 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     opts = opts || {};
     if (!words || !words.length) {
       return { cols: defaultCols(), rows: [], cells: [] };
+    }
+    if (opts.customLines && opts.customLines.vlines && opts.customLines.vlines.length >= 5 &&
+        opts.customLines.hlines && opts.customLines.hlines.length >= 3) {
+      var byCustom = buildFromLines(words, opts.customLines);
+      if (byCustom && byCustom.rows.length) {
+        byCustom.meta = { dayHeaders: 7, rowsByLines: true, customGrid: true };
+        return byCustom;
+      }
     }
 
     var list = words.map(function (w) {
@@ -43184,6 +46030,139 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
    * 把一格文字拆成 { name, location, teacher, weeks, note }
    * 支持：「高等数学\n教三301\n张老师」「大学英语(教三-301)(1-16周)」
    */
+
+  /* ==========================================================
+   * 高校课程专业词库与模糊纠偏 (Curriculum Dictionary & Fuzzy Correction)
+   * 针对本地 Tesseract chi_sim 常见形近字误识（如 高散数学→高等数学、微积今→微积分）
+   * ========================================================== */
+  var COURSE_DICT = [
+    '高等数学', '微积分', '线性代数', '概率论与数理统计', '概率论', '数理统计', '离散数学', '复变函数与积分变换',
+    '复变函数', '数学建模', '数值分析', '计算方法', '常微分方程', '偏微分方程', '数学分析', '高等代数', '抽象代数',
+    '实变函数', '泛函分析', '拓扑学', '运筹学', '最优化方法', '应用统计',
+    '大学物理', '大学物理实验', '普通物理', '理论力学', '材料力学', '结构力学', '流体力学', '弹性力学', '工程力学',
+    '电动力学', '热力学与统计物理', '量子力学', '固体物理', '光学', '原子物理学',
+    '大学英语', '综合英语', '英语听说', '英语视听说', '英语写作', '英语阅读', '学术英语', '科技英语', '大学日语', '大学德语', '大学法语',
+    '程序设计基础', 'C语言程序设计', 'Python程序设计', 'Java程序设计', '面向对象程序设计', '高级语言程序设计',
+    '数据结构', '数据结构与算法', '算法设计与分析', '操作系统', '计算机网络', '计算机组成原理', '计算机体系结构',
+    '数据库系统原理', '数据库原理及应用', '软件工程', '编译原理', '人工智能', '人工智能导论', '机器学习', '深度学习',
+    '数字图像处理', '计算机图形学', '计算机视觉', '自然语言处理', '数据挖掘', '大数据技术', '云计算技术',
+    '网络安全', '信息安全概论', '密码学', '嵌入式系统', '单片机原理及应用', '微机原理与接口技术', '汇编语言',
+    '数字逻辑', '数字电路与逻辑设计', '模拟电子技术', '数字电子技术', '电路原理', '电路分析', '电路分析基础',
+    '信号与系统', '数字信号处理', '自动控制原理', '现代控制理论', '通信原理', '电磁场与电磁波', '高频电子线路',
+    '传感器与检测技术', '电机与拖动', '电力电子技术', '工程制图', '机械制图', '画法几何及机械制图', '机械设计基础',
+    '机械原理', '互换性与测量技术', '工程材料', '金工实习', '电子工艺实习', '电工电子实习',
+    '无机化学', '有机化学', '分析化学', '物理化学', '生物化学', '仪器分析', '化工原理', '高分子化学', '普通生物学',
+    '分子生物学', '细胞生物学', '遗传学', '微生物学', '生理学', '解剖学', '病理学', '药理学', '医学统计学',
+    '马克思主义基本原理', '毛泽东思想和中国特色社会主义理论体系概论', '习近平新时代中国特色社会主义思想概论',
+    '思想道德与法治', '思想道德修养与法律基础', '中国近现代史纲要', '形势与政策', '军事理论', '军事技能',
+    '大学生心理健康教育', '大学生职业生涯规划', '就业指导', '创新创业基础', '劳动教育',
+    '大学体育', '体育', '羽毛球', '篮球', '排球', '足球', '乒乓球', '网球', '太极拳', '健美操', '游泳',
+    '微观经济学', '宏观经济学', '政治经济学', '计量经济学', '金融学', '货币银行学', '国际经济学', '国际贸易实务',
+    '财政学', '统计学', '管理学', '管理学原理', '会计学', '基础会计', '中级财务会计', '财务管理', '市场营销学',
+    '组织行为学', '人力资源管理', '战略管理', '运营管理', '经济法', '民法总论', '刑法学', '宪法学', '行政法与行政诉讼法',
+    '大学语文', '中国古代文学', '中国现当代文学', '外国文学', '传播学概论', '新闻学概论', '教育学原理', '普通心理学'
+  ];
+
+  // 高频形近字直接替换表（先做局部词根修复，再做编辑距离对齐）
+  var OCR_TYPO_RULES = [
+    [/高[散等数筹][数枚字学]学?/g, '高等数学'],
+    [/微积[今份兮分]/g, '微积分'],
+    [/[线浅][性牲形]代[数枚]/g, '线性代数'],
+    [/概[率幸][论沦]/g, '概率论'],
+    [/数理统[汁计]/g, '数理统计'],
+    [/[大太][学字]英[语捂语]/g, '大学英语'],
+    [/[大太][学字]物[理埋]/g, '大学物理'],
+    [/[大太][学字]体[育肓]/g, '大学体育'],
+    [/体[肓育]/g, '体育'],
+    [/数[据椐]结[构抅]/g, '数据结构'],
+    [/操[作怍]系[统統]/g, '操作系统'],
+    [/[计汁][算箅][机饥]网[络絡]/g, '计算机网络'],
+    [/[计汁][算箅][机饥]组成原[理埋]/g, '计算机组成原理'],
+    [/离[散撤][数枚]学/g, '离散数学'],
+    [/编译原[理埋]/g, '编译原理'],
+    [/软件工[程呈]/g, '软件工程'],
+    [/马[克兑]思主[义乂]/g, '马克思主义'],
+    [/毛[泽择][东乐]/g, '毛泽东'],
+    [/思想道[德徳]/g, '思想道德'],
+    [/近现代[史吏]纲要/g, '近现代史纲要'],
+    [/形[势努]与政[策笨]/g, '形势与政策'],
+    [/模[拟似]电子技术/g, '模拟电子技术'],
+    [/数字电子技[术木]/g, '数字电子技术'],
+    [/信[号亏]与系统/g, '信号与系统']
+  ];
+
+  // 反义/姊妹学科保护对：这几组词虽然只差 1 个字，但绝不能互相纠偏
+  var DISTINCT_PREFIXES = ['微观', '宏观', '无机', '有机', '分析', '物理', '生物', '模拟', '数字', '常微', '偏微', '实变', '复变', '古代', '现代'];
+
+  function editDistance(a, b) {
+    var m = a.length, n = b.length;
+    var dp = [];
+    for (var i = 0; i <= m; i++) {
+      dp[i] = [i];
+      for (var j = 1; j <= n; j++) {
+        dp[i][j] = i === 0 ? j : 0;
+      }
+    }
+    for (var r = 1; r <= m; r++) {
+      for (var c = 1; c <= n; c++) {
+        if (a.charAt(r - 1) === b.charAt(c - 1)) dp[r][c] = dp[r - 1][c - 1];
+        else dp[r][c] = 1 + Math.min(dp[r - 1][c], dp[r][c - 1], dp[r - 1][c - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  /**
+   * 对识别出的课程名进行高校专业词库纠偏
+   * @returns {{ name: string, corrected: boolean, original: string }}
+   */
+  function correctCourseName(rawName) {
+    var orig = String(rawName || '').trim();
+    if (!orig) return { name: '', corrected: false, original: '' };
+
+    var fixed = orig;
+    for (var i = 0; i < OCR_TYPO_RULES.length; i++) {
+      fixed = fixed.replace(OCR_TYPO_RULES[i][0], OCR_TYPO_RULES[i][1]);
+    }
+    if (fixed !== orig) {
+      return { name: fixed, corrected: true, original: orig };
+    }
+
+    // 剥离尾部常见编号后缀（如 A / B / (上) / （二） / II / 实验）后再比对词干
+    var suffixMatch = /^([一-龥A-Za-z]{3,14}?)(\s*(?:[A-Da-d1-4ⅠⅡⅢⅣ]+|[（(][上下一二三四1-4A-D][)）]|实验|实践|上|下)?)$/.exec(orig);
+    var stem = suffixMatch ? suffixMatch[1] : orig;
+    var tail = suffixMatch ? (suffixMatch[2] || '') : '';
+
+    if (COURSE_DICT.indexOf(stem) >= 0) {
+      return { name: orig, corrected: false, original: orig };
+    }
+
+    // 若词干长度 >= 3，查找编辑距离为 1 的同长度标准课程名
+    if (stem.length >= 3) {
+      for (var d = 0; d < COURSE_DICT.length; d++) {
+        var cand = COURSE_DICT[d];
+        if (cand.length !== stem.length) continue;
+        if (editDistance(stem, cand) === 1) {
+          // 检查是否触碰反义前缀保护对（如 微观经济学 vs 宏观经济学）
+          var conflict = false;
+          for (var p = 0; p < DISTINCT_PREFIXES.length; p++) {
+            var pfx = DISTINCT_PREFIXES[p];
+            if ((stem.indexOf(pfx) === 0 && cand.indexOf(pfx) !== 0) ||
+                (cand.indexOf(pfx) === 0 && stem.indexOf(pfx) !== 0)) {
+              conflict = true;
+              break;
+            }
+          }
+          if (!conflict) {
+            return { name: cand + tail, corrected: true, original: orig };
+          }
+        }
+      }
+    }
+
+    return { name: orig, corrected: false, original: orig };
+  }
+
   function parseCell(text) {
     var raw = String(text || '');
     var lines = raw.split(/[\n\r]+|\s+\/\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -43202,7 +46181,10 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
       segs.forEach(function (seg) { takeFields(seg, out, names, notes); });
     });
 
-    out.name = tidyName(names.length ? names[0] : (lines[0] || ''));
+    var rawTitle = tidyName(names.length ? names[0] : (lines[0] || ''));
+    var corr = correctCourseName(rawTitle);
+    out.name = corr.name;
+    if (corr.corrected) out.correctedFrom = corr.original;
     out.note = tidy(notes.join(' '));
     return out;
   }
@@ -43288,14 +46270,22 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   }
 
   function recognizeCloud(file, cfg) {
-    var prompt = '这是一张课程表截图。请只提取课程格子里的内容，' +
-      '忽略表头行（星期几、时间、节次、课程、教室这类表头文字），也不要把表头当课程。' +
-      '返回 JSON：{"courses":[{"day":1-7,"start":节次,"end":节次,' +
-      '"name":"课程名","location":"上课地点","teacher":"教师","weeks":"周次"}]}。' +
-      'day 用 1=周一 … 7=周日；start/end 是占用的节次序号（表格第几行就是第几节，连上的课写区间）。' +
-      '课程名里不要包含地点、教师和周次，这三项分别放到对应字段；没有的留空字符串。只返回 JSON，不要解释。';
+    var prompt = '你是一个高校教务系统课表结构化提取专家。请从这张课程表图片中提取所有课程安排。\n' +
+      '【核心提取规则】：\n' +
+      '1. 严格忽略表头与行列坐标文字（星期一至周日、第1-12节、08:00-09:40、上午/下午/晚上等绝不能当成课程）。\n' +
+      '2. 连堂课合并：若某门课纵向跨越多节（如第1-2节或第3-4节合并单元格），请将 start 设为起始节次序号，end 设为结束节次序号（整数 1-14）。\n' +
+      '3. 同格多课拆分：若同一个格子里上下写了两门不同周次的课（例如单周上A课、双周上B课，或1-8周上A、9-16周上B），必须拆成两条独立的课程记录！\n' +
+      '4. 字段剥离：name 只保留纯净课程名称（并自动修正明显错别字）；location 提取教学楼/教室/机房编号（如“教三-301”“理教204”）；teacher 提取任课教师姓名（去掉“老师/教授”后缀或保留原名）；weeks 提取周次描述（如“1-16周”“1-15周(单)”“2-16周(双)”）。\n' +
+      '5. 只返回严格合法的 JSON，格式为：{"courses":[{"day":1,"start":1,"end":2,"name":"高等数学A","location":"教三301","teacher":"王敏","weeks":"1-16周"}]}。day 取值 1(周一) 至 7(周日)。不要输出任何解释或 Markdown 代码块包裹以外的文字。';
     return visionJSON(file, cfg, prompt).then(function (data) {
-      return data.courses || [];
+      return (data.courses || []).map(function (c) {
+        if (c && c.name) {
+          var corr = correctCourseName(String(c.name).trim());
+          c.name = corr.name;
+          if (corr.corrected) c.correctedFrom = corr.original;
+        }
+        return c;
+      });
     });
   }
 
@@ -43364,12 +46354,22 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     recognizeCloudTasks: recognizeCloudTasks,
     recognizeCloudSleep: recognizeCloudSleep,
     binarize: binarize,
+    enhance: enhance,
     normalizeImage: normalizeImage,
+    rotateCanvas: rotateCanvas,
+    solveHomography: solveHomography,
+    warpPerspective: warpPerspective,
+    detectCorners: detectCorners,
+    detectLines: detectLines,
+    stripColorCardBg: stripColorCardBg,
+    isolateGridLines: isolateGridLines,
     buildGrid: buildGrid,
     buildFromLines: buildFromLines,
     parseCell: parseCell,
     parseWeeks: parseWeeks,
     splitCell: splitCell,
+    correctCourseName: correctCourseName,
+    COURSE_DICT: COURSE_DICT,
     isHeaderWord: function (t) {
       return !!dayOf(t) || !!periodOf(t) || isTime(t) || isMeta(t);
     },

@@ -188,6 +188,25 @@
         el('button', { class: 'btn', text: '关闭', onclick: function () { api.close(); } })
       ])
     });
+    if (!global.__cpTaskShotPasteBound) {
+      global.__cpTaskShotPasteBound = true;
+      document.addEventListener('paste', function (e) {
+        if (!bodyEl || !document.body.contains(bodyEl) || !S || S.step !== 'pick') return;
+        var items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf('image/') === 0) {
+            var f = items[i].getAsFile();
+            if (f) {
+              e.preventDefault();
+              pickFile(f);
+              UI.toast('已从剪贴板粘贴截图');
+              break;
+            }
+          }
+        }
+      });
+    }
     draw();
   }
 
@@ -205,7 +224,7 @@
 
     bodyEl.appendChild(el('div', { class: 'ocr-intro' }, [
       el('b', { text: '把活动页、通知截图变成待办' }),
-      el('p', { text: '识别出的事项会先进候选清单，你勾选并确认后才写入待办，不会直接加。' })
+      el('p', { text: '识别出的事项会先进候选清单，你勾选并确认后才写入待办（支持直接按 Ctrl+V 粘贴剪贴板截图）。' })
     ]));
 
     var fileInput = el('input', {
