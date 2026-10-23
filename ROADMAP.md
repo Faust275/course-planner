@@ -41,7 +41,7 @@
 - **⑤ 源码模块化 + 构建期打包（已完成）**：`course-planner-web/` 成为源码根。
   - `assets/css/style.css` + `assets/js/{store,ui,ak_ops,pet,app,quotes,quotes-data,foods,ocr,speech,theme,onboard}.js` + `assets/js/views/*.js`（课表/今日/日历/日程/象限/待办/计划/笔记/记账/抽卡/专注/收集/成绩/设置 + ocr-dialog）。
   - `src/index.template.html` 只留 head + body 壳 + `<link>/<script src>` 占位；`build.py` 内联为单文件 `index.html`。
-  - `sync_from_index.py` 可把任意历史单文件重新抽成模块；`namespace_cp.py` 负责 ④ 的前缀改写。
+  - `sync_from_index.py` 可把任意历史单文件重新抽成模块；`namespace_cp.py` 负责 ④ 的前缀改写（已完成使命，2026-10-23 删除）。
   - 复现：`cd course-planner-web && python3 build.py` → 生成单文件，行为与原版逐项等价（nav 12、viewsHTML 一致、0 报错）。
   - 说明：因各模块均为全局 IIFE、无 import，直接用 `build.py` 顺序内联即可，无需引入 esbuild。
 - **⑥ 机制主题皮肤（浅色，已完成）**：`theme.js` 新增 `applyMech()`，按 `settings.themeSkin` + `settings.pomodoro.mode` 给 `<html data-mech="tree|factory">`；`style.css` 新增两组浅色变量块（圆角/阴影/形状/字族）+ `.cp-deco` 装饰层（森林藤蔓/花叶、抽卡 HUD 标线/蓝图网点/部署箭头）。

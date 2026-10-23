@@ -4,5 +4,3 @@ node_modules/
 *.bak
 *.log
 
-# 一次性脚本（路径写死到旧工程，已过时）
-download_ops.py

@@ -41,7 +41,6 @@ course-planner-web/
 ├── make_logos_icon.py        用一张角色头像生成 PWA 图标（本机自用，图标不进 Git）
 ├── manifest.webmanifest      PWA manifest（含 今日/待办/写日记 三个 shortcuts）
 ├── sync_from_index.py        从任意历史单文件反向抽取模块
-├── namespace_cp.py           批量加 cp- 类名前缀（一次性迁移脚本）
 ├── verify_build.mjs          Playwright 冒烟回归
 ├── verify_sync_scope.mjs     同步码分档导出验证
 ├── verify_sync_ui.mjs        同步码弹窗交互验证

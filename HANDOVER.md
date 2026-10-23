@@ -51,7 +51,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 - **`assets/js/views/task-shot.js`** —— 截图转待办：`TaskShot.open()` 弹窗，本地走 `Ocr.recognizeLocal` + `linesFromWords/keepLine/toTasks`，云端走 `Ocr.recognizeCloudTasks`；识别结果只进候选清单，勾选后才 `Store.addTask`。纯函数四个（`normalizeLine/linesFromWords/keepLine/toTasks`）已导出，可脱离 DOM 单测。
 - **`assets/js/views/*.js`** —— 每个页面一个文件（课表、今日、日历、待办、计划、目标、日记、记账、专注、设置……），互不 import。注意：**日程 / 象限 / 统计已由独立视图改为宿主页分页**（`calendar.js` 承载 `AgendaPane`，`tasks.js` 承载 `QuadrantPane` / `StatsPane`），地址是 `#/calendar/agenda`、`#/tasks/quadrant`、`#/tasks/stats`。
 - **`tests/run.mjs`** —— 纯函数单测，不依赖浏览器；`verify_*.mjs` 是 Playwright 端到端回归。
-- **一次性脚本**：`namespace_cp.py`（批量加类名前缀）、`sync_from_index.py`（从历史单文件反抽模块）已在迁移期发挥作用，新功能用不到。
+- **一次性脚本**：`sync_from_index.py`（从历史单文件反抽模块）留作应急回退工具；`namespace_cp.py` 已完成类名前缀迁移、再跑会二次加前缀，已删除。`download_ops.py` 路径写死在旧工程，也已删除。
 
 **没有打包器、没有框架、没有 npm 依赖（除测试用的 playwright）。** 每个模块是全局 IIFE，构建就是把文件按模板顺序内联进 HTML。
 
