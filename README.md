@@ -35,7 +35,7 @@ course-planner-web/
 │   ├── foods.js / speech.js / ocr.js / theme.js / onboard.js
 │   └── views/*.js            各页面（课表、今日、日历、日程、象限、待办、计划、
 │                             目标、日记、记账、抽卡、专注、收集、成绩、设置、
-│                             统计、ocr-dialog）
+│                             统计、ocr-dialog、task-shot）
 ├── build.py                  构建：内联 CSS/JS → 单文件 index.html
 ├── make_icons.py             生成默认 PWA 图标（靛蓝日历）
 ├── make_logos_icon.py        用一张角色头像生成 PWA 图标（本机自用，图标不进 Git）
@@ -55,6 +55,8 @@ course-planner-web/
 ├── verify_repeat.mjs         重复任务：展开生成、保持节奏、until 截止
 ├── verify_repeat_ui.mjs      重复任务文案：日期标签、人话摘要、无日期拦截
 ├── verify_weekend.mjs        课表周末显示：5/7 列、设置同步、数据不受影响
+├── verify_tt_narrow.mjs      窄屏隐藏周末：5 列一屏放下、无横向滚动、时间列收窄
+├── verify_task_shot.mjs      截图转待办：入口、噪声过滤、候选清单、勾选后写入
 ├── verify_anniv.mjs          倒数纪念日：公历/农历顺延、今日卡片、弹窗
 ├── verify_export.mjs         课表导出图片：布局复用、单双周、撞课堆叠、预览下载
 ├── verify_subtask.mjs        子任务：只一层、四条联动开关、删除去向、角标口径
@@ -71,7 +73,7 @@ course-planner-web/
 ├── verify_b_records.mjs      记录类发分（睡眠/饮食/活动）+ KR 发分
 ├── verify_bg.mjs             板块联动 B–G：目标今日卡 / 本周考试 / 消费构成 / 健康提示 / 课程投入 / GPA KR / 专注里程
 ├── eq_check.mjs              Playwright 跨视图计算样式等价对比
-└── tests/run.mjs             纯函数单测（779 条，Palette / CourseException / TaskNLP 直读源文件）
+└── tests/run.mjs             纯函数单测（804 条，Palette / CourseException / TaskNLP / TaskShot 直读源文件）
 ```
 
 ## 构建
@@ -119,6 +121,9 @@ node verify_pwa.mjs         # 深链接与装到桌面（manifest / 快捷方式
 node verify_goals.mjs       # 目标（三类关键结果、上限、归档、月末复盘、搜索、同步）
 node verify_settings_cat.mjs # 设置三级结构（分类卡、24 项可达、深链、窄屏无溢出）
 node verify_shop.mjs        # 商店（月卡结算 30 天 / 漏签 / 双币扣款 / 满潜兑换 / 窄屏）
+node verify_weekend.mjs     # 课表周末开关（5/7 列、设置同步、数据不动）
+node verify_tt_narrow.mjs   # 窄屏隐藏周末：5 列一屏放下、无横向滚动
+node verify_task_shot.mjs   # 截图转待办：入口、噪声过滤、候选清单、勾选写入
 ```
 
 各 `verify_*.mjs` 用 `URL` 环境变量指定地址，不写死端口。
@@ -269,6 +274,15 @@ node verify_shop.mjs        # 商店（月卡结算 30 天 / 漏签 / 双币扣�
 - 日期：相对（今天 / 明天 / 后天 / 大后天 / N天后）、星期（下周三 / 本周六 / 周五，已过则顺延）、绝对（`2026-10-25` / `10月25日` / `10/25`）
 
 解析结果（标题 / 日期 / 时间 / 优先级 / 标签 / 课程）直接回填待办表单；**编辑已有任务时不触发**（`tasks.js` 仅在 `!isEdit` 时调用）。
+
+### 截图转待办（`assets/js/views/task-shot.js` → `TaskShot.open`）
+
+待办页快速添加条右侧的相机按钮：选一张活动页 / 通知截图（手机可直接拍照），识别出的事项先进入**候选清单**，逐条可改标题、改日期时间、取消勾选，确认后才批量写入。
+
+- **本地通道**：Tesseract 在本机识别（图片不出设备，首次下载约 1.8MB 中文模型），词按 `cy` 聚类成行 → `normalizeLine()` 压掉 OCR 塞进汉字与数字之间的空格（否则「10 月 25 日」会打断日期正则）→ 逐行交给 `TaskNLP.parse`，日期/时间/标签/课程直接落字段。
+- **云端通道**：复用「设置 → 图片识别」里那套 OpenAI 兼容接口，`Ocr.recognizeCloudTasks()` 用一段面向「活动页/通知」的提示词，一次调用直接返回 `tasks[]`（标题 / 日期 / 时间 / 备注 / 优先级），相对日期由模型按传入的今天换算。
+- **噪声过滤**：状态栏时间、电量、纯数字/符号、`返回/分享/预览/代码` 这类导航词，以及「点击下方按钮立即报名」这类行动号召，都在 `keepLine()` 里挡掉；拿不准的一律留在清单里由用户决定，**不做静默丢弃**。
+- 实测（720×520 的模拟通知截图，本地通道）：识别 + 整理约 7.6 秒，6 条候选中日期与时间全部正确。
 
 ### 白噪音（`assets/js/white-noise.js` → `WhiteNoise`）
 

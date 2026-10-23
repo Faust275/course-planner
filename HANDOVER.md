@@ -12,8 +12,8 @@
 
 | 项 | 状态 |
 |---|---|
-| 最后提交 | 备份默认剥离 API 密钥（`exportJSON` 新增 `includeKeys` 选项，设置页可勾选；本机自动备份仍保留密钥）；导出剥离统一走 `stripKeys()`。顺手修复既有 bug：`settings.js` 一直在调 `V.toggle` 但 `ui.js` 从未实现，进「精力节律 → 自定义」就报错，现已补上（复用 `.cp-switch` 样式）。新增 8 条断言（单测 771→779） |
-| 单元测试 | `node tests/run.mjs` **779 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；以及 TaskNLP 自然语言待办解析） |
+| 最后提交 | ① 窄屏隐藏周末时表格不再撑 640px 最小宽度，周一到周五按屏宽平分、一屏放下（`verify_tt_narrow.mjs` 13 项）；② 新增截图转待办（`views/task-shot.js` + `Ocr.recognizeCloudTasks`，本地/云端双通道，先候选清单再写入）；③ 顺带修 `TaskNLP` 把 `24:00` 夹成 `23:00` 的问题（现记 23:59）。单测 779→804 |
+| 单元测试 | `node tests/run.mjs` **804 条全过**（含重复任务三档：动态摘要、锚点引擎、多选星期 + 月位置规则；TaskNLP 自然语言待办解析；TaskShot 截图切行/噪声过滤/逐行解析） |
 | UI 回归 | 36 个 `verify_*.mjs` 全部通过（新增 `verify_repeat_custom.mjs` 覆盖第三档多选星期 / 月位置 / 月末；`verify_repeat_ui.mjs` 为第一档文案回归；需 Playwright，全部用 `URL` 环境变量指定地址）；`verify_theme.mjs`（23 项）覆盖机制皮肤与深色；`verify_timeplan.mjs` 已固定时钟消除时段 flaky |
 | 样式等价 | `eq_check.mjs` 12 视图 1714 项计算样式 0 差异 |
 | 窄屏 | 390px 宽度无横向溢出 |
@@ -48,6 +48,7 @@ UI 回归需要 Playwright：`npm i playwright && npx playwright install chromiu
 - **`assets/js/ui.js`** —— `el()` 元素工厂、`V.modal/confirm/segment/select` 弹窗组件、Toast。
 - **`assets/js/save-file.js`** —— 统一保存通道 `window.SaveFile.save(name, content, opts)`：能力探测 `showSaveFilePicker → navigator.share → a[download] → 复制兜底面板`，诚实反馈（取消不谎报、WebView 不假成功）；`el` 经 ui.js 封装仅以 `UI.el` 暴露，本模块取别名使用。新增下载需求一律走它，不要自造 `a[download]`。
 - **`assets/js/router.js` / `app.js`** —— hash 深链接（`#/today`、`#/diary` 等）、启动 boot、SW 注册、安装提示。
+- **`assets/js/views/task-shot.js`** —— 截图转待办：`TaskShot.open()` 弹窗，本地走 `Ocr.recognizeLocal` + `linesFromWords/keepLine/toTasks`，云端走 `Ocr.recognizeCloudTasks`；识别结果只进候选清单，勾选后才 `Store.addTask`。纯函数四个（`normalizeLine/linesFromWords/keepLine/toTasks`）已导出，可脱离 DOM 单测。
 - **`assets/js/views/*.js`** —— 每个页面一个文件（课表、今日、日历、待办、计划、目标、日记、记账、专注、设置……），互不 import。注意：**日程 / 象限 / 统计已由独立视图改为宿主页分页**（`calendar.js` 承载 `AgendaPane`，`tasks.js` 承载 `QuadrantPane` / `StatsPane`），地址是 `#/calendar/agenda`、`#/tasks/quadrant`、`#/tasks/stats`。
 - **`tests/run.mjs`** —— 纯函数单测，不依赖浏览器；`verify_*.mjs` 是 Playwright 端到端回归。
 - **一次性脚本**：`namespace_cp.py`（批量加类名前缀）、`sync_from_index.py`（从历史单文件反抽模块）已在迁移期发挥作用，新功能用不到。

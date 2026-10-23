@@ -556,6 +556,13 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 @media (max-width: 640px) {
   .cp-tt { min-width: 700px; }
+  /* 隐藏周末只剩 5 列：不再撑最小宽度，按屏幕平分，周一到周五一屏看完 */
+  .cp-tt.cp-no-weekend { min-width: 0; width: 100%; }
+  .cp-tt.cp-no-weekend .cp-tt-head th.cp-col-time,
+  .cp-tt.cp-no-weekend .cp-tt-body td.cp-col-time { width: 38px; min-width: 38px; }
+  .cp-tt.cp-no-weekend .cp-course-block { padding: 3px 4px; }
+  .cp-tt.cp-no-weekend .cp-course-block .cp-cb-name { font-size: 10.5px; }
+  .cp-tt.cp-no-weekend .cp-course-block .cp-cb-meta { font-size: 9px; }
   .cp-tt-head th.cp-col-time, .cp-tt-body td.cp-col-time { width: 44px; min-width: 44px; }
   .cp-tt-head th .cp-dow { font-size: 11.5px; }
   .cp-tt-head th .cp-date { font-size: 9.5px; }
@@ -1910,6 +1917,35 @@ input[type="range"]::-moz-range-thumb {
   background: var(--line); overflow: hidden;
 }
 .cp-ocr-bar i { display: block; height: 100%; background: var(--primary); transition: width .3s ease; }
+
+/* ---- 截图转待办：候选清单 ---- */
+.cp-shot-list {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 54vh; overflow: auto; padding-right: 2px;
+}
+.cp-shot-row {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); transition: opacity .15s;
+}
+.cp-shot-row.cp-off { opacity: .45; }
+.cp-shot-check { display: flex; align-items: center; padding-top: 3px; }
+.cp-shot-check input { width: 16px; height: 16px; accent-color: var(--primary); margin: 0; }
+.cp-shot-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cp-shot-title {
+  width: 100%; border: none; background: transparent; padding: 2px 0;
+  font-size: 13.5px; color: var(--text); border-bottom: 1px solid transparent;
+}
+.cp-shot-title:focus { outline: none; border-bottom-color: var(--primary); }
+.cp-shot-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cp-shot-date, .cp-shot-time {
+  font-size: 11.5px; color: var(--text-2); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 7px; padding: 2px 5px;
+}
+.cp-shot-src {
+  font-size: 10.5px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
 
 .cp-ocr-toolbar { display: flex; gap: 7px; flex-wrap: wrap; }
 .cp-ocr-grid-wrap {

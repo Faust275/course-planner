@@ -921,6 +921,11 @@
       var quickBar = el('div', { class: 'quick-task-bar' }, [
         V.svg(V.icons.check, 16),
         quickInput,
+        el('button', {
+          class: 'btn btn-sm', title: '从截图添加待办（活动页 / 通知）',
+          style: { height: '32px', padding: '0 10px', flex: '0 0 auto' },
+          onclick: function () { if (global.TaskShot) global.TaskShot.open(); }
+        }, [V.svg(V.icons.camera, 15)]),
         quickBtn
       ]);
       root.appendChild(quickBar);

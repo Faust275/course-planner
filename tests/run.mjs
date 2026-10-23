@@ -1836,6 +1836,81 @@ console.log('\nTaskNLP 自然语言待办解析');
   eq('NLP: 纯文本原样保留', r5.title, '去超市买苹果和牛奶');
   eq('NLP: 无日期', r5.hasDate, false);
   eq('NLP: 无时间', r5.hasTime, false);
+
+  // 6. 24:00 是当天结束，不能夹成 23:00
+  const r6 = TaskNLP.parse('报名截止10月25日24:00', { courses, baseDate: fixedNow });
+  eq('NLP: 24:00 记为 23:59', r6.dueTime, '23:59');
+  eq('NLP: 截止日期不变', r6.dueDate, '2026-10-25');
+}
+
+/* ==========================================================
+ * TaskShot: 截图 → 待办（切行 / 噪声过滤 / 逐行解析 / 云端归一）
+ * ========================================================== */
+const shotSrc = readFileSync(new URL('../assets/js/views/task-shot.js', import.meta.url), 'utf8');
+const shotWin = {};
+shotWin.TaskNLP = TaskNLP;   // 模块内用的是 window.TaskNLP
+new Function('window', 'UI', 'Store', 'DateUtil', 'TaskNLP', shotSrc)(
+  shotWin,
+  { el: () => ({}), modal: () => ({}), segment: () => ({}), $: () => null, svg: () => ({}) },
+  {}, {}, TaskNLP
+);
+const TS = shotWin.TaskShot;
+
+console.log('\nTaskShot 截图转待办');
+{
+  const fixedNow = new Date(2026, 9, 22, 10, 0, 0); // 2026-10-22 周四
+
+  // 1. 噪声过滤：状态栏、按钮、纯数字、纯符号都不进候选
+  eq('截图: 时间戳丢弃', TS.keepLine('10:45'), false);
+  eq('截图: 电量丢弃', TS.keepLine('82'), false);
+  eq('截图: 日期串丢弃', TS.keepLine('2026/10/22'), false);
+  eq('截图: 导航词丢弃', TS.keepLine('返回'), false);
+  eq('截图: 纯符号丢弃', TS.keepLine('—— ·'), false);
+  eq('截图: 正常句子保留', TS.keepLine('10月25日 24:00 截止报名'), true);
+  eq('截图: 行动号召丢弃', TS.keepLine('点击下方按钮立即报名'), false);
+
+  // 2. 空格归一再解析（OCR 常在汉字与数字间塞空格，会打断日期正则）
+  eq('截图: 数字与单位间空格压掉', TS.normalizeLine('报名截止 10 月 25 日 24:00'), '报名截止10月25日24:00');
+  eq('截图: 汉字之间空格压掉', TS.normalizeLine('提交 材料'), '提交材料');
+  eq('截图: 英文单词空格保留', TS.normalizeLine('deadline 10/25'), 'deadline 10/25');
+
+  // 2. 词 → 行：按 cy 聚类，同一行按 x 排序，中文不补空格
+  const words = [
+    { text: '报名', cx: 80, cy: 101, x0: 42, x1: 70, y0: 94, y1: 106 },
+    { text: '截止', cx: 60, cy: 100, x0: 10, x1: 40, y0: 94, y1: 106 },
+    { text: '2026-11-01', cx: 200, cy: 160, x0: 10, x1: 90, y0: 154, y1: 166 }
+  ];
+  const lines = TS.linesFromWords(words);
+  eq('截图: 聚成两行', lines.length, 2);
+  eq('截图: 同行按 x 合并、中文不空格', lines[0].text, '截止报名');
+  eq('截图: 第二行独立', lines[1].text, '2026-11-01');
+
+  // 3. 逐行解析：日期/时间/标签进字段，噪声行出局
+  const tasks = TS.toTasks([
+    '10月25日 截止报名 程序设计竞赛 #竞赛',
+    '10:45',
+    '返回',
+    '11月2日 14:00 提交实验报告 #实验'
+  ], { baseDate: fixedNow, courses: [] });
+  eq('截图: 只留两条候选', tasks.length, 2);
+  eq('截图: 相对日期落到字段', tasks[0].dueDate, '2026-10-25');
+  eq('截图: 标题不含日期', /10月25日/.test(tasks[0].title), false);
+  eq('截图: 标签进字段', tasks[0].tags, ['竞赛']);
+  eq('截图: 第二条时间', tasks[1].dueTime, '14:00');
+
+  // 4. 去重：同一句出现两次只留一条
+  eq('截图: 重复行只留一条', TS.toTasks(['提交材料', '提交材料'], { baseDate: fixedNow }).length, 1);
+
+  // 5. 云端返回归一：非法日期时间清空、短标题丢弃
+  const cloud = TS.fromCloud([
+    { title: '报名程序设计竞赛', dueDate: '2026-10-30', dueTime: '23:59', priority: 'high' },
+    { title: 'x' },
+    { title: '交材料', dueDate: '10月30日', dueTime: '晚上' }
+  ]);
+  eq('截图: 云端短标题丢弃', cloud.length, 2);
+  eq('截图: 云端高优映射', cloud[0].priority, 'high');
+  eq('截图: 云端非法日期清空', cloud[1].dueDate, '');
+  eq('截图: 云端非法时间清空', cloud[1].dueTime, '');
 }
 
 /* ==========================================================

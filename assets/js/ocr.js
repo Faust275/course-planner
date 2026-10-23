@@ -992,19 +992,13 @@
     });
   }
 
-  function recognizeCloud(file, cfg) {
+  /** 调一次视觉接口，返回模型吐出的 JSON 对象（两个业务各自取字段） */
+  function visionJSON(file, cfg, prompt) {
     cfg = cfg || {};
     if (!cfg.endpoint || !cfg.apiKey) {
       return Promise.reject(new Error('还没填写云端识别的接口地址与 API Key'));
     }
     return fileToDataURL(file).then(function (dataUrl) {
-      var prompt = '这是一张课程表截图。请只提取课程格子里的内容，' +
-        '忽略表头行（星期几、时间、节次、课程、教室这类表头文字），也不要把表头当课程。' +
-        '返回 JSON：{"courses":[{"day":1-7,"start":节次,"end":节次,' +
-        '"name":"课程名","location":"上课地点","teacher":"教师","weeks":"周次"}]}。' +
-        'day 用 1=周一 … 7=周日；start/end 是占用的节次序号（表格第几行就是第几节，连上的课写区间）。' +
-        '课程名里不要包含地点、教师和周次，这三项分别放到对应字段；没有的留空字符串。只返回 JSON，不要解释。';
-
       return fetch(cfg.endpoint.replace(/\/$/, '') + '/chat/completions', {
         method: 'POST',
         headers: {
@@ -1030,15 +1024,48 @@
           ? json.choices[0].message.content : '';
         var m = String(content).match(/\{[\s\S]*\}/);
         if (!m) throw new Error('返回内容不是有效 JSON');
-        var data = JSON.parse(m[0]);
-        return data.courses || [];
+        return JSON.parse(m[0]);
       });
+    });
+  }
+
+  function recognizeCloud(file, cfg) {
+    var prompt = '这是一张课程表截图。请只提取课程格子里的内容，' +
+      '忽略表头行（星期几、时间、节次、课程、教室这类表头文字），也不要把表头当课程。' +
+      '返回 JSON：{"courses":[{"day":1-7,"start":节次,"end":节次,' +
+      '"name":"课程名","location":"上课地点","teacher":"教师","weeks":"周次"}]}。' +
+      'day 用 1=周一 … 7=周日；start/end 是占用的节次序号（表格第几行就是第几节，连上的课写区间）。' +
+      '课程名里不要包含地点、教师和周次，这三项分别放到对应字段；没有的留空字符串。只返回 JSON，不要解释。';
+    return visionJSON(file, cfg, prompt).then(function (data) {
+      return data.courses || [];
+    });
+  }
+
+  /**
+   * 从活动页 / 通知截图里抽取待办
+   * @param {File} file
+   * @param {object} cfg 与课表识别共用「设置 → 图片识别」的接口配置
+   * @param {string} today 今天的 YYYY-MM-DD，用来让模型把「明天/下周三」换算成绝对日期
+   */
+  function recognizeCloudTasks(file, cfg, today) {
+    var prompt = '这是一张活动页、通知或待办清单的截图。请把其中所有需要执行的事项提取成待办。\n' +
+      '必须忽略界面元素：状态栏（时间、电量、信号）、返回/分享/预览/复制/更多一类的按钮、' +
+      '广告与推广语、昵称与头像文字、点赞评论转发数、底部导航、纯标题大字。\n' +
+      '要提取的是：报名/投稿/提交材料/参加活动/开会/上课/交作业/缴费/截止日期这类可执行的事。\n' +
+      '今天日期是 ' + (today || '') + '。相对日期（明天、下周三、本周五）要换算成 YYYY-MM-DD；' +
+      '没有明确日期或时间就留空字符串，不要猜。\n' +
+      '返回 JSON：{"tasks":[{"title":"以动词或名词短语开头的短标题，不含日期时间地点",' +
+      '"dueDate":"YYYY-MM-DD","dueTime":"HH:MM","note":"地点或补充说明","priority":"normal|high"}]}。\n' +
+      '同一件事不要拆成多条。只返回 JSON，不要解释。';
+    return visionJSON(file, cfg, prompt).then(function (data) {
+      return Array.isArray(data.tasks) ? data.tasks : [];
     });
   }
 
   global.Ocr = {
     recognizeLocal: recognizeLocal,
     recognizeCloud: recognizeCloud,
+    recognizeCloudTasks: recognizeCloudTasks,
     binarize: binarize,
     normalizeImage: normalizeImage,
     buildGrid: buildGrid,
