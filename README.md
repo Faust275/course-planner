@@ -117,7 +117,7 @@ node verify_stats.mjs       # 统计与复盘（自然口径、对比、热力�
 node verify_diary.mjs       # 日记（一天一篇、心情、凌晨归属、互拷、同步码不含日记）
 node verify_pwa.mjs         # 深链接与装到桌面（manifest / 快捷方式 / file:// 模式）
 node verify_goals.mjs       # 目标（三类关键结果、上限、归档、月末复盘、搜索、同步）
-node verify_settings_cat.mjs # 设置三级结构（分类卡、22 项可达、深链、窄屏无溢出）
+node verify_settings_cat.mjs # 设置三级结构（分类卡、24 项可达、深链、窄屏无溢出）
 node verify_shop.mjs        # 商店（月卡结算 30 天 / 漏签 / 双币扣款 / 满潜兑换 / 窄屏）
 ```
 

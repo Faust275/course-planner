@@ -635,7 +635,7 @@ sw.js 字节不变就永远不重新 install，新版发不出去。
 - `settings.js`：`SUB`（具体页）之外新增 `CAT`（分类）；`CATS` 定义一级分类，`SUBS[].group` 指向分类；`catOf()` / `groupOf()` 做双向查找。
 - 路由：`#/settings` → 首页、`#/settings/basic` → 分类页、`#/settings/look` → 具体页。深链进具体页时用 `groupOf()` 补出所属分类，返回键因此能回到分类页而不是首页。
 - `SettingsView.go(key)` 统一走 `view.setTab(key)`，分类 key 与具体页 key 都接受。
-- 顺手修：`SUB_META` 漏了 `diary`，日记设置页标题一直显示「设置」。
+- 顺手修：`SUB_META` 漏了 `diary`，日记设置页标题一直显示「设置」。（后来 `energy` / `guide` 也补上了，见 `0e661fb`；至此设置共 24 项，脚本断言同步改为 24。）
 - CSS：新增 `.cp-set-cats` / `.cp-set-cat`（≥561px 两列、窄屏单列）；`app.js` 删除 `openDrawer/closeDrawer` 与按钮绑定；模板删除 `#btnDrawer`。
 
 ### 验证
