@@ -99,11 +99,6 @@
     // 归一化基准时间为当天 00:00:00
     var today = new Date(base.getFullYear(), base.getMonth(), base.getDate());
     var workText = ' ' + raw + ' ';
-    var removedRanges = [];
-
-    function markRemoved(start, end) {
-      removedRanges.push([start, end]);
-    }
 
     /* ================= 1. 优先级提取 ================= */
     // !重要 / !高 / !high / !! / ★ / 【重要】

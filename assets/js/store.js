@@ -1290,6 +1290,7 @@
     return (t.lv1 === f.lv1 && t.lv2 === f.lv2); // 筛二级：精确
   }
 
+  /** 标签列表里是否有命中 filter 的项（一级命中其下所有二级） */
   function hasTag(tags, filter) {
     if (!filter) return true;
     for (var i = 0; i < (tags || []).length; i++) {
@@ -2744,17 +2745,6 @@
       return s;
     },
 
-    updateSemesterById: function (id, data) {
-      var s = this.semesterById(id);
-      if (!s) return null;
-      Object.keys(data || {}).forEach(function (k) {
-        if (typeof data[k] === 'string') s[k] = data[k].trim();
-        else s[k] = data[k];
-      });
-      this.emit();
-      return s;
-    },
-
     /** 删除学期：里面的课程和成绩一起删掉 */
     removeSemester: function (id) {
       if (state.semesters.length <= 1) return false;
@@ -2933,12 +2923,6 @@
       return Math.round(total * 100) / 100;
     },
 
-    allCredits: function () {
-      var self = this, total = 0;
-      state.semesters.forEach(function (s) { total += self.creditsOf(s.id); });
-      return Math.round(total * 100) / 100;
-    },
-
     /* ==========================================================
      * 考试
      * ========================================================== */
@@ -2970,17 +2954,6 @@
         this.examsOf(ds).forEach(function (e) {
           out.push(Object.assign({ date: ds, day: i + 1 }, e));
         });
-      }
-      return out;
-    },
-
-    /** 未来 n 天内有没有考试（日程用） */
-    examsInRange: function (from, to) {
-      var out = [], d = DateUtil.parse(from), end = DateUtil.parse(to);
-      while (d && end && d.getTime() <= end.getTime()) {
-        var ds = DateUtil.toStr(d);
-        this.examsOf(ds).forEach(function (e) { out.push(Object.assign({ date: ds }, e)); });
-        d = DateUtil.addDays(d, 1);
       }
       return out;
     },
@@ -3947,18 +3920,6 @@
       return limit ? out.slice(0, limit) : out;
     },
 
-    /** 按分类取食物（用于浏览） */
-    foodsOf: function (cat) {
-      var db = (global.FOOD_DB || []);
-      var out = [];
-      db.forEach(function (f, i) {
-        if (!cat || f[6] === cat) {
-          out.push({ idx: i, n: f[0], unit: f[1], kcal: f[2], p: f[3], f: f[4], c: f[5], cat: f[6] });
-        }
-      });
-      return out;
-    },
-
     /** 一餐的热量与营养（手填优先） */
     mealSum: function (m) {
       if (!m) return { kcal: 0, p: 0, f: 0, c: 0, manual: false };
@@ -4202,12 +4163,6 @@
       return global.StatsCalc.sumByCourse(state.activities, dates);
     },
 
-    /** 当前机制的余额（森林=积分，抽卡=合成玉） */
-    currentBalance: function () {
-      var pm = state.pomodoro;
-      return pm.mode === 'gacha' ? pm.jade : pm.points;
-    },
-
     /** 当前机制余额：森林=积分，抽卡=合成玉（两币不互通、不再折算） */
     totalPoints: function () {
       var pm = state.pomodoro;
@@ -4324,14 +4279,6 @@
         var ta = (a.exam.date || '') + ' ' + (a.exam.start || '');
         var tb = (b.exam.date || '') + ' ' + (b.exam.start || '');
         return ta < tb ? -1 : (ta > tb ? 1 : 0);
-      });
-    },
-
-    /** 获取关联到指定课程的所有待办任务（复习备考任务） */
-    examTasks: function (courseId) {
-      if (!courseId) return [];
-      return state.tasks.filter(function (t) {
-        return t.courseId === courseId;
       });
     },
 
@@ -5663,16 +5610,6 @@
           minutes: map[k].minutes, count: map[k].count
         };
       }).sort(function (a, b) { return b.minutes - a.minutes; });
-    },
-
-    /** 指定标签下的专注分钟（一级标签汇总其所有二级） */
-    focusMinutesByTag: function (filter, ym) {
-      var total = 0;
-      (state.pomodoro.sessions || []).forEach(function (x) {
-        if (ym && String(x.date).slice(0, 7) !== ym) return;
-        if (!filter || hasTag(x.tags, filter)) total += x.minutes;
-      });
-      return total;
     },
 
     /** 最近 7 天每天的专注分钟 */

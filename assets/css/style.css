@@ -1174,11 +1174,6 @@ input[type="range"]::-moz-range-thumb {
 .cp-rule-list b { flex: 0 0 62px; color: var(--primary); font-weight: 700; }
 
 /* ---- 森林 ---- */
-.cp-tree-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
-  gap: 12px;
-}
 .cp-tree-card {
   border: 1px solid var(--line); border-radius: 12px;
   padding: 8px 8px 10px; text-align: center;
@@ -1226,7 +1221,6 @@ input[type="range"]::-moz-range-thumb {
 @media (max-width: 640px) {
   .cp-timer-ring-wrap { width: 190px; }
   .cp-timer-time { font-size: 32px; }
-  .cp-tree-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; }
   .cp-tree-svg { height: 78px; }
 }
 
@@ -1526,7 +1520,6 @@ input[type="range"]::-moz-range-thumb {
 }
 .cp-plan-check-btn:hover { background: var(--primary-weak); }
 .cp-plan-check-btn.cp-on { background: var(--green); border-color: var(--green); color: #fff; }
-.cp-plan-check-btn.cp-done-all { background: var(--surface-2); border-color: var(--line); color: var(--text-3); }
 
 .cp-plan-grid {
   display: grid; grid-template-columns: repeat(14, minmax(0, 1fr));
@@ -1944,14 +1937,6 @@ input[type="range"]::-moz-range-thumb {
   font-family: inherit; padding: 4px;
 }
 .cp-ocr-cell:focus { background: var(--primary-weak); border-radius: 4px; }
-
-.cp-ocr-cloud-list { display: flex; flex-direction: column; gap: 6px; }
-.cp-ocr-cloud-item {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-}
-.cp-ocr-cloud-item b { font-size: 13px; }
-.cp-ocr-cloud-meta { font-size: 11.5px; color: var(--text-3); }
 
 @media (max-width: 640px) {
   .cp-ocr-grid-wrap { max-height: 40vh; }
@@ -2695,15 +2680,6 @@ input[type="range"]::-moz-range-thumb {
 .cp-ops-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
 @media (max-width: 640px) { .cp-ops-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
-/* ---- 首页干员墙 ---- */
-.cp-ops-wall { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
-@media (max-width: 640px) { .cp-ops-wall { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.cp-ops-more {
-  display: grid; place-items: center; border-radius: 10px; cursor: pointer;
-  border: 1px dashed var(--line-strong); background: var(--surface-2);
-  color: var(--text-3); font-size: 12px; font-weight: 600; aspect-ratio: 1 / 1.35;
-}
-
 /* ---- 干员详情 ---- */
 .cp-op-detail { display: flex; gap: 12px; align-items: center; }
 .cp-od-avatar {
@@ -2722,8 +2698,6 @@ input[type="range"]::-moz-range-thumb {
 .cp-ops-stat b { font-size: 19px; font-weight: 700; }
 .cp-ops-stat span { font-size: 12px; color: var(--text-3); }
 .cp-ops-pulls { margin-left: auto; }
-.cp-ops-all { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; max-height: 52vh; overflow-y: auto; padding-right: 2px; }
-@media (max-width: 640px) { .cp-ops-all { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /* ---- 首页抽卡区块 ---- */
 .cp-gacha-home .cp-gh-head {
@@ -2764,7 +2738,7 @@ input[type="range"]::-moz-range-thumb {
 .cp-rwb-item b { font-size: 17px; font-weight: 700; }
 .cp-rwb-item span { font-size: 11px; color: var(--text-3); }
 .cp-rwb-item.cp-total b { color: var(--primary); }
-.cp-rwb-plus, .cp-rwb-eq { font-size: 14px; color: var(--text-3); }
+.cp-rwb-plus { font-size: 14px; color: var(--text-3); }
 
 .cp-rw-rule {
   display: flex; justify-content: space-between; gap: 10px;
@@ -2783,7 +2757,6 @@ input[type="range"]::-moz-range-thumb {
   white-space: nowrap;
 }
 .cp-gacha-tab.cp-active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.cp-gacha-tabpane { margin-top: 2px; }
 
 /* ===== 商店 ===== */
 .cp-shop-pane { display: flex; flex-direction: column; gap: 12px; }
@@ -2886,8 +2859,6 @@ input[type="range"]::-moz-range-thumb {
 .cp-ach-count { font-size: 11px; color: var(--text-3); white-space: nowrap; }
 .cp-ach-time { font-size: 10.5px; color: var(--text-3); margin-top: 4px; opacity: .85; }
 .cp-ach-points { flex: 0 0 auto; text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-.cp-ach-pts { font-size: 13px; font-weight: 700; color: var(--text-3); }
-.cp-ach-item.cp-done .cp-ach-pts { color: var(--primary); }
 .cp-ach-status { font-size: 10.5px; color: var(--text-3); }
 .cp-ach-points.cp-got .cp-ach-status { color: #1f9d55; }
 
@@ -3554,7 +3525,7 @@ mark.cp-hit {
 @media (max-width: 560px) {
   .cp-diary-cal { gap: 3px; }
   .cp-dc-num { font-size: 11px; }
-  .cp-mm-pick-btn, .cp-mood-pick-btn { padding: 5px 10px; font-size: 12px; }
+  .cp-mood-pick-btn { padding: 5px 10px; font-size: 12px; }
   .cp-mood-avg b { font-size: 21px; }
 }
 
@@ -3650,9 +3621,6 @@ html[data-mech="tree"] {
 html[data-mech="tree"] .section-title,
 html[data-mech="tree"] .hero-title,
 html[data-mech="tree"] .cp-brand strong,
-html[data-mech="tree"] .modal-title,
-html[data-mech="tree"] .cp-stat-title,
-html[data-mech="tree"] .cp-card-title,
 html[data-mech="tree"] .cp-exam-title {
   font-family: var(--font) !important;
   font-weight: 600;
@@ -3773,10 +3741,8 @@ html[data-mech="factory"] * {
 
 /* 仅特定的机械数字、倒计时与时间戳使用 DIN 等宽工科数字 */
 html[data-mech="factory"] .cp-hero-stats div div:first-child,
-html[data-mech="factory"] .cp-stat-num,
 html[data-mech="factory"] .cp-time,
-html[data-mech="factory"] .cp-countdown,
-html[data-mech="factory"] .cp-pomo-time {
+html[data-mech="factory"] .cp-countdown {
   font-family: var(--font-mono) !important;
   font-weight: 700 !important;
 }
@@ -3807,9 +3773,7 @@ html[data-mech="factory"] .cp-brand-logo,
 html[data-mech="factory"] .cp-badge,
 html[data-mech="factory"] .cp-batch-dropzone,
 html[data-mech="factory"] .cp-tcell,
-html[data-mech="factory"] .cp-kanban-task,
 html[data-mech="factory"] .cp-empty,
-html[data-mech="factory"] .cp-empty-btn,
 html[data-mech="factory"] button,
 html[data-mech="factory"] select,
 html[data-mech="factory"] input,
