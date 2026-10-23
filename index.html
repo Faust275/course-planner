@@ -4291,6 +4291,119 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
   background: transparent; font-size: 12.5px; color: var(--text);
 }
 
+/* ===== 专注页：待办拖动托盘 ===== */
+.cp-pomo-tray {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  max-height: 168px; overflow-y: auto; padding: 2px 0;
+}
+.cp-pomo-chip {
+  cursor: grab; touch-action: none;
+  padding: 6px 11px; border-radius: 999px;
+  font-size: 12.5px; line-height: 1.2;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+.cp-pomo-chip:hover { border-color: var(--primary); background: var(--primary-tint); }
+.cp-pomo-chip:active { cursor: grabbing; }
+.cp-pomo-tray .cp-pomo-chip { user-select: none; }
+.cp-timer-ring-wrap.cp-drop-active {
+  outline: 3px solid var(--primary); outline-offset: 5px;
+  border-radius: 999px; background: var(--primary-tint);
+}
+
+.cp-pomo-chip.cp-active { border-color: var(--primary); background: var(--primary-tint); color: var(--primary); font-weight: 600; }
+
+/* ===== 拖动落点：可撤销 toast ===== */
+.cp-toast-action { pointer-events: auto; padding-right: 8px; }
+.cp-toast-action .cp-toast-msg { max-width: 240px; }
+.cp-toast .cp-toast-act {
+  margin-left: 2px; border: none; cursor: pointer;
+  background: rgba(255, 255, 255, .16); color: #9ecbff;
+  font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 14px;
+  white-space: nowrap; flex: 0 0 auto;
+}
+.cp-toast .cp-toast-act:active { transform: scale(.96); }
+
+/* ===== 「移动到…」动作面板 ===== */
+.cp-move-menu { display: flex; flex-direction: column; gap: 2px; }
+.cp-move-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 11px 12px; border: none; border-radius: 10px;
+  background: transparent; color: var(--text); font-size: 14px; font-weight: 500;
+}
+.cp-move-item:hover, .cp-move-item:active { background: var(--surface-2); }
+.cp-move-item.cp-danger { color: var(--red); }
+.cp-move-item-hint { color: var(--text-3); font-size: 12px; }
+.cp-move-sep { height: 1px; background: var(--line); margin: 6px 4px; }
+
+/* 键盘可达：可拖动卡片聚焦时给个可见焦点环 */
+.cp-drag-item[tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ===== 跨视图接力 / 边缘翻月 / 一次性提示 ===== */
+.cp-cal-nav-hot {
+  background: var(--primary-tint) !important;
+  color: var(--primary) !important;
+  box-shadow: inset 0 0 0 2px var(--primary);
+  border-radius: 10px;
+}
+.cp-relay-hl {
+  background: var(--primary-tint) !important;
+  box-shadow: inset 0 0 0 2px var(--primary);
+  border-radius: 10px;
+  animation: relayPulse .9s ease 2;
+}
+@keyframes relayPulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--primary); }
+  50% { box-shadow: inset 0 0 0 2px var(--primary), 0 0 0 4px var(--primary-weak); }
+}
+.cp-toast-hint { pointer-events: auto; padding-right: 8px; max-width: 340px; }
+.cp-toast-hint .cp-toast-msg { max-width: 230px; line-height: 1.45; }
+
+/* ===== 专注队列 ===== */
+.cp-pomo-queue {
+  border: 1px dashed var(--line-strong); border-radius: 12px;
+  padding: 8px; min-height: 46px; transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+.cp-pomo-queue.cp-drop-active { border-color: var(--primary); background: var(--primary-tint); }
+.cp-pomo-queue-list { display: flex; flex-direction: column; gap: 6px; }
+.cp-pomo-qchip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 10px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  cursor: grab; touch-action: none;
+}
+.cp-pomo-qchip:active { cursor: grabbing; }
+.cp-pomo-qchip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-pomo-qchip-x {
+  border: none; background: transparent; color: var(--text-3);
+  font-size: 16px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.cp-pomo-qchip-x:hover { color: var(--red); }
+.cp-pomo-queue-hint { font-size: 12px; color: var(--text-3); text-align: center; padding: 8px 0; }
+
+/* ===== 待办多选 / 整组拖动 / 批量操作条 ===== */
+.cp-task-selbox {
+  flex: 0 0 auto; width: 18px; height: 18px; border-radius: 5px;
+  border: 1.5px solid var(--line-strong); background: var(--surface);
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 8px; color: #fff;
+}
+.cp-task-selbox.cp-on { background: var(--primary); border-color: var(--primary); }
+.cp-task-selbox svg { width: 12px; height: 12px; stroke: #fff; fill: none; }
+.cp-task-drag.cp-selected { background: var(--primary-tint); border-radius: 10px; }
+.cp-task-bulkbar {
+  position: sticky; bottom: 8px; z-index: 6;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin-top: 10px;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: 14px; box-shadow: var(--shadow);
+}
+.cp-task-bulkcount { flex: 1; font-size: 13px; font-weight: 600; }
+
 </style>
 <script>
 
@@ -5531,6 +5644,11 @@ window.AK_OPS = [
   'use strict';
 
   var KEY = 'course-planner:v1';
+  var SCHEMA_VERSION = 3;          // 数据结构版本（导出/导入都写这个）
+  var BLOB_BG = 'cp-blob-background';
+  var BLOB_PET = 'cp-blob-pet';
+  var saveTimer = null;            // 保存去抖句柄
+  var blobCache = { bg: null, pet: null };   // 已落盘的大图，避免重复写
 
   /* ---------- 持久化抽象：优先 IndexedDB，file:// 或隐私模式回退 localStorage ---------- */
   var Persist = (function () {
@@ -5587,7 +5705,7 @@ window.AK_OPS = [
         });
       }).catch(function (e) {
         /* IDB 不可用（隐私/配额），回退 localStorage */
-        try { localStorage.setItem(key, str); resolve(); }
+        try { localStorage.setItem(key, str); }
         catch (e2) { return Promise.reject(e2); }
       });
     }
@@ -5681,7 +5799,7 @@ window.AK_OPS = [
     var start = DateUtil.addDays(DateUtil.weekStart(today), -7 * 8);
     var sid = uid('sem');
     return {
-      version: 2,
+      version: 3,          // 与 SCHEMA_VERSION 保持一致（单测沙箱只摘部分函数，这里写死）
       model: 2,          // 数据模型版本：2 = 课程支持多时段 slots[]
       semesters: [{
         id: sid,
@@ -7742,6 +7860,28 @@ window.AK_OPS = [
     };
   }
 
+  /**
+   * 版本化结构迁移：只做「无法靠字段特征判断」的升级，逐级递进。
+   * 字段补齐仍留在 ensure 里——两条路一起跑，导入任何来源的旧档都能兜住。
+   */
+  function migrateSchema(st) {
+    if (!st || typeof st !== 'object') return st;
+    var from = Number(st.version) || 1;
+    if (from > SCHEMA_VERSION) return st;   // 更新版本的数据不在旧代码里强行降级
+    if (from < 3) {
+      // v3：手动排序 order 字段 + 专注队列 timer.queue（幂等）
+      var mx = 0;
+      (st.tasks || []).forEach(function (t) { if (typeof t.order === 'number' && t.order > mx) mx = t.order; });
+      var seq = 1;
+      (st.tasks || []).forEach(function (t) { if (typeof t.order !== 'number') t.order = mx + (seq++); });
+      if (st.pomodoro && st.pomodoro.timer && !Array.isArray(st.pomodoro.timer.queue)) {
+        st.pomodoro.timer.queue = [];
+      }
+    }
+    st.version = SCHEMA_VERSION;
+    return st;
+  }
+
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
@@ -7862,15 +8002,42 @@ window.AK_OPS = [
       }
       if (!state || !state.version) state = defaultState();
 
+      // 大图外置：主 state 里只存空串，这里把图补回内存，渲染逻辑无需改动
+      try {
+        var bgBlob = await Persist.load(BLOB_BG);
+        var petBlob = await Persist.load(BLOB_PET);
+        if (state.settings) {
+          if (bgBlob && state.settings.background && !state.settings.background.dataUrl) state.settings.background.dataUrl = bgBlob;
+          if (petBlob && state.settings.pet && !state.settings.pet.src) state.settings.pet.src = petBlob;
+        }
+        blobCache.bg = bgBlob || null;
+        blobCache.pet = petBlob || null;
+      } catch (e) { /* 大图读取失败不影响主流程 */ }
+
       // 兼容补齐字段（日程 / 象限 / 记账 / 设置…）
       this.ensure();
       this.settleGoals();      // 上次关闭期间到期的目标，这里补结算
       this.save();
+      // 页面要走了，把去抖中的保存立刻落盘
+      var self = this;
+      if (!this._flushHooked && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        this._flushHooked = true;
+        window.addEventListener('pagehide', function () { self.flushSave(); });
+        if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'hidden') self.flushSave();
+          });
+        }
+      }
+      // 每日自动快照：跨天首次启动补一份；异步执行，不阻塞启动
+      this.maybeDailyBackup();
       return state;
     },
 
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
+      if (!state) state = defaultState();
+      migrateSchema(state);      // 版本升级：必须早于 validateSchema（否则默认值会盖掉旧结构）
       hoistLegacy(state);        // 旧值抢救：必须早于 validateSchema，否则旧值会被默认值覆盖、再也搬不动
       state = validateSchema(state);
       var ds = defaultState();
@@ -7966,6 +8133,13 @@ window.AK_OPS = [
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
+      // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
+      state.sleeps.forEach(function (s) {
+        ['deep', 'light', 'rem', 'awake', 'efficiency', 'awakenings'].forEach(function (k) {
+          if (s[k] === undefined) s[k] = null;
+        });
+        if (!s.source) s.source = 'manual';
+      });
       // 进行中的睡眠计时：字段不全就丢弃，避免半截状态一直转下去
       if (state.sleepSession && (!state.sleepSession.date || !state.sleepSession.start ||
           typeof state.sleepSession.at !== 'number')) {
@@ -7975,6 +8149,12 @@ window.AK_OPS = [
       if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
       if (!Array.isArray(state.taskArchive)) state.taskArchive = [];
+      // 旧任务补 order 字段（用于「待办手动排序」）：按当前最大值顺延，保证唯一
+      (function () {
+        var mx = 0, i = 1;
+        state.tasks.forEach(function (t) { if (typeof t.order === 'number' && t.order > mx) mx = t.order; });
+        state.tasks.forEach(function (t) { if (typeof t.order !== 'number') { t.order = mx + i; i++; } });
+      })();
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
@@ -8030,17 +8210,62 @@ window.AK_OPS = [
       return state;
     },
 
-    save: function () {
+    /**
+     * 保存。默认去抖 250ms：勾选待办、拖动排序这类高频操作不会每次都
+     * 序列化整个 state 再写库。计时等关键状态传 true 立即落盘。
+     */
+    save: function (immediate) {
+      if (immediate) return this.flushSave();
+      if (saveTimer) return;
       var self = this;
-      var str;
-      try { str = JSON.stringify(state); } catch (e) { console.warn('序列化失败', e); return; }
-      Persist.save(KEY, str).catch(function (e) {
+      saveTimer = setTimeout(function () { saveTimer = null; self._saveNow(); }, 250);
+    },
+
+    /** 立刻把待写状态落盘（页面隐藏 / 计时操作 / 测试用） */
+    flushSave: function () {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      return this._saveNow();
+    },
+
+    _saveNow: function () {
+      var self = this;
+      var bg = '', pet = '';
+      try {
+        if (state.settings && state.settings.background) bg = state.settings.background.dataUrl || '';
+        if (state.settings && state.settings.pet) pet = state.settings.pet.src || '';
+      } catch (e) {}
+
+      // 大图不进主 state：临时清空 → 序列化 → 还原。主状态因此保持很小。
+      var bgBackup = '', petBackup = '';
+      if (state.settings && state.settings.background && bg) { bgBackup = bg; state.settings.background.dataUrl = ''; }
+      if (state.settings && state.settings.pet && pet) { petBackup = pet; state.settings.pet.src = ''; }
+      var str = '';
+      try { str = JSON.stringify(state); }
+      catch (e) { console.warn('序列化失败', e); }
+      finally {
+        if (state.settings && state.settings.background) state.settings.background.dataUrl = bgBackup;
+        if (state.settings && state.settings.pet) state.settings.pet.src = petBackup;
+      }
+      if (!str) return Promise.resolve();
+
+      // 先写大图、再写主状态；图被清空时同步删除，避免下次启动又被塞回来
+      var chain = Promise.resolve();
+      if (bg && bg !== blobCache.bg) {
+        chain = chain.then(function () { return Persist.save(BLOB_BG, bg); }).then(function () { blobCache.bg = bg; });
+      } else if (!bg && blobCache.bg) {
+        chain = chain.then(function () { return Persist.remove(BLOB_BG); }).then(function () { blobCache.bg = null; });
+      }
+      if (pet && pet !== blobCache.pet) {
+        chain = chain.then(function () { return Persist.save(BLOB_PET, pet); }).then(function () { blobCache.pet = pet; });
+      } else if (!pet && blobCache.pet) {
+        chain = chain.then(function () { return Persist.remove(BLOB_PET); }).then(function () { blobCache.pet = null; });
+      }
+
+      return chain.then(function () { return Persist.save(KEY, str); }).catch(function (e) {
         console.warn('保存失败', e);
         if (!self.quotaWarned) {
           self.quotaWarned = true;
-          if (global.UI && UI.toast) {
-            UI.toast('本地存储空间不足，建议换一张更小的背景图', 'err');
-          }
+          if (global.UI && UI.toast) UI.toast('本地存储空间不足，建议换一张更小的背景图', 'err');
         }
       });
     },
@@ -8050,7 +8275,10 @@ window.AK_OPS = [
     /* ===== 自动备份：破坏性操作前的回滚点 ===== */
     BK_PREFIX: 'cp-backup-',
     BK_INDEX: 'cp-backup-index',
-    BK_MAX: 5,
+    BK_DAILY_KEY: 'cp-daily-backup-date',
+    BK_MAX: 5,           // 手动 / 覆盖前的回滚点，最多 5 份
+    BK_DAILY_MAX: 2,     // 每日自动快照，最多 2 份，且不挤占上面那 5 份
+    BK_TOTAL_BYTES: 4 * 1024 * 1024,  // 备份总量软上限：超出则丢弃最旧的，避免 IndexedDB 无限膨胀
 
     /** 存一份当前数据的快照；返回备份元信息（异步，不阻塞调用方） */
     backupNow: function (reason) {
@@ -8103,17 +8331,56 @@ window.AK_OPS = [
       });
     },
 
-    /** 只保留最近 BK_MAX 份，删掉更老的 */
+    /**
+     * 按来源分层裁剪：每日自动最多 BK_DAILY_MAX 份，其余（手动 / 清空 / 覆盖前）
+     * 最多 BK_MAX 份。这样每日快照不会把手动回滚点挤掉。
+     */
     _bkTrim: function () {
       var self = this;
       return this._bkReadIndex().then(function (list) {
-        if (list.length <= self.BK_MAX) return list;
-        var keep = list.slice(0, self.BK_MAX);
-        var drop = list.slice(self.BK_MAX);
+        var daily = [], other = [];
+        list.forEach(function (m) { (m.reason === '每日自动' ? daily : other).push(m); });
+        var keep = other.slice(0, self.BK_MAX).concat(daily.slice(0, self.BK_DAILY_MAX));
+        // 总量配额：从新到旧累计，超出 BK_TOTAL_BYTES 的最旧备份一并丢弃，防 IndexedDB 膨胀
+        var total = 0;
+        keep = keep.filter(function (m) {
+          total += (m.bytes || 0);
+          return total <= self.BK_TOTAL_BYTES;
+        });
+        keep.sort(function (a, b) { return b.ts - a.ts; });
+        var keepKeys = {};
+        keep.forEach(function (m) { keepKeys[m.key] = 1; });
+        var drop = list.filter(function (m) { return !keepKeys[m.key]; });
+        if (!drop.length) return keep;
         return Promise.all(drop.map(function (m) { return Persist.remove(m.key); }))
           .then(function () { return Persist.save(self.BK_INDEX, JSON.stringify(keep)); })
           .then(function () { return keep; });
       });
+    },
+
+    /**
+     * 每日自动快照：跨天首次启动补一份。用独立 key 记住「今天已备份」，
+     * 不写进同步数据；数据为空时 backupNow 返回 null，不落日期，之后有数据再补。
+     */
+    maybeDailyBackup: function () {
+      var self = this;
+      var today;
+      try { today = DateUtil.toStr(DateUtil.today()); } catch (e) { today = ''; }
+      if (!today) return Promise.resolve(false);
+      return Persist.load(this.BK_DAILY_KEY).then(function (last) {
+        if (last === today) return false;
+        return self.listBackups().then(function (list) {
+          var exists = list.some(function (m) {
+            return m.reason === '每日自动' && DateUtil.toStr(new Date(m.ts)) === today;
+          });
+          var p = exists ? Promise.resolve(true)
+                         : self.backupNow('每日自动').then(function (meta) { return !!meta; });
+          return p.then(function (ok) {
+            if (!ok) return false;
+            return Persist.save(self.BK_DAILY_KEY, today).then(function () { return true; });
+          });
+        });
+      }).catch(function () { return false; });
     },
 
     /** 列出备份（新的在前） */
@@ -8607,6 +8874,7 @@ window.AK_OPS = [
 
     /** 收藏的诗词（索引 → 内容） */
     favPoems: function () {
+      if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
       var list = (global.Daily && Daily.poems) || [];
       var out = [];
       this.fav().poems.forEach(function (i) {
@@ -8618,6 +8886,7 @@ window.AK_OPS = [
 
     /** 收藏的单词（按词形查回完整释义） */
     favWords: function () {
+      if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
       var list = (global.Daily && Daily.words) || [];
       var map = {};
       list.forEach(function (w, i) { if (!map[w.w]) map[w.w] = { idx: i, item: w }; });
@@ -8690,7 +8959,7 @@ window.AK_OPS = [
     gpaConfig: function () {
       var ds = defaultState();
       var g = (state.settings && state.settings.gpa) || ds.settings.gpa;
-      var rules = (Array.isArray(g.rules) && g.rules.length) ? g.rules : defaultGpaRules();
+      var rules = (Array.isArray(g.rules) && g.rules.length) ? g.rules : Store.defaultGpaRules();
       rules = rules.map(function (r) {
         return { min: Number(r.min) || 0, gp: Number(r.gp) || 0 };
       }).sort(function (a, b) { return b.min - a.min; });
@@ -8902,6 +9171,8 @@ window.AK_OPS = [
         doneAt: ''
       };
       state.tasks.push(t);
+      // 维护一个单调自增的 order，作为「手动排序」字段的默认值
+      (function () { var m = 0; state.tasks.forEach(function (x) { if (typeof x.order === 'number' && x.order > m) m = x.order; }); t.order = m + 1; })();
       // 新增子任务后，父任务的进度可能变了；若设置要求「全完成自动完成父」，这里也要生效
       if (t.parentId) this.syncParent(t.parentId);
       if (this.markAction) this.markAction('task', 1);
@@ -9037,6 +9308,58 @@ window.AK_OPS = [
       if (parentId) this.syncParent(parentId);
       this.emit();
       return { removed: removed, kept: kept };
+    },
+
+    /**
+     * 批量删除（单事务）：遵循与 removeTask 相同的 orphanKeep 规则。
+     * 返回 { removed, kept, snapshot, ids }；snapshot 用于「撤销」整份恢复。
+     */
+    removeTasks: function (ids) {
+      ids = (ids || []).filter(Boolean);
+      if (!ids.length) return { removed: 0, kept: 0, snapshot: null, ids: [] };
+      var set = {};
+      ids.forEach(function (id) { set[id] = 1; });
+      var o = subOpts(state.settings);
+      var snapshot = JSON.parse(JSON.stringify(state.tasks));
+      var removeSet = {};
+      state.tasks.forEach(function (t) { if (set[t.id]) removeSet[t.id] = 1; });
+
+      var kept = 0;
+      if (o.orphanKeep) {
+        // 保留子任务：选中父任务的子任务提升为顶层（子任务自己被选中时仍删除）
+        state.tasks.forEach(function (t) {
+          if (t.parentId && set[t.parentId] && !set[t.id]) { t.parentId = ''; kept++; }
+        });
+      } else {
+        // 一并删除：选中父任务的全部直属子任务
+        state.tasks.forEach(function (t) {
+          if (t.parentId && set[t.parentId]) removeSet[t.id] = 1;
+        });
+      }
+
+      // 被删掉子任务、但父任务还在的，父任务联动一次（与单条删除一致）
+      var affectedParents = {};
+      state.tasks.forEach(function (t) {
+        if (removeSet[t.id] && t.parentId && !removeSet[t.parentId]) affectedParents[t.parentId] = 1;
+      });
+
+      var removedIds = [];
+      state.tasks = state.tasks.filter(function (t) {
+        if (removeSet[t.id]) { removedIds.push(t.id); return false; }
+        return true;
+      });
+      var self = this;
+      Object.keys(affectedParents).forEach(function (pid) { self.syncParent(pid); });
+      this.emit();
+      return { removed: removedIds.length, kept: kept, snapshot: snapshot, ids: removedIds };
+    },
+
+    /** 从删除快照整份恢复，用于撤销 */
+    restoreTasks: function (snapshot) {
+      if (!Array.isArray(snapshot)) return false;
+      state.tasks = JSON.parse(JSON.stringify(snapshot));
+      this.emit();
+      return true;
     },
 
     getTask: function (id) {
@@ -9525,11 +9848,19 @@ window.AK_OPS = [
     addSleep: function (data) {
       var r = {
         id: uid('s'),
-        date: data.date || DateUtil.toStr(DateUtil.today()),   // 记录所属日
+        date: data.date || DateUtil.toStr(DateUtil.today()),   // 记录所属日（入睡日）
         start: data.start || '23:00',                          // 入睡时间
         end: data.end || '07:00',                              // 醒来时间（可跨午夜）
         quality: data.quality || 'normal',                     // good / normal / bad
-        note: (data.note || '').trim()
+        note: (data.note || '').trim(),
+        // 睡眠结构（深睡/浅睡/REM/清醒时长，分钟）；手环/截图/CSV/HC 可填，手动计时留空
+        deep: data.deep != null ? Number(data.deep) : null,
+        light: data.light != null ? Number(data.light) : null,
+        rem: data.rem != null ? Number(data.rem) : null,
+        awake: data.awake != null ? Number(data.awake) : null,
+        efficiency: data.efficiency != null ? Number(data.efficiency) : null,  // 睡眠效率 %
+        awakenings: data.awakenings != null ? Number(data.awakenings) : null, // 清醒次数
+        source: data.source || 'manual'   // manual | timer | shot | csv | hc
       };
       // 记录类发分：当天首条睡眠记录给 4 分（防重复刷）；push 前判断，避免把自己算进去
       var isFirst = !state.sleeps.some(function (s) { return s.date === r.date; });
@@ -9572,6 +9903,41 @@ window.AK_OPS = [
       var d = DateUtil.parse(dateStr) || DateUtil.today();
       var next = DateUtil.toStr(DateUtil.addDays(d, 1));
       return sleepByNight(state.sleeps, dateStr, next);
+    },
+
+    /** 这条睡眠记录的「醒来日」（跨午夜时比记录日 +1 天）。用于"用昨夜睡眠算今日状态"。 */
+    wakeDateOf: function (rec) {
+      if (!rec || !rec.date) return '';
+      var d = DateUtil.parse(rec.date);
+      if (!d) return rec.date;
+      var overnight = !!(rec.end && rec.start && rec.end < rec.start);
+      return DateUtil.toStr(DateUtil.addDays(d, overnight ? 1 : 0));
+    },
+
+    /**
+     * 取用于「某天状态推算」的那条睡眠（按夜归属）：
+     *   1) 优先：醒来日正好是 dayStr 的（即昨夜睡的、今早醒的）；
+     *   2) 退路：记录日就是 dayStr 且不跨午夜；
+     *   3) 再退路：最近一条（之前某夜）作为近似。
+     * 不改变 sleepByNight 的统计口径（仍按入睡日拆账），只在选择层做按夜归属。
+     */
+    sleepForDay: function (dayStr) {
+      var self = this;
+      var list = (state.sleeps || []).slice();
+      var exact = list.filter(function (s) { return self.wakeDateOf(s) === dayStr; });
+      if (exact.length) {
+        return exact.sort(function (a, b) { return a.start < b.start ? 1 : a.start > b.start ? -1 : 0; })[0];
+      }
+      var sameDay = list.filter(function (s) { return s.date === dayStr; });
+      if (sameDay.length) return sameDay[0];
+      var sorted = list.slice().sort(function (a, b) {
+        var wa = self.wakeDateOf(a), wb = self.wakeDateOf(b);
+        return wa < wb ? 1 : wa > wb ? -1 : 0;
+      });
+      for (var i = 0; i < sorted.length; i++) {
+        if (self.wakeDateOf(sorted[i]) <= dayStr) return sorted[i];
+      }
+      return null;
     },
 
     /* ===== 睡眠计时：点一下开始，再点一下结束 ===== */
@@ -11154,7 +11520,7 @@ window.AK_OPS = [
     /** 保存计时器状态（刷新后仍可恢复） */
     saveTimer: function (t) {
       state.pomodoro.timer = t;
-      this.save();
+      this.save(true);   // 计时状态要能经得起立刻刷新
     },
 
     /* ===== 计划 ===== */
@@ -11290,6 +11656,65 @@ window.AK_OPS = [
     removeGoal: function (id) {
       state.goals = (state.goals || []).filter(function (x) { return x.id !== id; });
       this.emit();
+    },
+
+    /**
+     * 列表内手动排序：仅对「当前可见（已筛选）的那批 id」重排，
+     * 其余隐藏项保持原位置不变，避免跨筛选串序。
+     * 用场景：计划页筛选后拖拽、目标页在办/归档分区内拖拽。
+     * @param {string} key   state 上的数组字段名（'plans' | 'goals' | 'tasks'）
+     * @param {string[]} visibleIdsNewOrder 落点后可见条目的 id 顺序
+     */
+    reorderInView: function (key, visibleIdsNewOrder) {
+      var arr = state[key];
+      if (!arr || !visibleIdsNewOrder || !visibleIdsNewOrder.length) return;
+      var set = {};
+      visibleIdsNewOrder.forEach(function (id) { set[id] = 1; });
+      var ordered = [], seen = {};
+      visibleIdsNewOrder.forEach(function (id) {
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i].id === id && !seen[id]) { ordered.push(arr[i]); seen[id] = 1; break; }
+        }
+      });
+      var ptr = 0;
+      state[key] = arr.map(function (x) { return set[x.id] ? ordered[ptr++] : x; });
+      this.emit();
+    },
+
+    /**
+     * 在「可见子集」里上移 / 下移一项（用于「移动到…」菜单的无障碍排序）。
+     * filterFn 决定哪些项参与排序（如待办只排顶层、目标只排未归档）。
+     * 只在数组里交换两项的绝对位置，隐藏项保持原位。
+     */
+    moveAmong: function (key, id, dir, filterFn) {
+      var arr = state[key];
+      if (!arr) return false;
+      var idxs = [];
+      for (var i = 0; i < arr.length; i++) { if (!filterFn || filterFn(arr[i])) idxs.push(i); }
+      var pos = -1;
+      for (var k = 0; k < idxs.length; k++) { if (arr[idxs[k]].id === id) { pos = k; break; } }
+      if (pos < 0) return false;
+      var np = pos + dir;
+      if (np < 0 || np >= idxs.length) return false;
+      var a = idxs[pos], b = idxs[np], tmp = arr[a];
+      arr[a] = arr[b]; arr[b] = tmp;
+      this.emit();
+      return true;
+    },
+
+    /** 在「可见子集」里置顶 / 置底（edge: 'top' | 'bottom'） */
+    moveEdgeAmong: function (key, id, edge, filterFn) {
+      var arr = state[key];
+      if (!arr) return false;
+      var idxs = [];
+      for (var i = 0; i < arr.length; i++) { if (!filterFn || filterFn(arr[i])) idxs.push(i); }
+      var pos = -1;
+      for (var k = 0; k < idxs.length; k++) { if (arr[idxs[k]].id === id) { pos = k; break; } }
+      if (pos < 0) return false;
+      var item = arr.splice(idxs[pos], 1)[0];
+      if (edge === 'top') arr.unshift(item); else arr.push(item);
+      this.emit();
+      return true;
     },
 
     /** 归档 = 留档：不删、不清空数据，只是从「在办」挪到下面 */
@@ -12278,7 +12703,7 @@ window.AK_OPS = [
       // 以默认结构打底再逐项覆盖：defaultState 里的每个顶层键都保证存在，
       // 以后新增顶层字段（如 shop）不会因为这份清单漏登记而在导入时凭空消失。
       var next = Object.assign({}, ds, obj);
-      next.version = 2;
+      next.version = Number(obj.version) || 1;   // 交给 ensure() 里的 migrateSchema 升级
       next.model = obj.model || 2;
       next.semesters = (obj.semesters && obj.semesters.length) ? obj.semesters : [
         Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
@@ -12383,6 +12808,630 @@ window.AK_OPS = [
 })(window);
 
 
+
+</script>
+<script>
+/* ==========================================================
+ * 睡眠推算模型（纯函数，无 DOM / Store 依赖）
+ * ----------------------------------------------------------
+ * 目标：用「昨夜的完整睡眠结构」（深睡/浅睡/REM/清醒时长 + 入睡/醒来）
+ * 推算一天的「高警觉时段 / 瞌睡时段 / 合适喝咖啡时段」。
+ *
+ * 设计原则：
+ *   - 全部为纯函数，输入一个"夜"对象，输出可序列化结果，便于单测与离线推算。
+ *   - 不关心数据从哪来（手环计时 / 截图 / CSV / Health Connect），
+ *     数据源只负责把记录规范成 normalizeNight 能吃的形状。
+ *   - 所有经验常数集中放在顶部 CONST，便于后续按真实数据标定。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var CONST = {
+    NEED_MIN: 480,          // 理想睡眠时长（分钟），8 小时
+    DEF_AFTER_WAKE: 90,     // 咖啡窗口起点：醒后多少分钟（避开晨间皮质醇高峰）
+    DEF_BEFORE_BED: 360,    // 咖啡窗口终点：睡前多少分钟（咖啡因半衰期≈5–6h）
+    INERTIA_MIN: 30,        // 睡眠惯性窗口长度
+    WIND_DOWN_MIN: 90,      // 睡前收尾窗口长度
+    CAFFEINE_PEAK: 18,      // 咖啡因对警觉度的最高加成（0–100 分制）
+    CAFFEINE_ONSET: 30,     // 起效时间（分钟）
+    CAFFEINE_HALF: 300,     // 半衰期（分钟）
+    STAGE_OK: 0.35          // 优质深睡+REM 占睡眠总时长比例（典型 35%–45%，取下限）
+  };
+
+  /* ---------- 基础工具 ---------- */
+
+  function toMin(hhmm) {
+    if (hhmm == null) return null;
+    var s = String(hhmm).split(':');
+    var h = parseInt(s[0], 10), m = parseInt(s[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // 分钟 -> 'HH:MM'，支持负数与跨 1440 回绕（如 -300 -> 19:00，1500 -> 01:00）
+  function minToHHMM(min) {
+    min = Math.round(min);
+    min = ((min % 1440) + 1440) % 1440;
+    return pad(Math.floor(min / 60)) + ':' + pad(min % 60);
+  }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  function num(v) { var n = Number(v); return isFinite(n) ? n : null; }
+
+  // 把一条 sleeps 记录（或任何含 start/end 的"夜"）规范化为模型输入
+  function normalizeNight(rec) {
+    if (!rec) return null;
+    var bed = toMin(rec.start), wake = toMin(rec.end);
+    if (bed == null || wake == null) return null;
+    if (wake <= bed) wake += 1440;            // 跨午夜：醒来时刻 +24h
+    return {
+      bed: bed,
+      wake: wake,
+      total: wake - bed,
+      deep: num(rec.deep),
+      light: num(rec.light),
+      rem: num(rec.rem),
+      awake: num(rec.awake),
+      efficiency: num(rec.efficiency),
+      awakenings: num(rec.awakenings),
+      quality: rec.quality || 'normal'
+    };
+  }
+
+  /* ---------- 警觉度基线 ---------- */
+
+  // 昼夜警觉度基线（0–1），自变量为当地时刻分钟数 clockMin（0–1439）
+  // 上午高峰 ~10:30，午后小谷 ~15:00，傍晚随昼夜节律缓降，深夜最低。
+  // 锚定当地时刻而非"醒后小时数"，否则晚睡晚起者的"午后低谷"会被傍晚整体下滑带偏。
+  function circadian(clockMin) {
+    var H = (((clockMin % 1440) + 1440) % 1440) / 60;            // 当地小时
+    var base = 0.5 + 0.42 * Math.cos((H - 10.5) / 24 * 2 * Math.PI); // 峰 10.5h，谷 22.5h
+    var dip = 0.10 * Math.exp(-Math.pow((H - 15) / 1.3, 2));           // 午后小谷 ~15:00
+    return clamp(base - dip, 0.05, 0.98);
+  }
+
+  // 睡眠质量系数（0.3–1）：时长达标 + 效率高 + 深睡/REM 占比合理
+  function qualityFactor(night) {
+    if (!night || !night.total) return 0.70;
+    var durScore = clamp(night.total / CONST.NEED_MIN, 0.2, 1.1);
+    var eff = night.efficiency != null ? clamp(night.efficiency / 100, 0.3, 1) : 0.90;
+    var stageScore = 0.85;
+    if (night.deep != null && night.rem != null && night.total > 0) {
+      var deepRem = (night.deep + night.rem) / night.total;
+      stageScore = clamp(deepRem / CONST.STAGE_OK, 0.4, 1.1);
+    }
+    return clamp(0.45 + 0.55 * durScore * eff * stageScore, 0.30, 1);
+  }
+
+  // 某时刻警觉度（0–100），h = 醒后小时数
+  function alertnessAt(night, h) {
+    if (!night) return null;
+    var q = qualityFactor(night);
+    var wakeClock = ((night.wake % 1440) + 1440) % 1440;
+    var clock = wakeClock + h * 60;
+    var c;
+    if (h < 0.5) {
+      // 睡眠惯性：醒后前 30 分钟被压低，再平滑接回昼夜曲线
+      var c05 = circadian(wakeClock + 0.5 * 60);
+      c = 0.35 + (c05 - 0.35) * (h / 0.5);
+    } else {
+      c = circadian(clock);
+    }
+    return Math.round(clamp(100 * q * c, 0, 100));
+  }
+
+  // 整日警觉度曲线：从醒来时刻起，覆盖 spanHours（默认 18h），步长 step 分钟
+  // 返回 [{ h, clock, score }]，clock 为该日当地时刻 'HH:MM'
+  function alertnessCurve(night, opts) {
+    if (!night) return [];
+    opts = opts || {};
+    var step = opts.step || 15;
+    var spanH = opts.spanHours || 18;
+    var wakeClock = ((night.wake % 1440) + 1440) % 1440;
+    var pts = [];
+    for (var m = 0; m <= spanH * 60; m += step) {
+      var h = m / 60;
+      pts.push({
+        h: h,
+        clock: minToHHMM(wakeClock + m),
+        score: alertnessAt(night, h)
+      });
+    }
+    return pts;
+  }
+
+  /* ---------- 咖啡 / 瞌睡窗口 ---------- */
+
+  // 合适喝咖啡时段：[醒后 DEF_AFTER_WAKE, 睡前 DEF_BEFORE_BED]
+  function coffeeWindow(night, opts) {
+    if (!night) return { valid: false, reason: 'no-sleep', start: '', end: '' };
+    opts = opts || {};
+    var after = opts.afterWake != null ? opts.afterWake : CONST.DEF_AFTER_WAKE;
+    var before = opts.beforeBed != null ? opts.beforeBed : CONST.DEF_BEFORE_BED;
+    var wakeClock = ((night.wake % 1440) + 1440) % 1440;
+    var bedClock = ((night.bed % 1440) + 1440) % 1440;
+    if (bedClock <= wakeClock) bedClock += 1440;   // 夜猫子：就寝在醒来之后，按次日晚算
+    var start = wakeClock + after;
+    var end = bedClock - before;
+    var valid = end > start;
+    return {
+      start: minToHHMM(start),
+      end: minToHHMM(end),
+      valid: valid,
+      reason: valid ? '' : 'window-too-narrow'
+    };
+  }
+
+  // 瞌睡时段：睡眠惯性 + 午后低谷 + 睡前收尾
+  function drowsinessWindows(night, opts) {
+    if (!night) return [];
+    opts = opts || {};
+    var wakeClock = ((night.wake % 1440) + 1440) % 1440;
+    var bedClock = ((night.bed % 1440) + 1440) % 1440;
+    if (bedClock <= wakeClock) bedClock += 1440;
+    var inertia = opts.inertia != null ? opts.inertia : CONST.INERTIA_MIN;
+    var wind = opts.windDown != null ? opts.windDown : CONST.WIND_DOWN_MIN;
+
+    var out = [{
+      type: 'inertia',
+      start: minToHHMM(wakeClock),
+      end: minToHHMM(wakeClock + inertia),
+      note: '刚醒，注意力尚未恢复'
+    }];
+
+    // 午后低谷：固定在当地 15:00 附近（受"醒后≥5h、睡前≥2h"约束），
+    // 不随曲线单调性漂移——否则晚睡者会被傍晚整体下滑误判成"午后"。
+    var center = 15 * 60;
+    if (center < wakeClock + 5 * 60) center = wakeClock + 5 * 60;
+    if (center > bedClock - 2 * 60) center = bedClock - 2 * 60;
+    out.push({
+      type: 'afternoon',
+      start: minToHHMM(center - 45),
+      end: minToHHMM(center + 45),
+      note: '午后生理低谷，最易犯困'
+    });
+
+    out.push({
+      type: 'winddown',
+      start: minToHHMM(bedClock - wind),
+      end: minToHHMM(bedClock),
+      note: '临近入睡，避免刺激与咖啡因'
+    });
+    return out;
+  }
+
+  // 给已有曲线叠加咖啡因效应（coffeeClock 为 'HH:MM'），返回新曲线
+  function applyCaffeine(curve, coffeeClock, opts) {
+    if (!curve || !curve.length) return curve;
+    opts = opts || {};
+    var peak = opts.peak != null ? opts.peak : CONST.CAFFEINE_PEAK;
+    var onset = opts.onset != null ? opts.onset : CONST.CAFFEINE_ONSET;
+    var half = opts.halfLife != null ? opts.halfLife : CONST.CAFFEINE_HALF;
+    var start = toMin(coffeeClock);
+    if (start == null) return curve;
+    return curve.map(function (p) {
+      var t = toMin(p.clock) - start;
+      if (t < 0) return p;
+      var boost = peak * (1 - Math.exp(-t / onset)) * Math.exp(-t / half);
+      return { h: p.h, clock: p.clock, score: clamp(p.score + boost, 0, 100) };
+    });
+  }
+
+  /* ---------- 截图 -> 睡眠（P2 解析器，按真实 OCR 校准） ----------
+   * 依据 tesseract.js（chi_sim best_int、psm4）对小米运动健康 6.x 真机截图的实测输出设计：
+   *  - 数字错字有规律：7→了、4→个、%→x/X，"分钟"→"分名/分针/分钙"
+   *  - 详情页每行「阶段名 占比 偏高/偏低 时长」，下方有「参考: 15%-20%」锚点行
+   *  - 总览页是「值行在上、标签行在下」的网格，值可能散落
+   * 策略：标签匹配 + 参考范围锚定双路取值，再用约束自动纠错：
+   *  深+浅+REM=总时长、效率≈总时长/卧床时长、阶段时长必须小于总时长。
+   */
+
+  // OCR 数字混淆候选：同一字符可能是哪个数字
+  var DIG_ALT = {
+    '0': [0], '1': [1], '2': [2], '3': [3], '4': [4], '5': [5],
+    '6': [6], '7': [7], '8': [8], '9': [9],
+    '了': [7], '个': [4], '涉': [4], 'O': [0], 'o': [0], '〇': [0], '○': [0],
+    '一': [1], '二': [2], '三': [3, 5], '四': [4], '五': [5],
+    '六': [6], '七': [7], '八': [8], '九': [9]
+  };
+  var NUMTOK = '0-9○O〇了个涉一二三四五六七八九十';
+
+  function numAlts(tok) {
+    var alts = [0];
+    for (var i = 0; i < tok.length; i++) {
+      var d = DIG_ALT[tok[i]];
+      if (!d) return null;
+      var next = [];
+      for (var a = 0; a < alts.length; a++) {
+        for (var b = 0; b < d.length; b++) next.push(alts[a] * 10 + d[b]);
+      }
+      alts = next.length > 8 ? next.slice(0, 8) : next;
+    }
+    return alts;
+  }
+
+  /** 扫一行里的时长 token：[{min, alt:[...]}]。前缀是 晚/迟 的是「入睡规律性」，跳过 */
+  function scanDurs(s) {
+    var out = [], m, TOK = '[' + NUMTOK + ']';
+    // hGroup/mGroup 指明哪个捕获组是小时/分钟（0=无）
+    // A: 7小时 / 7小时6分名；B: 7时6分（无「小」，两部分数字都须在场，避免「了时分」误判）；C: 3分针（纯分钟）
+    var PATS = [
+      { re: '(' + TOK + '{1,2})小时(?:(' + TOK + '{1,2})分?)?', h: 1, m: 2 },
+      { re: '(' + TOK + '{1,2})小?时(' + TOK + '{1,2})分', h: 1, m: 2 },
+      { re: '(' + TOK + '{1,3})分', h: 0, m: 1 }
+    ];
+    PATS.forEach(function (p) {
+      var g = new RegExp(p.re, 'g');
+      while ((m = g.exec(s))) {
+        var pv = m.index > 0 ? s[m.index - 1] : '';
+        if (pv === '晚' || pv === '迟') continue;
+        // 已被更长的模式覆盖的不重复算
+        var inside = out.some(function (d) {
+          var pos = s.indexOf(d.text);
+          return pos >= 0 && m.index >= pos && m.index < pos + d.text.length;
+        });
+        if (inside) continue;
+        var hs = p.h ? numAlts(m[p.h]) : [0];
+        if (!hs) continue;
+        var ms = p.m ? (m[p.m] ? numAlts(m[p.m]) : [0]) : [0];
+        if (!ms) ms = [0];
+        var mins = [];
+        hs.forEach(function (h) { ms.forEach(function (mm) { mins.push(h * 60 + mm); }); });
+        out.push({ min: mins[0], alt: mins, text: m[0] });
+      }
+    });
+    return out;
+  }
+
+  /** 扫一行里的占比：29x / 14% / 57%（“5”常被认成别的字，取不到就取不到） */
+  function scanPcts(s) {
+    var out = [], m;
+    var re = /(\d{1,3})\s*[x×X%]/g;
+    while ((m = re.exec(s))) {
+      var v = +m[1];
+      if (v >= 3 && v <= 100) out.push(v);
+    }
+    return out;
+  }
+
+  /** 模糊阶段标签（睡/眠/动 等关键字常被认错，用最稳定的单字兜） */
+  function stageOf(t) {
+    if (/深/.test(t)) return 'deep';
+    if (/浅/.test(t)) return 'light';
+    if (/眼动|限动|腿动|REM/i.test(t)) return 'rem';
+    if (/清[醒弄柄]/.test(t)) return 'awake';
+    return null;
+  }
+
+  /** 参考范围行 -> 阶段（小米详情页固定：清醒 0-2次 / REM 20%-25% / 浅睡 55%-75% / 深睡 15%-20%） */
+  function refStageOf(t) {
+    var m2 = t.match(/(\d+)\s*[-~—]\s*(\d+)\s*次/);
+    if (m2 && +m2[1] === 0) return 'awake';
+    var m = t.match(/(\d{1,3})\s*%?\s*[-~—]\s*(\d{1,3})\s*%?/);
+    if (!m) return null;
+    var a = +m[1], b = +m[2];
+    while (a > 100) a = Math.floor(a / 10);   // "202%-25%" -> 20
+    if (a === 55 || b === 75) return 'light';
+    if (a === 20 && b === 25) return 'rem';
+    if (a === 15 && b === 20) return 'deep';
+    if (a === 0) return 'awake';
+    return null;
+  }
+
+  function scanEff(s) {
+    var out = [], m;
+    var re = /(\d{1,3})\s*[%xX×"”]/g;
+    while ((m = re.exec(s))) {
+      var v = +m[1];
+      if (v >= 50 && v <= 100) out.push(v);
+    }
+    return out;
+  }
+
+  function uniqPush(arr, v) {
+    if (v != null && arr.indexOf(v) < 0) arr.push(v);
+  }
+
+  function parseSleepShot(lines) {
+    if (!lines || !lines.length) return null;
+    var C = lines.map(function (l) {
+      return String(l).replace(/\s+/g, '').replace(/％/g, '%');
+    });
+
+    /* 日期：2026年10月23日 / 2026-10-23 / 10月23日 */
+    var date = '';
+    for (var i = 0; i < C.length; i++) {
+      var dm = C[i].match(/(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})/);
+      if (dm) { date = dm[1] + '-' + pad(+dm[2]) + '-' + pad(+dm[3]); break; }
+      var dm2 = C[i].match(/(\d{1,2})月(\d{1,2})日/);
+      if (dm2) { date = new Date().getFullYear() + '-' + pad(+dm2[1]) + '-' + pad(+dm2[2]); break; }
+    }
+
+    /* 起止时间：两遍扫——先同行标签（入睡02:49 / 醒来09:58），
+       再用上下文配对（总览页是「值在上、标签在下」的网格） */
+    var bed = null, wake = null;
+    var timeRows = [];
+    for (i = 0; i < C.length; i++) {
+      var tm = C[i].match(/(\d{1,2})[:：](\d{2})/);
+      if (!tm) continue;
+      var hh = +tm[1];
+      if (hh > 23) continue;
+      timeRows.push({ i: i, time: pad(hh) + ':' + tm[2], line: C[i] });
+    }
+    timeRows.forEach(function (r) {
+      if (/醒|起床/.test(r.line) && wake == null) wake = r.time;
+      else if (/入|就寝/.test(r.line) && !/规律/.test(r.line) && bed == null) bed = r.time;
+    });
+    timeRows.forEach(function (r) {
+      if (wake != null && bed != null) return;
+      var ctx = r.line + '\n' + (C[r.i - 1] || '') + '\n' + (C[r.i + 1] || '');
+      if (wake == null && /醒|起床/.test(ctx) && !/入|就寝/.test(r.line)) wake = r.time;
+      else if (bed == null && /入|就寝/.test(ctx) && !/规律/.test(ctx) && !/醒|起床/.test(r.line)) bed = r.time;
+    });
+
+    /* 每行时长/占比预扫描 */
+    var durs = C.map(scanDurs);
+    var pcts = C.map(scanPcts);
+
+    /* 总时长：带「时长」标签行的同/上/下一行里最大的合理值；兜底找无阶段标签的长时长 */
+    var total = null;
+    for (i = 0; i < C.length; i++) {
+      if (!/时长/.test(C[i])) continue;
+      var rows = [i + 1, i, i - 1];
+      for (var k = 0; k < rows.length && total == null; k++) {
+        var j = rows[k];
+        if (j < 0 || j >= C.length || !durs[j].length) continue;
+        durs[j].forEach(function (d) {
+          d.alt.forEach(function (v) {
+            if (v >= 60 && v <= 900 && (total == null || v > total)) total = v;
+          });
+        });
+      }
+      if (total != null) break;
+    }
+    if (total == null) {
+      for (i = 0; i < C.length; i++) {
+        if (stageOf(C[i]) || /参考|规律/.test(C[i])) continue;
+        durs[i].forEach(function (d) {
+          d.alt.forEach(function (v) {
+            if (v >= 240 && v <= 900 && (total == null || v < total)) total = v;
+          });
+        });
+      }
+    }
+
+    /* 各阶段候选：标签行（同/上/下一行）+ 参考范围行锚定 */
+    var stageC = { deep: { durs: [], pcts: [] }, light: { durs: [], pcts: [] },
+                   rem: { durs: [], pcts: [] }, awake: { durs: [], pcts: [] } };
+
+    function collect(idx, st) {
+      durs[idx].forEach(function (d) { stageC[st].durs.push(d); });
+      pcts[idx].forEach(function (p) { uniqPush(stageC[st].pcts, p); });
+    }
+
+    for (i = 0; i < C.length; i++) {
+      var st = stageOf(C[i]);
+      if (!st || /参考/.test(C[i])) continue;
+      var got = false;
+      var near = [i, i + 1, i - 1];
+      for (var k2 = 0; k2 < near.length; k2++) {
+        var j2 = near[k2];
+        if (j2 < 0 || j2 >= C.length) continue;
+        if (j2 !== i && (stageOf(C[j2]) || /参考/.test(C[j2]))) continue;
+        if (durs[j2].length || pcts[j2].length) { collect(j2, st); got = true; break; }
+      }
+      if (!got && i + 1 < C.length) collect(i + 1, st);   // 散行兜底（如「深睦仅 / 点14%」）
+    }
+    for (i = 0; i < C.length; i++) {
+      if (!/参[考者]/.test(C[i])) continue;
+      var st2 = refStageOf(C[i]);
+      if (!st2) continue;
+      for (var k3 = 1; k3 <= 3 && i - k3 >= 0; k3++) {
+        var j3 = i - k3;
+        if (stageOf(C[j3]) && !/参考/.test(C[j3])) { collect(j3, st2); break; }
+        if (durs[j3].length || pcts[j3].length) { collect(j3, st2); break; }
+      }
+    }
+
+    /* 清醒次数 */
+    var awakenings = null;
+    for (i = 0; i < C.length; i++) {
+      if (/参考/.test(C[i])) continue;
+      var cm = C[i].match(/(\d{1,2})\s*次/);
+      if (!cm) continue;
+      var cv = +cm[1];
+      if (cv <= 20 && (stageOf(C[i]) === 'awake' || /次数/.test(C[i] + (C[i + 1] || '') + (C[i - 1] || '')))) {
+        awakenings = cv;
+        break;
+      }
+    }
+
+    /* 睡眠效率：候选取「最接近 总时长/卧床时长」的那个。
+       标签放宽到「率」——「效」字常被 conf 过滤丢掉（如「清醒次数率入规律性」） */
+    var effCands = [];
+    for (i = 0; i < C.length; i++) {
+      if (!/率/.test(C[i])) continue;
+      [i, i + 1, i - 1].forEach(function (j) {
+        if (j < 0 || j >= C.length) return;
+        if (/范[围闺园]|合理/.test(C[j])) return;   // 「合理范围: 85%~100%」不是效率值
+        scanEff(C[j]).forEach(function (v) { uniqPush(effCands, v); });
+      });
+    }
+
+    /* 卧床时长（跨午夜） */
+    var span = null;
+    if (bed && wake) {
+      var a1 = toMin(bed), b1 = toMin(wake);
+      span = b1 >= a1 ? b1 - a1 : 1440 - a1 + b1;
+      if (span <= 0 || span > 1080) span = null;
+    }
+
+    var efficiency = null;
+    if (effCands.length) {
+      if (span && total) {
+        var exp = Math.round(total / span * 100);
+        effCands.sort(function (x, y) { return Math.abs(x - exp) - Math.abs(y - exp); });
+      }
+      efficiency = effCands[0];
+    }
+
+    /* 阶段合成：时长候选 + 占比×总时长候选，穷举取「和=总时长」误差最小的组合 */
+    function stageOpts(st) {
+      var out = [];
+      stageC[st].durs.forEach(function (d) {
+        d.alt.forEach(function (v) { if (v > 0 && (total == null || v < total)) uniqPush(out, v); });
+      });
+      if (total) {
+        stageC[st].pcts.forEach(function (p) { uniqPush(out, Math.round(total * p / 100)); });
+      }
+      return out;
+    }
+
+    var deep = null, light = null, rem = null, awake = null;
+    var oD = stageOpts('deep'), oL = stageOpts('light'), oR = stageOpts('rem');
+    var oA = stageC.awake.durs.length ? [stageC.awake.durs[0].min] : [];
+
+    if (total == null && oD.length && oL.length && oR.length) {
+      // 没有总时长：三项齐全时直接用时长并反推总量
+      deep = oD[0]; light = oL[0]; rem = oR[0];
+      total = deep + light + rem;
+    } else if (total != null) {
+      var D2 = oD.length ? oD : [null], L2 = oL.length ? oL : [null], R2 = oR.length ? oR : [null];
+      var best = null;
+      D2.forEach(function (d) {
+        L2.forEach(function (l) {
+          R2.forEach(function (r) {
+            var vals = [d, l, r], miss = 0, sum = 0;
+            vals.forEach(function (v) { if (v == null) miss++; else sum += v; });
+            if (miss > 1) return;
+            var der = miss === 1 ? total - sum : 0;
+            if (miss === 1 && (der < 0 || der > total)) return;
+            var score = Math.abs(sum + der - total) + (miss === 1 ? 0.5 : 0);
+            if (!best || score < best.score) best = { score: score, deep: d, light: l, rem: r };
+          });
+        });
+      });
+      if (best) {
+        deep = best.deep; light = best.light; rem = best.rem;
+        // 唯一缺失的阶段由总量反推（如浅睡标签整行被 conf 过滤丢弃时）
+        if ([deep, light, rem].filter(function (v) { return v == null; }).length === 1) {
+          var der = total - (deep || 0) - (light || 0) - (rem || 0);
+          if (der >= 0 && der <= total) {
+            if (deep == null) deep = der;
+            else if (light == null) light = der;
+            else rem = der;
+          }
+        }
+      }
+      if (oA.length && oA[0] < (total || 1e9)) awake = oA[0];
+      else if (stageC.awake.pcts.length && total) awake = Math.round(total * stageC.awake.pcts[0] / 100);
+    }
+
+    /* 效率与「总时长/卧床时长」明显矛盾时宁可丢弃 */
+    if (efficiency != null && span && total) {
+      var exp2 = Math.round(total / span * 100);
+      if (Math.abs(efficiency - exp2) > 5) efficiency = null;
+    }
+
+    var quality = /良好|质量好|睡得?很?好/.test(C.join('')) ? 'good'
+      : (efficiency != null && efficiency >= 90) ? 'good'
+      : (efficiency != null && efficiency < 75) ? 'bad' : 'normal';
+
+    if (!bed && !wake && total == null && effCands.length === 0) return null;
+
+    return {
+      date: date,
+      start: bed,
+      end: wake,
+      total: total,
+      deep: deep,
+      light: light,
+      rem: rem,
+      awake: awake,
+      efficiency: efficiency,
+      awakenings: awakenings,
+      quality: quality,
+      source: 'shot',
+      _raw: {
+        effCands: effCands,
+        pcts: { deep: stageC.deep.pcts, light: stageC.light.pcts, rem: stageC.rem.pcts, awake: stageC.awake.pcts }
+      }
+    };
+  }
+
+  /**
+   * 多张截图的结果合并（详情页 + 总览页）。
+   * 字段取第一个非空值；效率在多候选时选最接近「总时长/卧床时长」的。
+   */
+  function mergeShotResults(list) {
+    var rs = (list || []).filter(Boolean);
+    if (!rs.length) return null;
+    if (rs.length === 1) return rs[0];
+
+    var out = { source: 'shot' };
+    var FIELDS = ['date', 'start', 'end', 'total', 'deep', 'light', 'rem', 'awake', 'awakenings'];
+    FIELDS.forEach(function (f) {
+      for (var i = 0; i < rs.length; i++) {
+        if (rs[i][f] != null && rs[i][f] !== '') { out[f] = rs[i][f]; return; }
+      }
+    });
+
+    // 日期冲突：以第一张为准并标记
+    var dates = rs.map(function (r) { return r.date; }).filter(Boolean);
+    if (dates.length && dates.some(function (d) { return d !== dates[0]; })) out._dateConflict = dates;
+
+    // 效率：收集所有候选（含各自 _raw），用 span 校验挑最合理的
+    var effAll = [];
+    rs.forEach(function (r) {
+      if (r.efficiency != null) effAll.push(r.efficiency);
+      ((r._raw && r._raw.effCands) || []).forEach(function (v) { uniqPush(effAll, v); });
+    });
+    var span2 = null;
+    if (out.start && out.end) {
+      var a = toMin(out.start), b = toMin(out.end);
+      span2 = b >= a ? b - a : 1440 - a + b;
+      if (span2 <= 0 || span2 > 1080) span2 = null;
+    }
+    if (effAll.length) {
+      if (span2 && out.total) {
+        var exp = Math.round(out.total / span2 * 100);
+        effAll.sort(function (x, y) { return Math.abs(x - exp) - Math.abs(y - exp); });
+      }
+      out.efficiency = effAll[0];
+    }
+
+    // 丢掉合并后与 span 矛盾的效率
+    if (out.efficiency != null && span2 && out.total) {
+      var exp2 = Math.round(out.total / span2 * 100);
+      if (Math.abs(out.efficiency - exp2) > 5) delete out.efficiency;
+    }
+
+    out.quality = out.efficiency != null
+      ? (out.efficiency >= 90 ? 'good' : out.efficiency < 75 ? 'bad' : 'normal')
+      : (rs.some(function (r) { return r.quality === 'good'; }) ? 'good' : 'normal');
+    out._raw = rs[0]._raw || {};
+    return out;
+  }
+
+  global.SleepModel = {
+    CONST: CONST,
+    toMin: toMin,
+    minToHHMM: minToHHMM,
+    normalizeNight: normalizeNight,
+    circadian: circadian,
+    qualityFactor: qualityFactor,
+    alertnessAt: alertnessAt,
+    alertnessCurve: alertnessCurve,
+    coffeeWindow: coffeeWindow,
+    drowsinessWindows: drowsinessWindows,
+    applyCaffeine: applyCaffeine,
+    parseSleepShot: parseSleepShot,
+    mergeShotResults: mergeShotResults
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
 <script>
@@ -12954,6 +14003,102 @@ window.AK_OPS = [
     }, 1900);
   }
 
+  /**
+   * 带「撤销」按钮的轻提示。用于拖动排序 / 改期等易误操作的落点：
+   * 点击撤销在有效期内执行 onAction（通常是恢复到操作前的状态）。
+   * @param {string} msg
+   * @param {{actionText?:string, onAction?:Function, duration?:number}} [opts]
+   */
+  function toastAction(msg, opts) {
+    opts = opts || {};
+    var root = document.getElementById('toastRoot');
+    if (!root) return null;
+    var closed = false;
+    var node = el('div', { class: 'toast toast-action' }, [
+      svg('M20 6L9 17l-5-5', 16),
+      el('span', { class: 'toast-msg', text: msg }),
+      el('button', {
+        class: 'toast-act',
+        text: opts.actionText || '撤销',
+        onclick: function () {
+          close();
+          if (opts.onAction) { try { opts.onAction(); } catch (e) {} }
+        }
+      })
+    ]);
+    function close() {
+      if (closed) return;
+      closed = true;
+      node.classList.add('cp-out');
+      setTimeout(function () { node.remove(); }, 220);
+    }
+    root.appendChild(node);
+    setTimeout(close, opts.duration || 5000);
+    return { close: close };
+  }
+
+  /**
+   * 「移动到…」动作面板：给拖动提供键盘 / 右键 / 长按的无障碍替代入口。
+   * @param {string} title
+   * @param {Array<{label:string, hint?:string, danger?:boolean, onClick?:Function, sep?:boolean}>} items
+   */
+  function moveMenu(title, items) {
+    items = (items || []).filter(Boolean);
+    if (!items.length) return null;
+    var list = el('div', { class: 'move-menu' });
+    var m = modal({ title: title || '移动到…', width: '380px', body: list });
+    items.forEach(function (it) {
+      if (it.sep) { list.appendChild(el('div', { class: 'move-sep' })); return; }
+      list.appendChild(el('button', {
+        class: 'move-item' + (it.danger ? ' danger' : ''),
+        onclick: function () {
+          m.close();
+          if (it.onClick) setTimeout(it.onClick, 0);
+        }
+      }, [
+        el('span', { class: 'move-item-label', text: it.label }),
+        it.hint ? el('span', { class: 'move-item-hint', text: it.hint }) : null
+      ]));
+    });
+    return m;
+  }
+
+  /**
+   * 一次性提示气泡：用于「长按可拖动」这类隐藏能力。
+   * 同一会话只弹一次；用户点「知道了」后写入 localStorage，之后不再打扰。
+   */
+  var hintShown = {};
+  function hintOnce(key, text, opts) {
+    opts = opts || {};
+    if (hintShown[key]) return null;
+    try { if (localStorage.getItem('cp_hint_' + key)) return null; } catch (e) {}
+    var root = document.getElementById('toastRoot');
+    if (!root) return null;
+    var closed = false;
+    var node = el('div', { class: 'toast toast-hint' }, [
+      svg('M12 16v-5M12 8v.01M12 3l9.5 16.5H2.5L12 3z', 16),
+      el('span', { class: 'toast-msg', text: text }),
+      el('button', {
+        class: 'toast-act', text: opts.okText || '知道了',
+        onclick: function () { remember(); close(); }
+      })
+    ]);
+    function remember() {
+      hintShown[key] = 1;
+      try { localStorage.setItem('cp_hint_' + key, '1'); } catch (e) {}
+    }
+    function close() {
+      if (closed) return;
+      closed = true;
+      node.classList.add('cp-out');
+      setTimeout(function () { node.remove(); }, 220);
+    }
+    root.appendChild(node);
+    hintShown[key] = 1;
+    setTimeout(function () { if (!closed) close(); }, opts.duration || 9000);
+    return { close: close, remember: remember };
+  }
+
   /* ---------- 横滑手势 ----------
    * 给视图根节点挂左右滑动：左滑（手指向左）触发 handlers.left，右滑触发 handlers.right。
    * 用于课表切周、月历切月。三道防误触：
@@ -13001,6 +14146,8 @@ window.AK_OPS = [
       close: function () {
         box.classList.remove('cp-show');
         wrap.style.background = 'transparent';
+        // 无论用哪种方式关闭，都摘掉 Esc 监听，避免多次开关后 keydown 监听越积越多
+        document.removeEventListener('keydown', onKey);
         setTimeout(function () {
           wrap.remove();
           openCount = Math.max(0, openCount - 1);
@@ -13608,7 +14755,8 @@ window.AK_OPS = [
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
     cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
-    toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
+    toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,
+    modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
@@ -14044,6 +15192,446 @@ window.AK_OPS = [
 })(window);
 
 
+
+</script>
+<script>
+/* ==========================================================
+ * 通用拖动手势引擎（DragGesture）
+ * ----------------------------------------------------------
+ * 复用于「课表 / 日程 / 日历 / 计划 / 目标 / 待办 / 专注」等所有
+ * 需要长按拖动的场景，统一处理：
+ *   - Pointer Events + setPointerCapture（鼠标 / 触摸 / 笔一致）
+ *   - touch-action:none 防止移动端拖动时误触发页面滚动
+ *   - 6px 阈值区分「点击」与「拖动」，避免误触卡片自带按钮
+ *   - 拖动中生成跟随指针的幽灵块（ghost），源块半透明
+ *   - 真实拖动后自动吞掉随后那次 click，避免误开详情 / 误触按钮
+ *
+ * 视图只负责两件事：
+ *   onMove(ctx)  —— 用 moveWithin 实时调整 DOM 顺序 / 高亮落点
+ *   onEnd(ctx)   —— 用 orderedIds 读出最终顺序，提交一次 Store（触发重渲染）
+ * ========================================================== */
+window.DragGesture = (function () {
+  'use strict';
+
+  var cssInjected = false;
+  function ensureCSS() {
+    if (cssInjected) return;
+    cssInjected = true;
+    var s = document.createElement('style');
+    s.id = 'cp-drag-style';
+    s.textContent = [
+      '.cp-drag-item{ touch-action:none; }',
+      '.cp-plan-card.cp-drag-item, .cp-goal-card.cp-drag-item,',
+      ' .cp-task-row.cp-drag-item, .cp-ag-item.cp-drag-item,',
+      ' .cp-cal-event.cp-drag-item, .cp-course-block.cp-drag-item{ cursor:grab; }',
+      '.cp-drag-item:active{ cursor:grabbing; }',
+      '.cp-drag-source{ opacity:.35; }',
+      '.cp-drag-ghost{ position:fixed; z-index:99999; pointer-events:none; margin:0;',
+      '  box-shadow:0 10px 28px rgba(0,0,0,.25); opacity:.95; transform:scale(1.02);',
+      '  border-radius:14px; }',
+      '.cp-drop-before{ box-shadow:inset 0 3px 0 0 var(--primary) !important; }',
+      '.cp-drop-after{ box-shadow:inset 0 -3px 0 0 var(--primary) !important; }',
+      '.cp-cal-cell.cp-drop-cell{ outline:2px solid var(--primary); outline-offset:-2px; background:var(--primary-faint); }'
+    ].join('\n');
+    document.head.appendChild(s);
+  }
+
+  /** 默认幽灵块：克隆源节点，固定宽高跟随指针 */
+  function defaultGhost(src) {
+    var g = src.cloneNode(true);
+    var base = (src.className || '').replace(/cp-drop-\S+/g, '').trim();
+    g.className = base + ' cp-drag-ghost';
+    var r = src.getBoundingClientRect();
+    g.style.width = r.width + 'px';
+    g.style.height = r.height + 'px';
+    return g;
+  }
+
+  /**
+   * 让 elem 可拖动。
+   * @param {HTMLElement} elem
+   * @param {Object} opts
+   *   handle  : 仅当 pointerdown 命中该选择器（或其子元素）才启动拖动
+   *   ignore  : 命中该选择器（如按钮）时不启动拖动，留给原点击事件
+   *   ghost   : 自定义幽灵块构建函数(elem) -> node
+   *   threshold: 触发拖动所需的位移阈值（默认 6px）
+   *   disabled: () => bool，返回 true 时整体禁用
+   *   onDown/onStart/onMove/onEnd(ctx)
+   *     ctx = { dx, dy, evt, ghost, overEl }  （overEl 为指针下的元素）
+   * @returns {Function} teardown
+   */
+  function makeDraggable(elem, opts) {
+    opts = opts || {};
+    ensureCSS();
+
+    var TH = opts.threshold == null ? 6 : opts.threshold;
+    var pid = null, sx = 0, sy = 0;
+    var dragging = false, started = false;
+    var ghost = null, offX = 0, offY = 0;
+    var lastX = 0, lastY = 0, scroller = null, rafId = null;
+    var lpTimer = null, suppressDrag = false;
+
+    function isCancelled() { return opts.disabled && opts.disabled(); }
+
+    function clearLp() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
+
+    /** 菜单弹出后，吞掉长按松手时那次 click，避免误开详情 / 立刻关闭菜单 */
+    function swallowNextClick() {
+      var t = setTimeout(function () { document.removeEventListener('click', swallow, true); }, 700);
+      function swallow(ev) {
+        // 只吞「长按松手」那一下；菜单项在 .cp-modal 里，必须放行
+        if (ev.target && ev.target.closest && ev.target.closest('.cp-modal')) return;
+        ev.stopPropagation(); ev.preventDefault();
+        document.removeEventListener('click', swallow, true);
+        clearTimeout(t);
+      }
+      document.addEventListener('click', swallow, true);
+    }
+
+    function startMenu(swallow) {
+      if (!opts.menu) return;
+      var items = null;
+      try { items = opts.menu(); } catch (_) { items = null; }
+      if (!items || !items.length) return;
+      suppressDrag = true;
+      if (swallow) {
+        // 长按：菜单可能盖在卡片上，捕获指针保证松手时仍走 onUp 收尾
+        try { elem.setPointerCapture(pid); } catch (_) {}
+        swallowNextClick();
+      }
+      if (window.UI && window.UI.moveMenu) window.UI.moveMenu(opts.menuTitle, items);
+    }
+
+    function onCtx(e) {
+      if (isCancelled() || !opts.menu) return;
+      e.preventDefault();
+      startMenu(false);
+    }
+
+    function onKeyMenu(e) {
+      if (!opts.menu) return;
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault();
+        startMenu(false);
+      }
+    }
+
+    /** 找最近的可滚动祖先（页面本身多数是 #view-wrap 内滚动） */
+    function nearestScroller(node) {
+      var p = node.parentElement;
+      while (p && p !== document.body && p !== document.documentElement) {
+        var st, oy;
+        try { st = getComputedStyle(p); } catch (_) { st = null; }
+        oy = st && st.overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 2) return p;
+        p = p.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    }
+
+    /**
+     * 拖动中若指针停在视口（或滚动容器）上下边缘，持续滚动并重算落点。
+     * 触摸拖动时 touch-action:none 会禁用原生滚动，长距离拖动（如日历↔待办）
+     * 必须靠它才能滚到屏幕外。用 rAF 持续滚，不依赖指针是否还在动。
+     */
+    function autoScrollTick() {
+      if (!started) { rafId = null; return; }
+      rafId = requestAnimationFrame(autoScrollTick);
+      if (!scroller) scroller = nearestScroller(elem);
+      if (!scroller) return;
+      var isPage = scroller === document.scrollingElement || scroller === document.documentElement ||
+                   scroller === document.body;
+      var top, bottom;
+      if (isPage) { top = 0; bottom = window.innerHeight; }
+      else {
+        var rect = scroller.getBoundingClientRect();
+        top = rect.top; bottom = rect.bottom;
+      }
+      var EDGE = 64, MAX = 16, v = 0;
+      if (lastY < top + EDGE) v = -Math.ceil((top + EDGE - lastY) / 4);
+      else if (lastY > bottom - EDGE) v = Math.ceil((lastY - (bottom - EDGE)) / 4);
+      if (!v) return;
+      v = Math.max(-MAX, Math.min(MAX, v));
+      if (isPage) window.scrollBy(0, v);
+      else scroller.scrollTop += v;
+      var over = document.elementFromPoint(lastX, lastY);
+      if (opts.onMove) {
+        opts.onMove({
+          dx: lastX - sx, dy: lastY - sy,
+          evt: { clientX: lastX, clientY: lastY, target: over },
+          ghost: ghost, overEl: over
+        });
+      }
+    }
+
+    function onDown(e) {
+      if (isCancelled()) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (opts.ignore && e.target.closest && e.target.closest(opts.ignore)) return;
+      if (opts.handle && !(e.target.closest && e.target.closest(opts.handle))) return;
+      sx = e.clientX; sy = e.clientY; pid = e.pointerId;
+      lastX = e.clientX; lastY = e.clientY; scroller = null;
+      dragging = true; started = false; suppressDrag = false;
+      // 监听在 document 上：拖动过程中条目会在容器里被 insertBefore 调整顺序，
+      // 某些浏览器会因此触发 lostpointercapture，事件不再送到 elem，拖动会「半路断掉」。
+      document.addEventListener('pointermove', onMove, true);
+      document.addEventListener('pointerup', onUp, true);
+      document.addEventListener('pointercancel', onUp, true);
+      // 长按不动 = 打开「移动到…」菜单（拖动仍是长按 + 移动）
+      if (opts.menu) {
+        clearLp();
+        lpTimer = setTimeout(function () {
+          lpTimer = null;
+          if (!started && dragging) startMenu(true);
+        }, opts.longPressMs || 550);
+      }
+      if (opts.onDown) opts.onDown(e);
+    }
+
+    function onMove(e) {
+      if (!dragging || suppressDrag) return;
+      lastX = e.clientX; lastY = e.clientY;
+      var dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!started) {
+        if (Math.hypot(dx, dy) < TH) return;
+        clearLp();
+        started = true;
+        try { elem.setPointerCapture(pid); } catch (_) {}
+        elem.classList.add('cp-drag-source');
+        ghost = opts.ghost ? opts.ghost(elem) : defaultGhost(elem);
+        document.body.appendChild(ghost);
+        var r = elem.getBoundingClientRect();
+        offX = sx - r.left; offY = sy - r.top;
+        position(e.clientX, e.clientY);
+        if (opts.onStart) opts.onStart({ dx: dx, dy: dy, evt: e, ghost: ghost });
+        try {
+          if (navigator.vibrate && !(window.Store && Store.settings && Store.settings.haptics === false)) navigator.vibrate(8);
+        } catch (_) {}
+        rafId = requestAnimationFrame(autoScrollTick);
+      }
+      position(e.clientX, e.clientY);
+      var over = document.elementFromPoint(e.clientX, e.clientY);
+      if (opts.onMove) opts.onMove({ dx: dx, dy: dy, evt: e, ghost: ghost, overEl: over });
+    }
+
+    function onUp(e) {
+      if (!dragging) return;
+      clearLp();
+      dragging = false;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      document.removeEventListener('pointermove', onMove, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onUp, true);
+      try { elem.releasePointerCapture(pid); } catch (_) {}
+      elem.classList.remove('cp-drag-source');
+      clearDropHints();
+      if (suppressDrag) { suppressDrag = false; ghost = null; started = false; return; }
+      var over = started ? document.elementFromPoint(e.clientX, e.clientY) : null;
+      if (started) {
+        // 拦截本次拖动后合成的 click，避免误触卡片内按钮 / 打开详情。
+        // 只在松手后极短时间内生效：合成 click 几乎同刻到达；超时自动摘除，
+        // 免得吞掉紧接着用户真正想点的「撤销」/菜单项。
+        document.addEventListener('click', killClick, true);
+        setTimeout(function () { document.removeEventListener('click', killClick, true); }, 120);
+        if (opts.onEnd) opts.onEnd({ dx: e.clientX - sx, dy: e.clientY - sy, evt: e, ghost: ghost, overEl: over });
+      }
+      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      ghost = null; started = false;
+    }
+
+    function killClick(ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      document.removeEventListener('click', killClick, true);
+    }
+
+    function position(x, y) {
+      if (!ghost) return;
+      ghost.style.left = (x - offX) + 'px';
+      ghost.style.top = (y - offY) + 'px';
+    }
+
+    elem.addEventListener('pointerdown', onDown);
+    elem.classList.add('cp-drag-item');
+    if (opts.menu) {
+      elem.addEventListener('contextmenu', onCtx);
+      elem.addEventListener('keydown', onKeyMenu);
+      if (!elem.hasAttribute('tabindex')) elem.setAttribute('tabindex', '0');
+      elem.setAttribute('aria-haspopup', 'menu');
+    }
+    return function teardown() {
+      elem.removeEventListener('pointerdown', onDown);
+      elem.removeEventListener('contextmenu', onCtx);
+      elem.removeEventListener('keydown', onKeyMenu);
+      document.removeEventListener('pointermove', onMove, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onUp, true);
+      elem.classList.remove('cp-drag-item');
+      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    };
+  }
+
+  /** 清掉所有落点高亮 */
+  function clearDropHints() {
+    var nodes = document.querySelectorAll('.cp-drop-before, .cp-drop-after');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].classList.remove('cp-drop-before', 'cp-drop-after');
+    }
+  }
+
+  /**
+   * 列表内拖动时，把 dragged 插到 overEl 所在条目之前 / 之后
+   * （按指针在目标条目内的纵向位置判断）。
+   * @param {HTMLElement} container 条目共同的父容器
+   * @param {HTMLElement} dragged   正在拖动的条目
+   * @param {HTMLElement} overEl    指针下的元素
+   * @param {number} clientY        指针纵坐标
+   * @param {string} itemSel        条目选择器（默认 [data-id]）
+   */
+  function moveWithin(container, dragged, overEl, clientY, itemSel) {
+    if (!container || !overEl) return;
+    itemSel = itemSel || '[data-id]';
+    var target = overEl.closest(itemSel);
+    if (!target || target === dragged || !container.contains(target)) return;
+    var tr = target.getBoundingClientRect();
+    var after = clientY > tr.top + tr.height / 2;
+    if (after) {
+      if (target.nextSibling !== dragged) container.insertBefore(dragged, target.nextSibling);
+    } else {
+      if (target.previousSibling !== dragged) container.insertBefore(dragged, target);
+    }
+  }
+
+  /** 读出容器内各条目的 id 顺序（优先 data-drag-id，否则 data-id） */
+  function orderedIds(container, itemSel) {
+    var ids = [];
+    if (!container) return ids;
+    itemSel = itemSel || '[data-id]';
+    var nodes = container.querySelectorAll(itemSel);
+    for (var i = 0; i < nodes.length; i++) {
+      var id = nodes[i].getAttribute('data-drag-id') || nodes[i].getAttribute('data-id');
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /** 给 overEl 加落点提示（before/after），并清掉其它条目的提示 */
+  function showDropHint(overEl, clientY, itemSel) {
+    clearDropHints();
+    itemSel = itemSel || '[data-id]';
+    var target = overEl && overEl.closest(itemSel);
+    if (!target) return;
+    var tr = target.getBoundingClientRect();
+    var after = clientY > tr.top + tr.height / 2;
+    target.classList.add(after ? 'cp-drop-after' : 'cp-drop-before');
+  }
+
+  /* ==========================================================
+   * 「移动到…」菜单项构造器（供各视图复用，含撤销）
+   * ========================================================== */
+  function snapshot(key) {
+    var arr = (window.Store && window.Store.state && window.Store.state[key]) || [];
+    return arr.map(function (x) { return x.id; });
+  }
+
+  /** 排序类菜单：上移 / 下移 / 置顶 / 置底；操作后带「撤销」 */
+  function orderMenuItems(key, id, filterFn) {
+    var Store = window.Store;
+    if (!Store) return [];
+    var arr = (Store.state && Store.state[key]) || [];
+    var ids = [];
+    for (var i = 0; i < arr.length; i++) { if (!filterFn || filterFn(arr[i])) ids.push(arr[i].id); }
+    var pos = ids.indexOf(id);
+    if (pos < 0) return [];
+
+    function apply(kind, label) {
+      var before = snapshot(key);
+      var ok;
+      if (kind === 'up') ok = Store.moveAmong(key, id, -1, filterFn);
+      else if (kind === 'down') ok = Store.moveAmong(key, id, 1, filterFn);
+      else if (kind === 'top') ok = Store.moveEdgeAmong(key, id, 'top', filterFn);
+      else ok = Store.moveEdgeAmong(key, id, 'bottom', filterFn);
+      if (ok && window.UI && window.UI.toastAction) {
+        window.UI.toastAction(label, { onAction: function () { Store.reorderInView(key, before); } });
+      }
+    }
+
+    var items = [];
+    if (pos > 0) {
+      items.push({ label: '上移一位', onClick: function () { apply('up', '已上移'); } });
+      items.push({ label: '移到最前', onClick: function () { apply('top', '已移到最前'); } });
+    }
+    if (pos < ids.length - 1) {
+      items.push({ label: '下移一位', onClick: function () { apply('down', '已下移'); } });
+      items.push({ label: '移到最后', onClick: function () { apply('bottom', '已移到最后'); } });
+    }
+    return items;
+  }
+
+  /**
+   * 日期类菜单：移到今天 / 明天 / 下周（待办还可清除截止日）。
+   * kind = 'event' | 'task'；操作后带「撤销」。
+   */
+  function dateMenuItems(kind, id) {
+    var Store = window.Store;
+    var DU = window.DateUtil;
+    if (!Store || !DU) return [];
+    var items = [];
+
+    function setDate(label, ds) {
+      items.push({
+        label: label,
+        onClick: function () {
+          var before = kind === 'event'
+            ? ((Store.getEvent(id) || {}).date || '')
+            : ((Store.getTask(id) || {}).dueDate || '');
+          if (kind === 'event') Store.updateEvent(id, { date: ds });
+          else Store.updateTask(id, { dueDate: ds });
+          if (window.UI && window.UI.toastAction) {
+            window.UI.toastAction(label.replace('移到', '已移到'), {
+              onAction: function () {
+                if (kind === 'event') Store.updateEvent(id, { date: before });
+                else Store.updateTask(id, { dueDate: before });
+              }
+            });
+          }
+        }
+      });
+    }
+
+    var today = DU.today();
+    setDate('移到今天', DU.toStr(today));
+    setDate('移到明天', DU.toStr(DU.addDays(today, 1)));
+    setDate('移到下周', DU.toStr(DU.addDays(today, 7)));
+
+    if (kind === 'task') {
+      items.push({ sep: true });
+      items.push({
+        label: '清除截止日期', danger: true,
+        onClick: function () {
+          var before = (Store.getTask(id) || {}).dueDate || '';
+          Store.updateTask(id, { dueDate: '' });
+          if (window.UI && window.UI.toastAction) {
+            window.UI.toastAction('已清除截止日期', {
+              onAction: function () { Store.updateTask(id, { dueDate: before }); }
+            });
+          }
+        }
+      });
+    }
+    return items;
+  }
+
+  return {
+    makeDraggable: makeDraggable,
+    moveWithin: moveWithin,
+    orderedIds: orderedIds,
+    showDropHint: showDropHint,
+    clearDropHints: clearDropHints,
+    orderMenuItems: orderMenuItems,
+    dateMenuItems: dateMenuItems
+  };
+})();
 
 </script>
 <script>
@@ -14690,7 +16278,8 @@ window.AK_OPS = [
       lead: 15,      // 提前多少分钟
       sound: true,
       exams: true,   // 导出的日历里含考试
-      events: true   // 含重要日程
+      events: true,  // 含重要日程
+      taskDue: true  // 待办到期（已逾期 / 今日到期）页面内提醒
     };
   }
 
@@ -14898,6 +16487,58 @@ window.AK_OPS = [
     return out.sort(function (a, b) { return a.startMin - b.startMin; });
   }
 
+  /** 'HH:MM' -> 当天分钟数；解析不了返回 null */
+  function timeToMin(s) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    return (+m[1]) * 60 + (+m[2]);
+  }
+
+  /**
+   * 待办到期提醒：只管「已逾期」和「今日到期」，每条一天只弹一次。
+   * 与上课提醒共用同一套页面内策略（零权限、零兼容问题），见文件头说明。
+   * 明天以后的一概不打扰——那属于计划，不属于提醒。
+   */
+  function checkTaskDue(o, dk, nowMin) {
+    if (!o.taskDue) return;
+    var lead = +o.lead || 0;
+    var MAX = 3;                                   // 一次最多弹 3 条，剩下的合并成一条汇总
+
+    var overdue = (Store.overdueTasks ? Store.overdueTasks() : []).map(function (t) {
+      return { t: t, left: DateUtil.daysLeft(t.dueDate) };
+    }).sort(function (a, b) { return a.left - b.left; });        // 逾期最久的在前
+
+    var today = (Store.todayTasks ? Store.todayTasks() : []).filter(function (t) {
+      if (!t.dueTime) return true;                              // 只有日期，当天弹一次
+      var m = timeToMin(t.dueTime);
+      if (m == null) return true;
+      return nowMin >= m - lead;                                // 有具体时刻就按 lead 提前
+    }).sort(function (a, b) {
+      return (a.dueTime || '99:99') < (b.dueTime || '99:99') ? -1 : 1;
+    });
+
+    var list = overdue.concat(today.map(function (t) { return { t: t, left: 0 }; }));
+    var total = list.length, n = 0;
+    list.slice(0, MAX).forEach(function (it) {
+      var key = dk + '|task|' + it.t.id;
+      if (fired[key]) return;
+      fired[key] = 1;
+      var txt = (it.left < 0 ? '待办已逾期：' : '今日到期：') + (it.t.title || '未命名待办');
+      if (it.t.dueTime) txt += '（' + it.t.dueTime + '）';
+      if (it.left < 0) txt += ' · 逾期 ' + Math.abs(it.left) + ' 天';
+      UI.toast(txt);
+      n++;
+    });
+    if (n && o.sound) beep();
+    if (n && total > n) {
+      var mk = dk + '|task|__more';
+      if (!fired[mk]) {
+        fired[mk] = 1;
+        UI.toast('另有 ' + (total - n) + ' 条待办到期，去「待办」看看');
+      }
+    }
+  }
+
   function check() {
     var o = opts();
     if (!o.on) return;
@@ -14920,6 +16561,9 @@ window.AK_OPS = [
       UI.toast(txt);
       if (o.sound) beep();
     });
+
+    // 待办到期（逾期 / 今日到期）
+    checkTaskDue(o, dk, nowMin);
 
     // 番茄钟自然跑完（不是手动停的）时提示一下
     var t = Store.pomodoro && Store.pomodoro.timer;
@@ -19365,6 +21009,8 @@ window.AK_OPS = [
 
   var cursor = null;     // { y, m }
   var selected = null;   // 选中日期 YYYY-MM-DD
+  var relayHighlight = null;  // 从待办页接力过来、需要在「待办抽屉」里高亮的待办 id
+  var relayToastedId = null;  // 避免 mount + onEnter 双渲染时重复弹提示
   var onlyMine = false;  // 是否只看有内容的日子（预留）
   var calTab = 'calendar';   // 分页：calendar 日历 / agenda 日程（日程来自 agenda.js 的 AgendaPane）
   var COURSE_COLOR = '#0ea5e9';   // 时间块里课程统一显示为该色（与「学习/课程」主色一致），不再用每门课各自颜色
@@ -19444,6 +21090,22 @@ window.AK_OPS = [
       root.innerHTML = '';
       ensureCursor();
 
+      /* 跨视图接力：从待办页拖到「日历」入口过来时，定位到今天并在待办抽屉里高亮它。
+         进入视图时 mount + onEnter 会连续渲染两次，所以这里不立刻清标记，
+         而是保留 500ms，让两次渲染都能命中；之后再清掉避免误高亮。 */
+      (function () {
+        var bus = (global.App && global.App.bus) ? App.bus : null;
+        var relay = bus ? bus.peekRelay(8000) : null;
+        if (relay) {
+          var id = relay.taskId, at = relay.at;
+          var d = today0();
+          selected = DateUtil.toStr(d);
+          cursor = { y: d.getFullYear(), m: d.getMonth() };
+          relayHighlight = id;
+          setTimeout(function () { if (bus) bus.clearRelay(at); }, 500);
+        }
+      })();
+
       /* ---- 分页：日历 / 日程 ---- */
       var paneBar = el('div', { class: 'pane-tabs' });
       [
@@ -19474,12 +21136,12 @@ window.AK_OPS = [
       /* ================= 月份头 ================= */
       var head = el('div', { class: 'week-bar', style: { marginBottom: '12px' } }, [
         el('div', { class: 'week-nav' }, [
-          el('button', { class: 'icon-btn', onclick: function () { shiftMonth(-1); view.render(); } }, [V.svg(V.icons.left)]),
+          el('button', { class: 'icon-btn', dataset: { calNav: 'prev' }, title: '上个月（把日程拖到这里可改到上月同日）', onclick: function () { shiftMonth(-1); view.render(); } }, [V.svg(V.icons.left)]),
           el('div', { class: 'week-label' }, [
             el('span', { text: y + ' 年 ' + (m + 1) + ' 月' }),
             el('small', { text: monthSummary(y, m) })
           ]),
-          el('button', { class: 'icon-btn', onclick: function () { shiftMonth(1); view.render(); } }, [V.svg(V.icons.right)])
+          el('button', { class: 'icon-btn', dataset: { calNav: 'next' }, title: '下个月（把日程拖到这里可改到下月同日）', onclick: function () { shiftMonth(1); view.render(); } }, [V.svg(V.icons.right)])
         ]),
         el('div', { class: 'week-meta' }, [
           (y !== today0().getFullYear() || m !== today0().getMonth()) ? el('button', {
@@ -19529,7 +21191,7 @@ window.AK_OPS = [
         var box = el('div', { class: 'card', style: { padding: '4px 8px' } });
         upcoming.forEach(function (e) {
           var d = DateUtil.parse(e.date);
-          box.appendChild(el('div', {
+          var row = el('div', {
             class: 'task-row',
             onclick: function () {
               cursor = { y: d.getFullYear(), m: d.getMonth() };
@@ -19545,7 +21207,9 @@ window.AK_OPS = [
               ])
             ]),
             el('span', { class: 'chip chip-primary', text: '日程' })
-          ]));
+          ]);
+          dragEventToCell(row, e.id, e.date);
+          box.appendChild(row);
         });
         up.appendChild(box);
         root.appendChild(up);
@@ -19580,6 +21244,7 @@ window.AK_OPS = [
         (isToday ? ' today' : '') +
         (isSel ? ' sel' : '') +
         (isFuture ? ' future' : ''),
+      dataset: { date: ds },
       onclick: function () {
         selected = ds;
         if (d.getMonth() !== cursor.m) {
@@ -19602,6 +21267,121 @@ window.AK_OPS = [
       ])
     ]);
     return cell;
+  }
+
+  /* ==========================================================
+   * 拖动：把事件拖到别的日格 → 改期
+   * 拖动源：选中日详情里的日程行 / 未来 7 天日程行
+   * 落点：月格（cp-cal-cell，带 data-date）
+   * ========================================================== */
+  function clearCellHint() {
+    var ns = document.querySelectorAll('.cp-cal-cell.cp-drop-cell');
+    for (var i = 0; i < ns.length; i++) ns[i].classList.remove('cp-drop-cell');
+  }
+
+  /* ---- 拖到月份导航 ‹ › 松手：改到相邻月同一天（边缘翻月的可落地形态） ---- */
+  function dropNavDir(overEl) {
+    var b = overEl && overEl.closest && overEl.closest('[data-cal-nav]');
+    return b ? b.getAttribute('data-cal-nav') : null;
+  }
+  function clearNavHot() {
+    var ns = document.querySelectorAll('.cp-cal-nav-hot');
+    for (var i = 0; i < ns.length; i++) ns[i].classList.remove('cp-cal-nav-hot');
+  }
+  function navHotButton(overEl) {
+    clearNavHot();
+    var b = overEl && overEl.closest && overEl.closest('[data-cal-nav]');
+    if (b) b.classList.add('cp-cal-nav-hot');
+    return b;
+  }
+  function sameDayShiftMonth(srcDate, dir) {
+    var base = srcDate ? DateUtil.parse(srcDate) : null;
+    if (!base) base = today0();
+    var ny = base.getFullYear(), nm = base.getMonth() + (dir === 'next' ? 1 : -1);
+    var dim = new Date(ny, nm + 1, 0).getDate();
+    var day = Math.min(base.getDate(), dim);
+    var d = new Date(ny, nm, day);
+    return { ds: DateUtil.toStr(d), y: ny, m: nm };
+  }
+
+  function dragEventToCell(node, eventId, sourceDate) {
+    if (!global.DragGesture) return;
+    var oldDate = sourceDate;
+    DragGesture.makeDraggable(node, {
+      ignore: '.cal-color',
+      menuTitle: '日程',
+      menu: function () { return DragGesture.dateMenuItems('event', eventId); },
+      onMove: function (c) {
+        clearCellHint();
+        if (navHotButton(c.overEl)) return;   // 悬停翻月按钮时只高亮按钮
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== sourceDate) cell.classList.add('cp-drop-cell');
+      },
+      onEnd: function (c) {
+        clearCellHint(); clearNavHot();
+        var dir = dropNavDir(c.overEl);
+        if (dir) {
+          var t = sameDayShiftMonth(sourceDate, dir);
+          Store.updateEvent(eventId, { date: t.ds });
+          cursor = { y: t.y, m: t.m }; selected = t.ds; view.render();
+          V.toastAction('已改期到 ' + t.ds.slice(5).replace('-', '/'), {
+            onAction: function () { if (oldDate) { var od = DateUtil.parse(oldDate); cursor = { y: od.getFullYear(), m: od.getMonth() }; selected = oldDate; } Store.updateEvent(eventId, { date: oldDate }); }
+          });
+          return;
+        }
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var targetDs = cell && cell.getAttribute('data-date');
+        if (targetDs && targetDs !== sourceDate) {
+          Store.updateEvent(eventId, { date: targetDs });
+          V.toastAction('已改期到 ' + targetDs.slice(5).replace('-', '/'), {
+            onAction: function () { Store.updateEvent(eventId, { date: oldDate }); }
+          });
+        }
+      }
+    });
+  }
+
+  /** 待办抽屉 → 拖到日期格，直接改这条待办的截止日期（待办↔日历桥接） */
+  function dragTaskToCell(node, task) {
+    if (!global.DragGesture) return;
+    var src = task.dueDate || '';
+    DragGesture.makeDraggable(node, {
+      ignore: '.cal-color',
+      menuTitle: '待办「' + task.title + '」',
+      menu: function () { return DragGesture.dateMenuItems('task', task.id); },
+      onMove: function (c) {
+        clearCellHint();
+        if (navHotButton(c.overEl)) return;
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== src) cell.classList.add('cp-drop-cell');
+      },
+      onEnd: function (c) {
+        clearCellHint(); clearNavHot();
+        var dir = dropNavDir(c.overEl);
+        if (dir) {
+          var t = sameDayShiftMonth(src || '', dir);
+          Store.updateTask(task.id, { dueDate: t.ds });
+          cursor = { y: t.y, m: t.m }; selected = t.ds; view.render();
+          V.toastAction('「' + task.title + '」截止日改到 ' + t.ds.slice(5).replace('-', '/'), {
+            onAction: function () {
+              if (src) { var od = DateUtil.parse(src); cursor = { y: od.getFullYear(), m: od.getMonth() }; selected = src; }
+              Store.updateTask(task.id, { dueDate: src });
+            }
+          });
+          return;
+        }
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== src) {
+          Store.updateTask(task.id, { dueDate: ds });
+          V.toastAction('「' + task.title + '」截止日改到 ' + ds.slice(5).replace('-', '/'), {
+            onAction: function () { Store.updateTask(task.id, { dueDate: src }); }
+          });
+        }
+      }
+    });
   }
 
   function monthSummary(y, m) {
@@ -19683,16 +21463,18 @@ window.AK_OPS = [
 
     /* ---- 日程 ---- */
     if (events.length) {
-      card.appendChild(el('div', { class: 'cal-sub' }, ['日程']));
+      card.appendChild(el('div', { class: 'cal-sub' }, ['日程（可拖动改期）']));
       events.forEach(function (e) {
-        card.appendChild(el('div', { class: 'cal-line', onclick: function () {
+        var row = el('div', { class: 'cal-line', onclick: function () {
           if (global.EventDetail) global.EventDetail.open(e.id);
         } }, [
           el('span', { class: 'cal-time', text: e.start }),
           el('i', { class: 'cal-color', style: { background: '#ec4899' } }),
           el('span', { class: 'cal-name', text: e.title + (e.location ? ' · ' + e.location : '') }),
           e.done ? el('span', { class: 'chip chip-green', text: '已完成' }) : null
-        ]));
+        ]);
+        dragEventToCell(row, e.id, ds);
+        card.appendChild(row);
       });
     }
 
@@ -19982,6 +21764,15 @@ window.AK_OPS = [
       var da = a.dueDate || '9999-99-99', db = b.dueDate || '9999-99-99';
       return da < db ? -1 : da > db ? 1 : 0;
     });
+    // 接力进来的待办优先展示，避免被挤到 8 条之外
+    if (relayHighlight) {
+      for (var ri = 0; ri < pend.length; ri++) {
+        if (pend[ri].id === relayHighlight) {
+          pend.unshift(pend.splice(ri, 1)[0]);
+          break;
+        }
+      }
+    }
     pend = pend.slice(0, 8);
 
     wrap.appendChild(el('div', { class: 'section-title' }, [
@@ -20008,16 +21799,34 @@ window.AK_OPS = [
       var tag = [];
       if (planned) tag.push('计划 ' + TimeUtil.humanMin(planned));
       if (actual) tag.push('实际 ' + TimeUtil.humanMin(actual));
-      wrap.appendChild(el('div', {
-        class: 'tb-drawer-row',
+      var isRelay = relayHighlight && t.id === relayHighlight;
+      var row = el('div', {
+        class: 'tb-drawer-row' + (isRelay ? ' relay-hl' : ''),
         onclick: function () { paintPlanned(ds, t); }
       }, [
         el('i', { class: 'cal-color', style: { background: '#0ea5e9' } }),
         el('span', { class: 'tb-drawer-name', text: t.title }),
         t.dueDate ? el('span', { class: 'chip', text: DateUtil.human(t.dueDate) }) : null,
         tag.length ? el('span', { class: 'tb-drawer-tag', text: tag.join(' · ') }) : null
-      ]));
+      ]);
+      // 跨视图桥接：把待办拖到上方任意日期格 → 直接改截止日期
+      dragTaskToCell(row, t);
+      wrap.appendChild(row);
     });
+
+    if (relayHighlight) {
+      var hl = relayHighlight;
+      relayHighlight = null;
+      var rt = Store.getTask(hl);
+      if (rt && relayToastedId !== hl) {
+        relayToastedId = hl;
+        V.toast('已把「' + rt.title + '」带到日历：拖到某天改期，或点一下排今天', 'info');
+      }
+      setTimeout(function () {
+        var n = wrap.querySelector('.cp-relay-hl');
+        if (n && n.scrollIntoView) { try { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} }
+      }, 80);
+    }
     return wrap;
   }
 
@@ -21233,22 +23042,60 @@ window.AK_OPS = [
   }
 
   /* ==========================================================
-   * 睡眠记录弹窗
+   * 睡眠记录弹窗（手动填写 + 截图一键导入）
    * ========================================================== */
   var SleepDialog = {
     open: function (dateStr, id) {
       var isEdit = !!id;
       var r = id ? Store.getSleep(id) : null;
       var quality = r ? r.quality : 'normal';
+      var saveDate = dateStr;     // 截图带日期时可能改写
+      var imported = false;       // 是否来自截图导入
 
-      var fStart = V.input({ type: 'time', value: r ? r.start : '23:30' });
-      var fEnd = V.input({ type: 'time', value: r ? r.end : '07:00' });
-      var fQuality = V.segment([
+      function numOrNull(v) {
+        v = String(v == null ? '' : v).trim();
+        if (!v) return null;
+        var n = Number(v);
+        return isFinite(n) ? n : null;
+      }
+
+      var qualityOpts = [
         { value: 'good', label: '睡得好' },
         { value: 'normal', label: '一般' },
         { value: 'bad', label: '没睡好' }
-      ], quality, function (v) { quality = v; });
+      ];
+      var fStart = V.input({ type: 'time', value: r ? r.start : '23:30' });
+      var fEnd = V.input({ type: 'time', value: r ? r.end : '07:00' });
+      var fQuality = V.segment(qualityOpts, quality, function (v) { quality = v; });
+      // 记下每个选项的 value，便于截图回填时同步高亮
+      Array.prototype.forEach.call(fQuality.querySelectorAll('button'), function (b, i) { b.dataset.value = qualityOpts[i].value; });
+      function setQuality(v) {
+        quality = v;
+        Array.prototype.forEach.call(fQuality.querySelectorAll('button'), function (b) {
+          var on = b.dataset.value === v;
+          b.classList.toggle('active', on);
+          b.classList.toggle('cp-active', on);
+        });
+      }
       var fNote = V.input({ placeholder: '可选，例如：睡前刷手机太久', value: r ? r.note : '' });
+
+      // 睡眠结构（可选）：手环 / 截图才有；折叠，导入时自动展开
+      var fDeep = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.deep != null ? r.deep : '' });
+      var fLight = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.light != null ? r.light : '' });
+      var fRem = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.rem != null ? r.rem : '' });
+      var fAwake = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.awake != null ? r.awake : '' });
+      var fEff = V.input({ type: 'number', min: 0, max: 100, placeholder: '%', value: r && r.efficiency != null ? r.efficiency : '' });
+      var fAwakeCount = V.input({ type: 'number', min: 0, placeholder: '次', value: r && r.awakenings != null ? r.awakenings : '' });
+
+      var stageBox = el('div', { style: { display: 'none', marginTop: '4px' } }, [
+        el('div', { class: 'field-row' }, [V.field('深睡(分)', fDeep), V.field('浅睡(分)', fLight)]),
+        el('div', { class: 'field-row' }, [V.field('REM(分)', fRem), V.field('清醒(分)', fAwake)]),
+        el('div', { class: 'field-row' }, [V.field('睡眠效率(%)', fEff), V.field('清醒次数', fAwakeCount)])
+      ]);
+      var stageToggle = el('button', {
+        class: 'btn btn-sm', style: { margin: '2px 0 6px' },
+        onclick: function () { stageBox.style.display = stageBox.style.display === 'none' ? '' : 'none'; }
+      }, ['＋ 睡眠结构（可选，手环/截图才有）']);
 
       var preview = el('div', { class: 'preview-box' });
       function refresh() {
@@ -21260,6 +23107,89 @@ window.AK_OPS = [
       fEnd.addEventListener('input', refresh);
       refresh();
 
+      function prefill(rec) {
+        if (rec.start) fStart.value = rec.start;
+        if (rec.end) fEnd.value = rec.end;
+        if (rec.quality) setQuality(rec.quality);
+        if (rec.date) saveDate = rec.date;
+        fDeep.value = rec.deep != null ? rec.deep : '';
+        fLight.value = rec.light != null ? rec.light : '';
+        fRem.value = rec.rem != null ? rec.rem : '';
+        fAwake.value = rec.awake != null ? rec.awake : '';
+        fEff.value = rec.efficiency != null ? rec.efficiency : '';
+        fAwakeCount.value = rec.awakenings != null ? rec.awakenings : '';
+        stageBox.style.display = (rec.deep != null || rec.light != null || rec.rem != null ||
+          rec.awake != null || rec.efficiency != null || rec.awakenings != null) ? '' : 'none';
+        imported = true;
+        refresh();
+      }
+
+      function runSleepOCR(files) {
+        if (!global.Ocr) { UI.toast('当前环境不支持识别', 'err'); return; }
+        var list = Array.prototype.slice.call(files || []);
+        if (!list.length) return;
+        // 设置里勾了「云端识别」且填了接口，就走云端多模态视觉；否则本地 tesseract
+        var oc = (Store.state.settings && Store.state.settings.ocr) || {};
+        var useCloud = oc.prefer === 'cloud' && oc.endpoint && oc.apiKey;
+        var progText = el('b', { text: '正在识别第 1/' + list.length + ' 张…（' + (useCloud ? '云端' : '本地') + '）' });
+        var prog = V.modal({ title: '识别睡眠截图', body: el('div', { class: 'ocr-busy' }, [
+          el('div', { class: 'ocr-spinner' }), progText
+        ]) });
+        var results = [], errs = [];
+
+        function localParse(file) {
+          return global.Ocr.recognizeLocal(file, function () {}).then(function (res) {
+            if (res && res.words && res.words.length) {
+              var lines = global.TaskShot.linesFromWords(res.words).map(function (l) { return l.text; });
+              return global.SleepModel.parseSleepShot(lines);
+            }
+            return null;
+          });
+        }
+
+        function next(idx) {
+          if (idx >= list.length) {
+            prog.close();
+            var rec = global.SleepModel.mergeShotResults(results);
+            if (!rec || (!rec.start && !rec.end && rec.total == null)) {
+              UI.toast('没从截图里读到睡眠数据' + (errs.length ? '（' + errs.length + ' 张识别失败）' : ''), 'err');
+              return;
+            }
+            prefill(rec);
+            UI.toast('已从 ' + results.length + ' 张截图填入，请核对后保存' + (rec.date ? '（日期 ' + rec.date + '）' : ''));
+            return;
+          }
+          progText.textContent = '正在识别第 ' + (idx + 1) + '/' + list.length + ' 张…（' + (useCloud ? '云端' : '本地') + '）';
+
+          var p;
+          if (useCloud) {
+            // 云端优先；失败（如超时/接口错）自动回退本地 OCR
+            p = global.Ocr.recognizeCloudSleep(list[idx], oc).catch(function () { return localParse(list[idx]); });
+          } else {
+            p = localParse(list[idx]);
+          }
+          p.then(function (r) {
+            if (r) results.push(r);
+            next(idx + 1);
+          }).catch(function () {
+            errs.push(idx);
+            next(idx + 1);
+          });
+        }
+        next(0);
+      }
+
+      function pickSleepShot() {
+        var input = document.createElement('input');
+        input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+        input.onchange = function () {
+          var fs = input.files;
+          if (fs && fs.length) runSleepOCR(fs);
+          input.remove();
+        };
+        input.click();
+      }
+
       var m = V.modal({
         title: isEdit ? '编辑睡眠' : '记录睡眠',
         body: [
@@ -21270,6 +23200,8 @@ window.AK_OPS = [
           preview,
           el('div', { style: { height: '14px' } }),
           V.field('睡眠质量', fQuality),
+          stageToggle,
+          stageBox,
           V.field('备注', fNote)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -21284,9 +23216,18 @@ window.AK_OPS = [
             }
           }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
           el('button', {
+            class: 'btn', style: { marginLeft: 'auto' },
+            onclick: function () { pickSleepShot(); }
+          }, [V.svg(V.icons.camera, 16), '从截图导入']),
+          el('button', {
             class: 'btn btn-primary', text: '保存',
             onclick: function () {
-              var d = { date: dateStr, start: fStart.value, end: fEnd.value, quality: quality, note: fNote.value };
+              var d = {
+                date: saveDate, start: fStart.value, end: fEnd.value, quality: quality, note: fNote.value,
+                deep: numOrNull(fDeep.value), light: numOrNull(fLight.value), rem: numOrNull(fRem.value),
+                awake: numOrNull(fAwake.value), efficiency: numOrNull(fEff.value), awakenings: numOrNull(fAwakeCount.value),
+                source: imported ? 'shot' : (r && r.source) || 'manual'
+              };
               if (!d.start || !d.end) { UI.toast('请填写时间', 'err'); return; }
               if (isEdit) Store.updateSleep(id, d); else Store.addSleep(d);
               m.close();
@@ -21781,6 +23722,9 @@ window.AK_OPS = [
       /* ---------- 周热力条 ---------- */
       root.appendChild(heatCard(st));
 
+      /* ---------- 计划 vs 实际偏差 ---------- */
+      root.appendChild(planDeviationCard());
+
       /* ---------- 逐日记录量 ----------
          只在 8–35 天时给：更短的话上面已经有逐日热力条，更长的话
          chartDaily 会自动聚合成周，和上面的周热力条重复，还容易被误读成「一天 69 小时」。 */
@@ -22144,6 +24088,70 @@ window.AK_OPS = [
    *   跨度短（本周 / 今天）→ 按天分组，一格一天，否则只有一格没什么可看
    * 颜色一律按**日均**着色：首尾的不满周如果按总量算会显得特别浅，误导。
    * ========================================================== */
+  /* ==========================================================
+   * 计划 vs 实际偏差
+   * ----------------------------------------------------------
+   * 复用 Store.planProgress 的 target（计划量）与 value（实际量）。
+   * 复盘时真正有用的往往不是「完成率 78%」这种漂亮数字，
+   * 而是「还差 5 次」这种缺口，所以这里把差值直接摆出来，按差距大到小排。
+   * ========================================================== */
+  function planDeviationCard() {
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['计划 vs 实际']));
+
+    var plans = (Store.state.plans || []).filter(function (p) { return p && p.target > 0; });
+    if (!plans.length) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)' },
+        text: '还没有带目标的计划。建一个打卡或累加型计划，这里就能看到它差多少。'
+      }));
+      return card;
+    }
+
+    var rows = plans.map(function (p) {
+      var pg = Store.planProgress(p);
+      return { p: p, plan: pg.target, actual: pg.value, diff: pg.value - pg.target, pct: pg.pct };
+    }).sort(function (a, b) { return Math.abs(b.diff) - Math.abs(a.diff); });   // 差距最大的在前
+
+    var sumPlan = 0, sumActual = 0;
+    rows.forEach(function (r) { sumPlan += r.plan; sumActual += r.actual; });
+    var sumDiff = sumActual - sumPlan;
+    var sumPct = sumPlan ? Math.round(sumActual / sumPlan * 100) : 0;
+
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '合计 计划 ' + sumPlan + ' / 实际 ' + sumActual +
+            '（' + (sumDiff >= 0 ? '+' : '') + sumDiff + '，达成 ' + sumPct + '%）'
+    }));
+
+    rows.forEach(function (r) {
+      var over = r.diff >= 0;
+      card.appendChild(el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 0',
+          borderTop: '1px solid rgba(128,128,128,0.18)'
+        }
+      }, [
+        el('div', { style: { flex: '1', minWidth: '0' } }, [
+          el('div', {
+            style: { fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+            text: r.p.title
+          }),
+          el('div', {
+            style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '2px' },
+            text: '计划 ' + r.plan + ' · 实际 ' + r.actual
+          })
+        ]),
+        el('span', {
+          class: 'chip',
+          style: { color: over ? '#10b981' : '#ef4444', flex: 'none' },
+          text: (over ? '+' : '') + r.diff + '（' + r.pct + '%）'
+        })
+      ]));
+    });
+    return card;
+  }
+
   function heatCard(st) {
     var card = el('div', { class: 'card cp-chart-card' });
     var days = st.cur.daily;
@@ -22895,8 +24903,12 @@ window.AK_OPS = [
                   danger: true, okText: '删除'
                 }).then(function (ok) {
                   if (!ok) return;
+                  var snap = JSON.parse(JSON.stringify(Store.state.tasks));
                   var r = Store.removeTask(taskId);
-                  UI.toast(r.kept ? ('已删除，' + r.kept + ' 个子任务已提升为顶层') : '已删除待办');
+                  UI.toastAction(
+                    r.kept ? ('已删除，' + r.kept + ' 个子任务已提升为顶层') : '已删除待办',
+                    { duration: 6000, onAction: function () { Store.restoreTasks(snap); } }
+                  );
                 });
               }, 220);
             }
@@ -22984,7 +24996,12 @@ window.AK_OPS = [
     if (bar) { bar.innerHTML = ''; view.actions(bar); }
   }
 
-  var state = { status: 'all', course: 'all', tag: '', q: '', tab: 'tasks' };
+  var state = {
+    status: 'all', course: 'all', tag: '', q: '', tab: 'tasks',
+    sortMode: 'auto',
+    selectMode: false,   // 多选批量操作（仅手动排序模式）
+    selected: {}         // id -> 1
+  };
   /** 五个分页的可选值；深链接 / 搜索跳转都要按这个列表收口
    *  quadrant（时间去向）与 stats（统计与复盘）已不再是独立底部模块，
    *  而是挂在「待办」页里的分页；stats 还额外受 settings.statsOn 开关控制。 */
@@ -23205,15 +25222,45 @@ window.AK_OPS = [
         }));
       });
 
+      // 右侧操作区：课程筛选 + 手动排序开关
+      var rightBox = el('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' } });
       if (Store.courses.length) {
         var sel = V.select(
           [{ value: 'all', label: '全部课程' }].concat(Store.courses.map(function (c) {
             return { value: c.id, label: c.name };
-          })), state.course, { style: 'height:32px;width:auto;min-width:118px;font-size:12.5px' }
+          })), state.course, { style: 'height:32px;width:auto;min-width:110px;font-size:12.5px' }
         );
         sel.addEventListener('change', function () { state.course = sel.value; view.render(); });
-        tabBar.appendChild(el('div', { style: { marginLeft: 'auto' } }, [sel]));
+        rightBox.appendChild(sel);
       }
+      if (state.sortMode === 'manual') {
+        rightBox.appendChild(el('button', {
+          class: 'filter-tab' + (state.selectMode ? ' active' : ''),
+          title: '多选后可整组拖动或批量删除',
+          onclick: function () {
+            state.selectMode = !state.selectMode;
+            if (!state.selectMode) state.selected = {};
+            view.render();
+          }
+        }, [el('span', { text: '多选' })]));
+      }
+      rightBox.appendChild(el('button', {
+        class: 'filter-tab' + (state.sortMode === 'manual' ? ' active' : ''),
+        title: '开启后可长按拖动调整待办顺序',
+        onclick: function () {
+          state.sortMode = state.sortMode === 'manual' ? 'auto' : 'manual';
+          state.selectMode = false;
+          state.selected = {};
+          view.render();
+          if (state.sortMode === 'manual') {
+            UI.hintOnce('tasks-drag', '长按待办卡片可上下拖动调整顺序；拖到底部「日历」可直接去排期。');
+          }
+        }
+      }, [
+        V.svg('M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01', 15),
+        el('span', { text: '手动排序' })
+      ]));
+      tabBar.appendChild(rightBox);
       root.appendChild(tabBar);
 
       /* ---- 搜索 ---- */
@@ -23264,8 +25311,11 @@ window.AK_OPS = [
         }
         return true;
       }).sort(function (a, b) {
-        if (a.status === 'done' && b.status !== 'done') return 1;
-        if (b.status === 'done' && a.status !== 'done') return -1;
+        // 仅分组模式需要「已完成置底」；手动排序模式走数组顺序，不在此处排序
+        if (state.sortMode !== 'manual') {
+          if (a.status === 'done' && b.status !== 'done') return 1;
+          if (b.status === 'done' && a.status !== 'done') return -1;
+        }
         return 0;
       });
 
@@ -23280,22 +25330,183 @@ window.AK_OPS = [
         return;
       }
 
-      /* ---- 分组 ---- */
-      var groups = buildGroups(list);
-      groups.forEach(function (g) {
-        if (!g.items.length) return;
-        var head = el('div', { class: 'group-head' }, [
-          el('span', { text: g.title }),
-          el('span', { class: 'group-count', text: String(g.items.length) })
-        ]);
+      /* ---- 手动排序模式：平铺列表；支持多选整组移动与批量删除 ---- */
+      if (state.sortMode === 'manual') {
+        // 被筛选掉的选中项自动剔除，避免「选中了但看不见」
+        if (state.selectMode) {
+          var visSet = {};
+          list.forEach(function (t) { visSet[t.id] = 1; });
+          Object.keys(state.selected).forEach(function (id) { if (!visSet[id]) delete state.selected[id]; });
+        }
+
+        function selectedIds() { return Object.keys(state.selected); }
+
+        function toggleSelect(id) {
+          if (state.selected[id]) delete state.selected[id];
+          else state.selected[id] = 1;
+          view.render();
+        }
+
+        function bulkDelete(ids) {
+          if (!ids.length) return;
+          var o = Store.subtaskOpts();
+          var childCount = 0;
+          ids.forEach(function (id) { childCount += Store.subtasksOf(id).length; });
+          var msg = '确定删除选中的 ' + ids.length + ' 项待办吗？';
+          if (childCount) {
+            msg += '\n\n' + (o.orphanKeep
+              ? '其中 ' + childCount + ' 个子任务会保留，并提升为顶层。'
+              : '将连同 ' + childCount + ' 个子任务一起删除。');
+          }
+          V.confirm({ title: '批量删除待办', message: msg, danger: true, okText: '删除' }).then(function (ok) {
+            if (!ok) return;
+            state.selected = {};
+            state.selectMode = false;
+            var r = Store.removeTasks(ids);
+            if (r.removed) {
+              UI.toastAction('已删除 ' + r.removed + ' 项待办' + (r.kept ? '，' + r.kept + ' 个子任务已提升' : ''), {
+                duration: 6000,
+                onAction: function () { Store.restoreTasks(r.snapshot); }
+              });
+            }
+          });
+        }
+
+        function bulkBar() {
+          var ids = selectedIds();
+          var n = ids.length;
+          return el('div', { class: 'task-bulkbar' }, [
+            el('span', { class: 'task-bulkcount', text: '已选 ' + n + ' 项' }),
+            el('button', {
+              class: 'btn btn-sm', text: '取消',
+              onclick: function () { state.selectMode = false; state.selected = {}; view.render(); }
+            }),
+            el('button', {
+              class: 'btn btn-sm' + (n ? '' : ' disabled'),
+              style: n ? { color: 'var(--red)', borderColor: 'var(--red)' } : null,
+              text: '删除',
+              onclick: function () { if (n) bulkDelete(ids); }
+            })
+          ]);
+        }
+
+        root.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '0 0 10px' }
+        }, [state.selectMode ? '点击卡片勾选；拖动任意已选项可整组移动' : '长按任务卡片可上下拖动调整顺序']));
+
         var box = el('div', { class: 'card', style: { padding: '6px 8px', marginBottom: '14px' } });
-        g.items.forEach(function (t) {
-          // onToggle：展开/收起后不整页重绘，只重建这一组，保住滚动位置
-          box.appendChild(TaskRow.build(t, { onToggle: function () { view.render(); } }));
+        list.forEach(function (t) {
+          var node = TaskRow.build(t, { onToggle: function () { view.render(); } });
+          // 顶层条目统一打标记，作为拖拽单元（父任务为 .subtask-wrap，叶子为 .task-row）
+          node.classList.add('cp-task-drag');
+          node.dataset.id = t.id;
+
+          var rowEl = node.classList.contains('cp-task-row') ? node : node.querySelector('.cp-task-row');
+          if (state.selectMode && rowEl) {
+            var checked = !!state.selected[t.id];
+            rowEl.classList.add('cp-selecting');
+            if (checked) node.classList.add('cp-selected');
+            var sb = el('span', {
+              class: 'task-selbox' + (checked ? ' on' : ''),
+              title: checked ? '取消选择' : '选择'
+            }, [checked ? V.svg('M4 12l5 5L20 6', 12) : null]);
+            rowEl.insertBefore(sb, rowEl.firstChild);
+            rowEl.addEventListener('click', function (e) {
+              if (!state.selectMode) return;
+              if (e.target.closest && e.target.closest('.cp-task-selbox')) {
+                e.stopPropagation(); e.preventDefault(); toggleSelect(t.id); return;
+              }
+              if (e.target.closest && e.target.closest('button, input, a')) return;
+              e.stopPropagation(); e.preventDefault();
+              toggleSelect(t.id);
+            }, true);
+          }
+
+          box.appendChild(node);
+          if (global.DragGesture) {
+            var beforeOrder = null;
+            DragGesture.makeDraggable(node, {
+              ignore: 'button, input, textarea, a, .task-check, .subtask-toggle, .icon-btn, .cp-task-selbox',
+              menuTitle: '待办「' + t.title + '」',
+              menu: state.selectMode ? null : function () {
+                var items = DragGesture.orderMenuItems('tasks', t.id, function (x) { return !x.parentId; });
+                var dateItems = DragGesture.dateMenuItems('task', t.id);
+                if (items.length && dateItems.length) items.push({ sep: true });
+                var all = items.concat(dateItems);
+                // 无障碍兜底：不依赖拖到 TabBar，也能把待办带到日历排期
+                if (all.length) all.push({ sep: true });
+                all.push({
+                  label: '安排到日历…', hint: '跳到日历并高亮它',
+                  onClick: function () {
+                    if (global.App && global.App.bus) App.bus.setRelay(t.id);
+                    if (global.App && global.App.go) global.App.go('calendar');
+                  }
+                });
+                return all;
+              },
+              onStart: function () {
+                beforeOrder = DragGesture.orderedIds(box, '.cp-task-drag');
+              },
+              onMove: function (c) {
+                DragGesture.moveWithin(box, node, c.overEl, c.evt.clientY, '.cp-task-drag');
+                DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-task-drag');
+              },
+              onEnd: function (c) {
+                // 跨视图接力：拖到底部/侧边的「日历」入口松手 → 带着这条待办跳过去排期
+                var nav = c && c.overEl && c.overEl.closest && c.overEl.closest('[data-view]');
+                var vid = nav && nav.getAttribute('data-view');
+                if (vid && vid !== 'tasks') {
+                  if (vid === 'calendar') {
+                    if (global.App && global.App.bus) App.bus.setRelay(t.id);
+                  }
+                  if (global.App && global.App.go) global.App.go(vid);
+                  return;
+                }
+                var ids = DragGesture.orderedIds(box, '.cp-task-drag');
+                var finalIds = ids;
+                var selMap = state.selected;
+                var selCount = Object.keys(selMap).length;
+                if (state.selectMode && selMap[t.id] && selCount > 1) {
+                  // 整组移动：把选中的几条作为一块，落到被拖卡片当前的位置
+                  var di = ids.indexOf(t.id);
+                  var others = ids.filter(function (id) { return !selMap[id]; });
+                  var before = 0;
+                  for (var i = 0; i < di; i++) { if (!selMap[ids[i]]) before++; }
+                  var selIds = ids.filter(function (id) { return !!selMap[id]; });
+                  finalIds = others.slice(0, before).concat(selIds, others.slice(before));
+                }
+                if (finalIds.length > 1) {
+                  Store.reorderInView('tasks', finalIds);
+                  if (beforeOrder && beforeOrder.join(',') !== finalIds.join(',')) {
+                    UI.toastAction((state.selectMode && selCount > 1) ? '已移动 ' + selCount + ' 项' : '已调整待办顺序', {
+                      onAction: function () { Store.reorderInView('tasks', beforeOrder); }
+                    });
+                  }
+                }
+              }
+            });
+          }
         });
-        root.appendChild(head);
         root.appendChild(box);
-      });
+        if (state.selectMode) root.appendChild(bulkBar());
+      } else {
+        /* ---- 分组 ---- */
+        var groups = buildGroups(list);
+        groups.forEach(function (g) {
+          if (!g.items.length) return;
+          var head = el('div', { class: 'group-head' }, [
+            el('span', { text: g.title }),
+            el('span', { class: 'group-count', text: String(g.items.length) })
+          ]);
+          var gbox = el('div', { class: 'card', style: { padding: '6px 8px', marginBottom: '14px' } });
+          g.items.forEach(function (t) {
+            // onToggle：展开/收起后不整页重绘，只重建这一组，保住滚动位置
+            gbox.appendChild(TaskRow.build(t, { onToggle: function () { view.render(); } }));
+          });
+          root.appendChild(head);
+          root.appendChild(gbox);
+        });
+      }
 
       if (state.q) {
         var si = V.$('.cp-task-search input', root);
@@ -23503,7 +25714,38 @@ window.AK_OPS = [
       }, [V.svg(V.icons.trash, 14), '删除']));
     }
     card.appendChild(acts);
-    return card;
+
+  /* ---- 长按拖动排序（整卡可拖，按钮 / KR 行不触发） ---- */
+  if (global.DragGesture) {
+    var beforeOrder = null;
+    DragGesture.makeDraggable(card, {
+      ignore: 'button, input, textarea, a, .goal-kr, .icon-btn',
+      menuTitle: '目标「' + g.title + '」',
+      menu: function () {
+        return DragGesture.orderMenuItems('goals', g.id, function (x) { return !x.archivedAt; });
+      },
+      onStart: function () {
+        beforeOrder = DragGesture.orderedIds(card.parentNode, '.cp-goal-card');
+      },
+      onMove: function (c) {
+        DragGesture.moveWithin(card.parentNode, card, c.overEl, c.evt.clientY, '.cp-goal-card');
+        DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-goal-card');
+      },
+      onEnd: function (c) {
+        var ids = DragGesture.orderedIds(card.parentNode, '.cp-goal-card');
+        if (ids.length > 1) {
+          Store.reorderInView('goals', ids);
+          if (beforeOrder && beforeOrder.join(',') !== ids.join(',')) {
+            UI.toastAction('已调整目标顺序', {
+              onAction: function () { Store.reorderInView('goals', beforeOrder); }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  return card;
   }
 
   function archive(g) {
@@ -23644,7 +25886,12 @@ window.AK_OPS = [
             onclick: function () { openGoalDialog(); }
           }, [V.svg(V.icons.plus, 16), '新建目标'])));
       } else {
-        active.forEach(function (g) { host.appendChild(goalCard(g, false)); });
+        host.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '-2px 0 10px' }
+        }, ['长按卡片可拖动调整顺序']));
+        var activeWrap = el('div', { class: 'goal-active-list' });
+        active.forEach(function (g) { activeWrap.appendChild(goalCard(g, false)); });
+        host.appendChild(activeWrap);
       }
 
       if (archived.length) {
@@ -24123,6 +26370,9 @@ window.AK_OPS = [
         return;
       }
 
+      root.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '0 0 10px' }
+      }, ['长按卡片可拖动调整顺序']));
       var wrap = el('div', { class: 'plan-list' });
       list.forEach(function (p) { wrap.appendChild(planCard(p, view)); });
       root.appendChild(wrap);
@@ -24211,11 +26461,39 @@ window.AK_OPS = [
           onclick: function (e) { e.stopPropagation(); openAddValueDialog(p, view); }
         }, ['+ 记一笔' + (p.type === 'duration' ? '时长' : '进度')]));
       }
-      card.appendChild(row);
-    }
-
-    return card;
+    card.appendChild(row);
   }
+
+  /* ---- 长按拖动排序（整卡可拖，按钮区不触发） ---- */
+  if (global.DragGesture) {
+    var beforeOrder = null;
+    DragGesture.makeDraggable(card, {
+      ignore: 'button, .plan-check-btn, .plan-cell, input, textarea, a, .icon-btn',
+      menuTitle: '计划「' + p.title + '」',
+      menu: function () { return DragGesture.orderMenuItems('plans', p.id); },
+      onStart: function () {
+        beforeOrder = DragGesture.orderedIds(card.parentNode, '.cp-plan-card');
+      },
+      onMove: function (c) {
+        DragGesture.moveWithin(card.parentNode, card, c.overEl, c.evt.clientY, '.cp-plan-card');
+        DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-plan-card');
+      },
+      onEnd: function (c) {
+        var ids = DragGesture.orderedIds(card.parentNode, '.cp-plan-card');
+        if (ids.length > 1) {
+          Store.reorderInView('plans', ids);
+          if (beforeOrder && beforeOrder.join(',') !== ids.join(',')) {
+            UI.toastAction('已调整计划顺序', {
+              onAction: function () { Store.reorderInView('plans', beforeOrder); }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  return card;
+}
 
   function checkinWithAnim(id, dateStr, view, card) {
     var res = Store.togglePlanCheckin(id, dateStr);
@@ -27483,6 +29761,7 @@ window.AK_OPS = [
     total: 0,      // 本次总秒
     duration: 45,  // 设定分钟（默认 45，便于达到 ≥40 的种树门槛）
     taskId: '',
+    queue: [],     // 专注队列：待办 id 顺序，结算后可「开始下一个」
     tags: '',
     treeId: '',    // 本次专注播下/养护的树
     warned60: false
@@ -27664,9 +29943,137 @@ window.AK_OPS = [
       ]));
       card.appendChild(durRow);
 
-      // 选择待办（只列顶层任务，子任务进父任务里做）
+      // 关联待办：拖到上方圆环=本次专注，拖到下方队列=排队；下拉兜底
       var pending = Store.rootPending();
       if (pending.length) {
+        function pickTask(id, silent) {
+          T.taskId = id;
+          var tk = id ? Store.getTask(id) : null;
+          if (tk && tk.tags && tk.tags.length) T.tags = tk.tags.join(',');
+          if (tk && !silent) UI.toast('已关联待办：' + tk.title);
+          self.render();
+        }
+        function isOverRing(el0) {
+          return !!(el0 && el0.closest && el0.closest('.cp-timer-ring-wrap'));
+        }
+        function isOverQueue(el0) {
+          return !!(el0 && el0.closest && el0.closest('.cp-pomo-queue'));
+        }
+
+        /* ---- 队列容器先建好，供托盘拖放引用 ---- */
+        var queueWrap = el('div', { class: 'pomo-queue' });
+        var queueList = el('div', { class: 'pomo-queue-list' });
+        var queueHint = el('div', { class: 'pomo-queue-hint', text: '把待办拖到这里排队，或点待办菜单「加入专注队列」' });
+        queueWrap.appendChild(queueList);
+        queueWrap.appendChild(queueHint);
+
+        function pruneQueue() {
+          T.queue = (T.queue || []).filter(function (id) { return !!Store.getTask(id); });
+        }
+        function enqueue(id) {
+          pruneQueue();
+          if (id === T.taskId) { UI.toast('这条正在专注，无需排队'); return; }
+          if (T.queue.indexOf(id) >= 0) { UI.toast('已在专注队列中'); return; }
+          T.queue.push(id);
+          persistTimer();
+          UI.toast('已加入专注队列');
+          self.render();
+        }
+        function dequeue(id) {
+          T.queue = (T.queue || []).filter(function (x) { return x !== id; });
+          persistTimer();
+          self.render();
+        }
+        function startNext() {
+          pruneQueue();
+          var id = T.queue.shift();
+          if (!id) return;
+          pickTask(id, true);
+          start();
+          persistTimer();
+        }
+        function renderQueue() {
+          pruneQueue();
+          queueList.innerHTML = '';
+          T.queue.forEach(function (id) {
+            var t = Store.getTask(id);
+            if (!t) return;
+            var qchip = el('div', { class: 'pomo-qchip', dataset: { id: id }, title: '拖动可调整顺序' }, [
+              el('span', { class: 'pomo-qchip-name', text: t.title }),
+              el('button', {
+                class: 'pomo-qchip-x', title: '移出队列', text: '×',
+                onclick: function (e) { e.stopPropagation(); dequeue(id); }
+              })
+            ]);
+            if (global.DragGesture) {
+              DragGesture.makeDraggable(qchip, {
+                ignore: 'button',
+                onMove: function (c) {
+                  DragGesture.moveWithin(queueList, qchip, c.overEl, c.evt.clientY, '.cp-pomo-qchip');
+                  DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-pomo-qchip');
+                },
+                onEnd: function () {
+                  var ids = DragGesture.orderedIds(queueList, '.cp-pomo-qchip');
+                  if (ids.length) { T.queue = ids; persistTimer(); self.render(); }
+                }
+              });
+            }
+            queueList.appendChild(qchip);
+          });
+          queueHint.style.display = T.queue.length ? 'none' : '';
+          queueWrap.classList.toggle('has-items', T.queue.length > 0);
+        }
+        renderQueue();
+
+        var tray = el('div', { class: 'pomo-tray' });
+        pending.forEach(function (t) {
+          var chip = el('div', {
+            class: 'pomo-chip' + (t.id === T.taskId ? ' active' : ''),
+            dataset: { id: t.id },
+            title: '拖进上方圆环开始专注，或拖进下方队列排队',
+            text: t.title
+          });
+          chip.addEventListener('click', function () { pickTask(t.id); });
+          if (global.DragGesture) {
+            DragGesture.makeDraggable(chip, {
+              menuTitle: '待办「' + t.title + '」',
+              menu: function () {
+                return [
+                  { label: '关联为本次专注', onClick: function () { pickTask(t.id); } },
+                  { label: '加入专注队列', hint: '结算后依次专注', onClick: function () { enqueue(t.id); } }
+                ];
+              },
+              onMove: function (c) {
+                var ring = isOverRing(c.overEl);
+                ringWrap.classList.toggle('cp-drop-active', ring);
+                queueWrap.classList.toggle('cp-drop-active', !ring && isOverQueue(c.overEl));
+              },
+              onEnd: function (c) {
+                ringWrap.classList.remove('cp-drop-active');
+                queueWrap.classList.remove('cp-drop-active');
+                if (isOverRing(c.overEl)) pickTask(t.id);
+                else if (isOverQueue(c.overEl)) enqueue(t.id);
+              }
+            });
+          }
+          tray.appendChild(chip);
+        });
+        card.appendChild(V.field('待办（拖进圆环=本次，拖进队列=排队）', tray, '点一下也能直接关联'));
+        UI.hintOnce('pomo-drag', '把待办拖进上方圆环开始专注，或拖进下方队列依次专注。');
+
+        card.appendChild(V.field('专注队列', queueWrap,
+          T.queue.length ? '队列中 ' + T.queue.length + ' 条，结算后可「开始下一个」' : '把待办拖进来，依次专注'));
+
+        var qfirst = T.queue.length ? Store.getTask(T.queue[0]) : null;
+        if (qfirst && !T.running) {
+          card.appendChild(el('button', {
+            class: 'btn btn-primary',
+            style: { width: '100%', marginBottom: '6px' },
+            onclick: startNext
+          }, ['开始下一个：' + qfirst.title]));
+        }
+
+        // 下拉兜底（保留原有交互，方便键盘/无拖动场景）
         var opts = [{ value: '', label: '不关联待办' }].concat(pending.map(function (t) {
           return { value: t.id, label: t.title };
         }));
@@ -27677,7 +30084,7 @@ window.AK_OPS = [
           if (tk && tk.tags && tk.tags.length) T.tags = tk.tags.join(',');
           self.render();
         });
-        card.appendChild(V.field('本次专注的待办', sel));
+        card.appendChild(V.field('或从下拉选择', sel));
       }
 
       // 本次标签（用于按标签统计）
@@ -28002,6 +30409,16 @@ window.AK_OPS = [
     }
   }
 
+  /** 统一持久化计时状态（含队列），避免各处漏传字段 */
+  function persistTimer(over) {
+    var o = {
+      running: T.running, endAt: T.endAt, left: Math.round(T.left), duration: T.duration,
+      taskId: T.taskId, tags: T.tags, treeId: T.treeId, queue: (T.queue || []).slice()
+    };
+    if (over) Object.keys(over).forEach(function (k) { o[k] = over[k]; });
+    Store.saveTimer(o);
+  }
+
   function start() {
     T.total = T.duration * 60;
     T.left = T.total;
@@ -28014,7 +30431,7 @@ window.AK_OPS = [
       var seed = Store.seedTree(Store.pomodoro.selectedSpecies);
       if (seed) T.treeId = seed.id;
     }
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: true, endAt: T.endAt, left: 0 });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -28025,7 +30442,7 @@ window.AK_OPS = [
     T.running = false;
     stopTick();
     if (global.WhiteNoise) WhiteNoise.stop();
-    Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: false, endAt: 0, left: Math.round(T.left) });
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
     UI.toast('已暂停');
@@ -28034,7 +30451,7 @@ window.AK_OPS = [
   function resume() {
     T.endAt = Date.now() + T.left * 1000;
     T.running = true;
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: true, endAt: T.endAt, left: 0 });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -28099,7 +30516,7 @@ window.AK_OPS = [
   /** 提前停止后的收尾（清空计时器状态并重绘） */
   function afterStopEarly() {
     T.treeId = '';
-    Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags, treeId: '' });
+    persistTimer({ running: false, endAt: 0, left: 0, taskId: '', treeId: '' });
     T.left = T.duration * 60;
     T.total = T.duration * 60;
     var v0 = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
@@ -28177,6 +30594,7 @@ window.AK_OPS = [
     if (!t) return;
     T.duration = t.duration || 45;
     T.taskId = t.taskId || '';
+    T.queue = Array.isArray(t.queue) ? t.queue.filter(function (x) { return !!x; }) : [];
     T.tags = t.tags || '';
     T.treeId = t.treeId || '';
     T.total = T.duration * 60;
@@ -30903,6 +33321,8 @@ window.AK_OPS = [
         root.appendChild(navCard);
 
         /* ---- 首页卡片开关 ---- */
+        // 语料是懒加载的，这里要用到篇数，先展开（仅打开设置时付一次成本）
+        if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
         var dailyCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
         dailyCard.appendChild(el('div', { class: 'section-title' }, ['首页卡片']));
         dailyCard.appendChild(el('p', {
@@ -31197,8 +33617,9 @@ window.AK_OPS = [
           el('div', { class: 'section-title' }, ['自动备份']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '清空数据、导入备份或粘贴同步码覆盖前，会自动在本机存一份快照（最多保留 ' +
-                  Store.BK_MAX + ' 份）。误操作后可以回到上一份，不用手动先导出。'
+            text: '清空数据、导入备份或粘贴同步码覆盖前会自动存一份快照（最多 ' + Store.BK_MAX +
+                  ' 份）；此外每天首次打开会存一份「每日自动」快照（最多 ' + Store.BK_DAILY_MAX +
+                  ' 份），两类互不挤占。误操作后可在这里回到之前的版本。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, [
             el('button', {
@@ -31385,7 +33806,7 @@ window.AK_OPS = [
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'record' },
     { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'record' },
     { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981', group: 'record' },
-    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'record' },
+    { key: 'remind', name: '上课与待办提醒', desc: '页面内提醒（上课 / 待办到期）与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'record' },
     /* 奖励与目标 */
     { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b', group: 'award' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a', group: 'award' },
@@ -31442,6 +33863,10 @@ window.AK_OPS = [
     inPage.appendChild(row('提示音', '一声很短的正弦音，不会打断别人', el('input', {
       type: 'checkbox', checked: !!o.sound,
       onchange: function (e) { o.sound = e.target.checked; save(); }
+    })));
+    inPage.appendChild(row('待办到期提醒', '已逾期或今天到期的待办，每条一天提醒一次', el('input', {
+      type: 'checkbox', checked: o.taskDue !== false,
+      onchange: function (e) { o.taskDue = e.target.checked; save(); }
     })));
     if (global.Remind) {
       var today = Remind.todayLessons();
@@ -33195,6 +35620,13 @@ function renderSubtaskPage(root) {
  * 用多源词频（wordfreq zipf / google-10000 / 教材熟悉度）
  * 界定为「专四且非高考」范围后取全集
  * ========================================================== */
+/**
+ * 惰性加载：整份语料（约 800KB 字面量）包在函数体里，V8 只做预解析、不立即构造，
+ * 首屏不必为「今日 / 设置」之外的功能付解析成本。首次需要时调用 window.__cpLoadDaily()。
+ */
+window.__cpLoadDaily = function () {
+  if (window.Daily) return window.Daily;
+
 (function (global) {
   'use strict';
 
@@ -38678,6 +41110,10 @@ function renderSubtaskPage(root) {
   global.Daily = Daily;
 })(window);
 
+  return window.Daily;
+};
+
+
 
 
 </script>
@@ -39294,8 +41730,17 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     setTimeout(function () { input.focus(); }, 120);
   }
 
+  /** 首次用到语料时再展开（quotes-data.js 已改为惰性函数） */
+  function ensureDaily() {
+    if (!window.Daily && typeof window.__cpLoadDaily === 'function') window.__cpLoadDaily();
+    return window.Daily;
+  }
+
   global.DailyCards = {
-    section: section, openPoem: openPoem, openWord: openWord, openQuiz: openQuiz
+    section: function () { ensureDaily(); return section.apply(null, arguments); },
+    openPoem: function () { ensureDaily(); return openPoem.apply(null, arguments); },
+    openWord: function () { ensureDaily(); return openWord.apply(null, arguments); },
+    openQuiz: function () { ensureDaily(); return openQuiz.apply(null, arguments); }
   };
 })(window);
 
@@ -40875,10 +43320,49 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     });
   }
 
+  /** 睡眠截图走云端视觉：直接让多模态大模型读整张图，返回结构化 JSON */
+  function toInt(v) {
+    if (v == null) return null;
+    var n = parseInt(String(v).replace(/[^\d-]/g, ''), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function recognizeCloudSleep(file, cfg) {
+    var prompt = '这是小米运动健康（或类似健康 App）的睡眠详情页截图。请提取这一晚的睡眠数据，'
+      + '只返回 JSON：{"date":"入睡日期 YYYY-MM-DD","start":"入睡时间 HH:MM","end":"醒来时间 HH:MM",'
+      + '"totalMinutes":总睡眠分钟数,"deep":深睡分钟数,"light":浅睡分钟数,"rem":快速眼动(REM)分钟数,'
+      + '"awake":清醒分钟数,"efficiency":睡眠效率百分比(整数),"awakenings":清醒次数(整数),'
+      + '"quality":"good|normal|bad"}。'
+      + '各阶段优先用截图里直接给出的分钟数（例如“2小时4分钟”=124、“1小时”=60）；若只给百分比，'
+      + '则用 总睡眠×百分比 推算。截图里没有的字段填空或0。不要解释，只返回 JSON。';
+    return visionJSON(file, cfg, prompt).then(function (data) {
+      if (!data || typeof data !== 'object') return null;
+      var rec = {
+        date: (data.date || '').toString().replace(/\s/g, ''),
+        start: (data.start || '').toString().replace(/\s/g, ''),
+        end: (data.end || '').toString().replace(/\s/g, ''),
+        total: toInt(data.totalMinutes),
+        deep: toInt(data.deep),
+        light: toInt(data.light),
+        rem: toInt(data.rem),
+        awake: toInt(data.awake),
+        efficiency: toInt(data.efficiency),
+        awakenings: toInt(data.awakenings),
+        quality: ['good', 'normal', 'bad'].indexOf(data.quality) >= 0 ? data.quality
+          : (data.efficiency != null && data.efficiency >= 90) ? 'good'
+          : (data.efficiency != null && data.efficiency < 75) ? 'bad' : 'normal',
+        source: 'cloud'
+      };
+      if (!rec.date && !rec.start && !rec.end && rec.total == null) return null;
+      return rec;
+    });
+  }
+
   global.Ocr = {
     recognizeLocal: recognizeLocal,
     recognizeCloud: recognizeCloud,
     recognizeCloudTasks: recognizeCloudTasks,
+    recognizeCloudSleep: recognizeCloudSleep,
     binarize: binarize,
     normalizeImage: normalizeImage,
     buildGrid: buildGrid,
@@ -41875,7 +44359,35 @@ window.Pet = (function () {
   var App = {
     views: [],
     current: null,
-    currentId: 'schedule'
+    currentId: 'schedule',
+
+    /* ---------- 跨视图通信总线 ----------
+       取代散落在各处的 window.__cp* 私有全局变量，统一挂在 App 下，
+       避免「一个视图往 window 上挂个字段、另一个视图去读」这种隐式契约。
+       目前承载「待办 → 日历」的接力高亮。 */
+    bus: {
+      _relay: null,                 // { taskId, at }
+
+      /** 把一条待办「接力」给目标视图（跳过去后高亮它） */
+      setRelay: function (taskId) {
+        this._relay = taskId ? { taskId: taskId, at: Date.now() } : null;
+      },
+
+      /** 取接力信息；超过 maxAgeMs 视为过期并丢弃。
+          取到后**不**立刻清空：进入视图时 mount + onEnter 会连着渲染两次，
+          两次都要命中，所以由 clearRelay(at) 在渲染收尾时显式清。 */
+      peekRelay: function (maxAgeMs) {
+        var r = this._relay;
+        if (!r || !r.taskId) return null;
+        if (Date.now() - r.at > (maxAgeMs || 8000)) { this._relay = null; return null; }
+        return r;
+      },
+
+      /** 消费掉接力标记；传 at 时只在标记未被替换的情况下清，防止误清新接力 */
+      clearRelay: function (at) {
+        if (this._relay && (at == null || this._relay.at === at)) this._relay = null;
+      }
+    }
   };
 
   function sortViews() {
@@ -41923,7 +44435,7 @@ window.Pet = (function () {
     // 侧边栏：全部启用项
     list.forEach(function (v) {
       nav.appendChild(UI.el('button', {
-        class: 'nav-item', id: 'nav-' + v.id,
+        class: 'nav-item', id: 'nav-' + v.id, dataset: { view: v.id },
         onclick: function () { go(v.id); }
       }, [UI.svg(v.icon, 20), UI.el('span', { text: v.name })]));
     });
@@ -41933,7 +44445,7 @@ window.Pet = (function () {
     if (list.length > MAX_TABS) shown = list.slice(0, MAX_TABS - 1);
     shown.forEach(function (v) {
       tabbar.appendChild(UI.el('button', {
-        class: 'tabbar-item', id: 'tab-' + v.id,
+        class: 'tabbar-item', id: 'tab-' + v.id, dataset: { view: v.id },
         onclick: function () { go(v.id); }
       }, [UI.svg(v.icon, 22), UI.el('span', { text: v.name })]));
     });
@@ -42103,7 +44615,7 @@ window.Pet = (function () {
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (!hadController) { hadController = true; return; }
       if (document.getElementById('cpUpdateToast')) return;
-      var btn = UI.el('button', { class: 'update-btn', onclick: function () { location.reload(); } }, ['立即刷新']);
+      var btn = UI.el('button', { class: 'update-btn', onclick: function () { if (global.Store && Store.flushSave) Store.flushSave(); location.reload(); } }, ['立即刷新']);
       var node = UI.el('div', { class: 'toast info', id: 'cpUpdateToast' }, [
         UI.el('span', { text: '应用已更新' }),
         btn

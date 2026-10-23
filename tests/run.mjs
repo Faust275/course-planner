@@ -2472,5 +2472,129 @@ console.log('\n备份导出: API 密钥默认剥离');
   eq('导出未污染本机设置', S.state.settings.asr.apiKey, 'fake-key');
 }
 
+/* ==========================================================
+ * SleepModel：睡眠推算模型（直接 import 源文件，纯模块）
+ * ========================================================== */
+const sleepModelSrc = readFileSync(new URL('../assets/js/sleep-model.js', import.meta.url), 'utf8');
+new Function(sleepModelSrc)();
+const SM = globalThis.SleepModel;
+
+console.log('SleepModel.normalizeNight');
+let n1 = SM.normalizeNight({ start: '23:00', end: '07:00' });
+eq('跨午夜: bed=1380 wake=1860 total=480', [n1.bed, n1.wake, n1.total], [1380, 1860, 480]);
+let n2 = SM.normalizeNight({ start: '01:00', end: '09:00', deep: 60, light: 300, rem: 90, awake: 30, efficiency: 97, awakenings: 1 });
+eq('同夜带阶段字段保留', [n2.bed, n2.wake, n2.total, n2.deep, n2.rem, n2.efficiency, n2.awakenings], [60, 540, 480, 60, 90, 97, 1]);
+eq('缺字段返回 null', SM.normalizeNight({ start: 'x' }), null);
+
+console.log('SleepModel.coffeeWindow');
+let cw = SM.coffeeWindow(SM.normalizeNight({ start: '23:00', end: '07:00' }));
+eq('常规: 醒08:30起 睡17:00止 有效', [cw.start, cw.end, cw.valid], ['08:30', '17:00', true]);
+let cw2 = SM.coffeeWindow(SM.normalizeNight({ start: '20:00', end: '07:00' }));
+eq('早睡20:00: 截止14:00', [cw2.start, cw2.end, cw2.valid], ['08:30', '14:00', true]);
+let cwBad = SM.coffeeWindow(SM.normalizeNight({ start: '23:00', end: '22:00' }));
+eq('窗口过窄标记无效', cwBad.valid, false);
+
+console.log('SleepModel.drowsinessWindows');
+let dw = SM.drowsinessWindows(SM.normalizeNight({ start: '23:00', end: '07:00' }));
+eq('三类瞌睡: 睡眠惯性/午后/睡前', dw.map(d => d.type), ['inertia', 'afternoon', 'winddown']);
+eq('睡眠惯性从醒来起算 07:00-07:30', [dw[0].start, dw[0].end], ['07:00', '07:30']);
+
+console.log('SleepModel.alertnessCurve');
+let curve = SM.alertnessCurve(SM.normalizeNight({ start: '23:00', end: '07:00' }), { spanHours: 18, step: 15 });
+eq('18h/15min -> 73 个点', curve.length, 73);
+let peak = curve.reduce((a, b) => b.score > a.score ? b : a);
+eq('峰值在上午(h≈3.5, 07:00醒→10:30峰)', Math.abs(peak.h - 3.5) <= 1.5, true);
+let aftH = (15 * 60 - ((SM.normalizeNight({ start: '23:00', end: '07:00' }).wake % 1440 + 1440) % 1440)) / 60;
+let aft = SM.alertnessAt(SM.normalizeNight({ start: '23:00', end: '07:00' }), aftH);
+eq('午后(15:00)警觉度低于上午峰值', aft < peak.score, true);
+
+console.log('SleepModel.qualityFactor');
+let good = SM.qualityFactor(SM.normalizeNight({ start: '23:00', end: '07:00', deep: 60, rem: 90, efficiency: 97 }));
+let bad = SM.qualityFactor(SM.normalizeNight({ start: '01:00', end: '06:00', deep: 20, rem: 20, efficiency: 70 }));
+eq('好睡眠系数高于差睡眠', good > bad, true);
+eq('好睡眠系数 > 0.9', good > 0.9, true);
+
+console.log('SleepModel.applyCaffeine');
+let base = SM.alertnessCurve(SM.normalizeNight({ start: '23:00', end: '07:00' }), { spanHours: 12, step: 15 });
+let doped = SM.applyCaffeine(base, '09:00');
+eq('咖啡后10:30警觉度高于基线', doped.find(p => p.clock === '10:30').score > base.find(p => p.clock === '10:30').score, true);
+
+console.log('SleepModel.parseSleepShot');
+let shot = SM.parseSleepShot([
+  '总睡眠7时6分', '入睡02:49', '醒来09:58', '深睡占比14%', '浅睡57%',
+  '快速眼动29%', '清醒3%', '睡眠效率97%', '清醒1次'
+]);
+eq('解析入睡/醒来时刻', [shot.start, shot.end], ['02:49', '09:58']);
+eq('解析效率与清醒次数', [shot.efficiency, shot.awakenings], [97, 1]);
+eq('深睡分钟=总*14%=60', shot.deep, 60);
+eq('浅睡分钟=总*57%', shot.light, Math.round(426 * 0.57));
+eq('REM 分钟=总*29%', shot.rem, Math.round(426 * 0.29));
+eq('来源标记为 shot', shot.source, 'shot');
+eq('乱码返回 null', SM.parseSleepShot(['广告', '下载', '立即打开']), null);
+
+console.log('SleepModel.parseSleepShot: 真实 OCR 噪声行（2026-10-23 tesseract.js chi_sim 实测）');
+// 详情页（psm4 原样输出：错字 了/个/名/针/旱、百分比 x%、参考行锚点）
+let s1 = SM.parseSleepShot([
+  '14:59 co澡和会', '险卢', '2026年10月23旱v', '日 周 月', '人 肥明详情',
+  '脸肯时长', '7小时 6分名', '瞪卢结构 二 te@，', '清醒 次 3分针',
+  '参考; 0-2次', '快速限动 29x 人 2小时个分名', '一', '参考: 20%-25%',
+  '浅 村 训1x 个小时2分钟', '深睡 14% 亿 1小时', '参考: 15%-20%%',
+  '睦眠效率', '91”', '仿理范围: 85% ~ 100%'
+]);
+eq('详情页: 日期（旱=日）', s1.date, '2026-10-23');
+eq('详情页: 总时长 426', s1.total, 426);
+eq('详情页: 深60/浅242/REM124（个→4 纠错+约束合成）', [s1.deep, s1.light, s1.rem], [60, 242, 124]);
+eq('详情页: 清醒 3 分钟', s1.awake, 3);
+eq('详情页: 无起止时刻', [s1.start, s1.end], [null, null]);
+// 总览页（值行在上、标签行在下的网格）
+let s2 = SM.parseSleepShot([
+  '14:19 o党和本会 ED', '险卢', '2026年10月23旱v', '日 周 月',
+  '险甩斋量良好 。81', '高 72% 同龄用户', '了时分 02:49 让 14% 全',
+  '睡眠总时长 入睡时间 深睡点化', '1 次 97x 晚 17 分',
+  '清醒次数 睡肯效率 入睡规律性', '昨晚整体瞪得不错，但有 3 点需留意深睦仅',
+  '点 14%，点比偏低 更多》', '加 会天肚蜂', '了时各分针',
+  '图 深蛙 国 浅蛙 国 快速限动 图 清醒', '09:58', '醒来'
+]);
+eq('总览页: 入睡/醒来（网格上下文配对）', [s2.start, s2.end], ['02:49', '09:58']);
+eq('总览页: 效率 97 / 清醒 1 次', [s2.efficiency, s2.awakenings], [97, 1]);
+eq('总览页: 「晚17分」不算清醒时长', s2.awake, null);
+// 多图合并：详情页给阶段、总览页给时刻，效率取与 span 最一致的候选
+let mg = SM.mergeShotResults([s1, s2]);
+eq('合并: 完整记录', [mg.start, mg.end, mg.total, mg.deep, mg.light, mg.rem, mg.awake, mg.efficiency, mg.awakenings],
+  ['02:49', '09:58', 426, 60, 242, 124, 3, 97, 1]);
+eq('合并: 质量良好', mg.quality, 'good');
+eq('合并: 单图原样透传', SM.mergeShotResults([s1]).total, 426);
+eq('合并: 全空返回 null', SM.mergeShotResults([null, null]), null);
+
+// 词级 conf>25 过滤后的真实行：浅睡标签/29x/14% 全被丢，浅睡须由「总量-深-REM」反推
+let s3 = SM.parseSleepShot([
+  '14:59 co 会', '险', '2026年10月23', '日周月', '情', '时长', '7小时6分',
+  '结构二', '清醒3分针', '参考 ; 0-2次', '快速限动2小时个分名', '一',
+  '参考 :', '训小时2分钟', '深1小时', '参考 : 15%-20%%', '效率', '仿理范围 : 85% ~ 100%'
+]);
+eq('词过滤后: 深60/浅242(反推)/REM124', [s3.deep, s3.light, s3.rem], [60, 242, 124]);
+eq('词过滤后: 效率不受「合理范围85%~100%」污染', s3.efficiency, null);
+
+// 总览页真实行：效率标签丢「效」字变「…次数率入规律性」
+let s4 = SM.parseSleepShot([
+  '和会 ED', '险', '2026年10月23', '日周月', '险量良好', '。81', '72% 同龄用户',
+  '了时02:49', '睡眠总时长入时间深睡点化', '1次97x 晚17分', '清醒次数率入规律性',
+  '昨晚整体不错 ， 但有3点需留意深', '点14%， 点更多 》', '会天肚', '了各分',
+  '深国浅国快速限动图清醒', '09:58', '醒来'
+]);
+eq('效率标签丢「效」字仍取到 97', s4.efficiency, 97);
+eq('同页: 时刻/清醒次数不丢', [s4.start, s4.end, s4.awakenings], ['02:49', '09:58', 1]);
+
+console.log('Store: 睡眠结构字段与按夜选择');
+{
+  const S = await initTestStore();
+  const sRec = S.addSleep({ date: '2026-05-09', start: '23:30', end: '07:10', deep: 70, light: 280, rem: 90, awake: 20, efficiency: 95, awakenings: 1, source: 'shot' });
+  eq('addSleep 保留结构字段', [sRec.deep, sRec.light, sRec.rem, sRec.efficiency, sRec.source], [70, 280, 90, 95, 'shot']);
+  eq('wakeDateOf 跨午夜 = 入睡日+1', S.wakeDateOf(sRec), '2026-05-10');
+  eq('sleepForDay 按醒来日挑昨夜那条', S.sleepForDay('2026-05-10').id, sRec.id);
+  const norm = SM.normalizeNight(sRec);
+  eq('normalizeNight 在真实存储记录上可用', typeof norm.total, 'number');
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

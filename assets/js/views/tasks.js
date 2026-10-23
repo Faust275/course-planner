@@ -636,8 +636,12 @@
                   danger: true, okText: '删除'
                 }).then(function (ok) {
                   if (!ok) return;
+                  var snap = JSON.parse(JSON.stringify(Store.state.tasks));
                   var r = Store.removeTask(taskId);
-                  UI.toast(r.kept ? ('已删除，' + r.kept + ' 个子任务已提升为顶层') : '已删除待办');
+                  UI.toastAction(
+                    r.kept ? ('已删除，' + r.kept + ' 个子任务已提升为顶层') : '已删除待办',
+                    { duration: 6000, onAction: function () { Store.restoreTasks(snap); } }
+                  );
                 });
               }, 220);
             }
@@ -725,7 +729,12 @@
     if (bar) { bar.innerHTML = ''; view.actions(bar); }
   }
 
-  var state = { status: 'all', course: 'all', tag: '', q: '', tab: 'tasks' };
+  var state = {
+    status: 'all', course: 'all', tag: '', q: '', tab: 'tasks',
+    sortMode: 'auto',
+    selectMode: false,   // 多选批量操作（仅手动排序模式）
+    selected: {}         // id -> 1
+  };
   /** 五个分页的可选值；深链接 / 搜索跳转都要按这个列表收口
    *  quadrant（时间去向）与 stats（统计与复盘）已不再是独立底部模块，
    *  而是挂在「待办」页里的分页；stats 还额外受 settings.statsOn 开关控制。 */
@@ -946,15 +955,45 @@
         }));
       });
 
+      // 右侧操作区：课程筛选 + 手动排序开关
+      var rightBox = el('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' } });
       if (Store.courses.length) {
         var sel = V.select(
           [{ value: 'all', label: '全部课程' }].concat(Store.courses.map(function (c) {
             return { value: c.id, label: c.name };
-          })), state.course, { style: 'height:32px;width:auto;min-width:118px;font-size:12.5px' }
+          })), state.course, { style: 'height:32px;width:auto;min-width:110px;font-size:12.5px' }
         );
         sel.addEventListener('change', function () { state.course = sel.value; view.render(); });
-        tabBar.appendChild(el('div', { style: { marginLeft: 'auto' } }, [sel]));
+        rightBox.appendChild(sel);
       }
+      if (state.sortMode === 'manual') {
+        rightBox.appendChild(el('button', {
+          class: 'filter-tab' + (state.selectMode ? ' active' : ''),
+          title: '多选后可整组拖动或批量删除',
+          onclick: function () {
+            state.selectMode = !state.selectMode;
+            if (!state.selectMode) state.selected = {};
+            view.render();
+          }
+        }, [el('span', { text: '多选' })]));
+      }
+      rightBox.appendChild(el('button', {
+        class: 'filter-tab' + (state.sortMode === 'manual' ? ' active' : ''),
+        title: '开启后可长按拖动调整待办顺序',
+        onclick: function () {
+          state.sortMode = state.sortMode === 'manual' ? 'auto' : 'manual';
+          state.selectMode = false;
+          state.selected = {};
+          view.render();
+          if (state.sortMode === 'manual') {
+            UI.hintOnce('tasks-drag', '长按待办卡片可上下拖动调整顺序；拖到底部「日历」可直接去排期。');
+          }
+        }
+      }, [
+        V.svg('M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01', 15),
+        el('span', { text: '手动排序' })
+      ]));
+      tabBar.appendChild(rightBox);
       root.appendChild(tabBar);
 
       /* ---- 搜索 ---- */
@@ -1005,8 +1044,11 @@
         }
         return true;
       }).sort(function (a, b) {
-        if (a.status === 'done' && b.status !== 'done') return 1;
-        if (b.status === 'done' && a.status !== 'done') return -1;
+        // 仅分组模式需要「已完成置底」；手动排序模式走数组顺序，不在此处排序
+        if (state.sortMode !== 'manual') {
+          if (a.status === 'done' && b.status !== 'done') return 1;
+          if (b.status === 'done' && a.status !== 'done') return -1;
+        }
         return 0;
       });
 
@@ -1021,22 +1063,183 @@
         return;
       }
 
-      /* ---- 分组 ---- */
-      var groups = buildGroups(list);
-      groups.forEach(function (g) {
-        if (!g.items.length) return;
-        var head = el('div', { class: 'group-head' }, [
-          el('span', { text: g.title }),
-          el('span', { class: 'group-count', text: String(g.items.length) })
-        ]);
+      /* ---- 手动排序模式：平铺列表；支持多选整组移动与批量删除 ---- */
+      if (state.sortMode === 'manual') {
+        // 被筛选掉的选中项自动剔除，避免「选中了但看不见」
+        if (state.selectMode) {
+          var visSet = {};
+          list.forEach(function (t) { visSet[t.id] = 1; });
+          Object.keys(state.selected).forEach(function (id) { if (!visSet[id]) delete state.selected[id]; });
+        }
+
+        function selectedIds() { return Object.keys(state.selected); }
+
+        function toggleSelect(id) {
+          if (state.selected[id]) delete state.selected[id];
+          else state.selected[id] = 1;
+          view.render();
+        }
+
+        function bulkDelete(ids) {
+          if (!ids.length) return;
+          var o = Store.subtaskOpts();
+          var childCount = 0;
+          ids.forEach(function (id) { childCount += Store.subtasksOf(id).length; });
+          var msg = '确定删除选中的 ' + ids.length + ' 项待办吗？';
+          if (childCount) {
+            msg += '\n\n' + (o.orphanKeep
+              ? '其中 ' + childCount + ' 个子任务会保留，并提升为顶层。'
+              : '将连同 ' + childCount + ' 个子任务一起删除。');
+          }
+          V.confirm({ title: '批量删除待办', message: msg, danger: true, okText: '删除' }).then(function (ok) {
+            if (!ok) return;
+            state.selected = {};
+            state.selectMode = false;
+            var r = Store.removeTasks(ids);
+            if (r.removed) {
+              UI.toastAction('已删除 ' + r.removed + ' 项待办' + (r.kept ? '，' + r.kept + ' 个子任务已提升' : ''), {
+                duration: 6000,
+                onAction: function () { Store.restoreTasks(r.snapshot); }
+              });
+            }
+          });
+        }
+
+        function bulkBar() {
+          var ids = selectedIds();
+          var n = ids.length;
+          return el('div', { class: 'task-bulkbar' }, [
+            el('span', { class: 'task-bulkcount', text: '已选 ' + n + ' 项' }),
+            el('button', {
+              class: 'btn btn-sm', text: '取消',
+              onclick: function () { state.selectMode = false; state.selected = {}; view.render(); }
+            }),
+            el('button', {
+              class: 'btn btn-sm' + (n ? '' : ' disabled'),
+              style: n ? { color: 'var(--red)', borderColor: 'var(--red)' } : null,
+              text: '删除',
+              onclick: function () { if (n) bulkDelete(ids); }
+            })
+          ]);
+        }
+
+        root.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '0 0 10px' }
+        }, [state.selectMode ? '点击卡片勾选；拖动任意已选项可整组移动' : '长按任务卡片可上下拖动调整顺序']));
+
         var box = el('div', { class: 'card', style: { padding: '6px 8px', marginBottom: '14px' } });
-        g.items.forEach(function (t) {
-          // onToggle：展开/收起后不整页重绘，只重建这一组，保住滚动位置
-          box.appendChild(TaskRow.build(t, { onToggle: function () { view.render(); } }));
+        list.forEach(function (t) {
+          var node = TaskRow.build(t, { onToggle: function () { view.render(); } });
+          // 顶层条目统一打标记，作为拖拽单元（父任务为 .subtask-wrap，叶子为 .task-row）
+          node.classList.add('cp-task-drag');
+          node.dataset.id = t.id;
+
+          var rowEl = node.classList.contains('cp-task-row') ? node : node.querySelector('.cp-task-row');
+          if (state.selectMode && rowEl) {
+            var checked = !!state.selected[t.id];
+            rowEl.classList.add('cp-selecting');
+            if (checked) node.classList.add('cp-selected');
+            var sb = el('span', {
+              class: 'task-selbox' + (checked ? ' on' : ''),
+              title: checked ? '取消选择' : '选择'
+            }, [checked ? V.svg('M4 12l5 5L20 6', 12) : null]);
+            rowEl.insertBefore(sb, rowEl.firstChild);
+            rowEl.addEventListener('click', function (e) {
+              if (!state.selectMode) return;
+              if (e.target.closest && e.target.closest('.cp-task-selbox')) {
+                e.stopPropagation(); e.preventDefault(); toggleSelect(t.id); return;
+              }
+              if (e.target.closest && e.target.closest('button, input, a')) return;
+              e.stopPropagation(); e.preventDefault();
+              toggleSelect(t.id);
+            }, true);
+          }
+
+          box.appendChild(node);
+          if (global.DragGesture) {
+            var beforeOrder = null;
+            DragGesture.makeDraggable(node, {
+              ignore: 'button, input, textarea, a, .task-check, .subtask-toggle, .icon-btn, .cp-task-selbox',
+              menuTitle: '待办「' + t.title + '」',
+              menu: state.selectMode ? null : function () {
+                var items = DragGesture.orderMenuItems('tasks', t.id, function (x) { return !x.parentId; });
+                var dateItems = DragGesture.dateMenuItems('task', t.id);
+                if (items.length && dateItems.length) items.push({ sep: true });
+                var all = items.concat(dateItems);
+                // 无障碍兜底：不依赖拖到 TabBar，也能把待办带到日历排期
+                if (all.length) all.push({ sep: true });
+                all.push({
+                  label: '安排到日历…', hint: '跳到日历并高亮它',
+                  onClick: function () {
+                    if (global.App && global.App.bus) App.bus.setRelay(t.id);
+                    if (global.App && global.App.go) global.App.go('calendar');
+                  }
+                });
+                return all;
+              },
+              onStart: function () {
+                beforeOrder = DragGesture.orderedIds(box, '.cp-task-drag');
+              },
+              onMove: function (c) {
+                DragGesture.moveWithin(box, node, c.overEl, c.evt.clientY, '.cp-task-drag');
+                DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-task-drag');
+              },
+              onEnd: function (c) {
+                // 跨视图接力：拖到底部/侧边的「日历」入口松手 → 带着这条待办跳过去排期
+                var nav = c && c.overEl && c.overEl.closest && c.overEl.closest('[data-view]');
+                var vid = nav && nav.getAttribute('data-view');
+                if (vid && vid !== 'tasks') {
+                  if (vid === 'calendar') {
+                    if (global.App && global.App.bus) App.bus.setRelay(t.id);
+                  }
+                  if (global.App && global.App.go) global.App.go(vid);
+                  return;
+                }
+                var ids = DragGesture.orderedIds(box, '.cp-task-drag');
+                var finalIds = ids;
+                var selMap = state.selected;
+                var selCount = Object.keys(selMap).length;
+                if (state.selectMode && selMap[t.id] && selCount > 1) {
+                  // 整组移动：把选中的几条作为一块，落到被拖卡片当前的位置
+                  var di = ids.indexOf(t.id);
+                  var others = ids.filter(function (id) { return !selMap[id]; });
+                  var before = 0;
+                  for (var i = 0; i < di; i++) { if (!selMap[ids[i]]) before++; }
+                  var selIds = ids.filter(function (id) { return !!selMap[id]; });
+                  finalIds = others.slice(0, before).concat(selIds, others.slice(before));
+                }
+                if (finalIds.length > 1) {
+                  Store.reorderInView('tasks', finalIds);
+                  if (beforeOrder && beforeOrder.join(',') !== finalIds.join(',')) {
+                    UI.toastAction((state.selectMode && selCount > 1) ? '已移动 ' + selCount + ' 项' : '已调整待办顺序', {
+                      onAction: function () { Store.reorderInView('tasks', beforeOrder); }
+                    });
+                  }
+                }
+              }
+            });
+          }
         });
-        root.appendChild(head);
         root.appendChild(box);
-      });
+        if (state.selectMode) root.appendChild(bulkBar());
+      } else {
+        /* ---- 分组 ---- */
+        var groups = buildGroups(list);
+        groups.forEach(function (g) {
+          if (!g.items.length) return;
+          var head = el('div', { class: 'group-head' }, [
+            el('span', { text: g.title }),
+            el('span', { class: 'group-count', text: String(g.items.length) })
+          ]);
+          var gbox = el('div', { class: 'card', style: { padding: '6px 8px', marginBottom: '14px' } });
+          g.items.forEach(function (t) {
+            // onToggle：展开/收起后不整页重绘，只重建这一组，保住滚动位置
+            gbox.appendChild(TaskRow.build(t, { onToggle: function () { view.render(); } }));
+          });
+          root.appendChild(head);
+          root.appendChild(gbox);
+        });
+      }
 
       if (state.q) {
         var si = V.$('.cp-task-search input', root);

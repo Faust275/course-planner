@@ -1062,10 +1062,49 @@
     });
   }
 
+  /** 睡眠截图走云端视觉：直接让多模态大模型读整张图，返回结构化 JSON */
+  function toInt(v) {
+    if (v == null) return null;
+    var n = parseInt(String(v).replace(/[^\d-]/g, ''), 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function recognizeCloudSleep(file, cfg) {
+    var prompt = '这是小米运动健康（或类似健康 App）的睡眠详情页截图。请提取这一晚的睡眠数据，'
+      + '只返回 JSON：{"date":"入睡日期 YYYY-MM-DD","start":"入睡时间 HH:MM","end":"醒来时间 HH:MM",'
+      + '"totalMinutes":总睡眠分钟数,"deep":深睡分钟数,"light":浅睡分钟数,"rem":快速眼动(REM)分钟数,'
+      + '"awake":清醒分钟数,"efficiency":睡眠效率百分比(整数),"awakenings":清醒次数(整数),'
+      + '"quality":"good|normal|bad"}。'
+      + '各阶段优先用截图里直接给出的分钟数（例如“2小时4分钟”=124、“1小时”=60）；若只给百分比，'
+      + '则用 总睡眠×百分比 推算。截图里没有的字段填空或0。不要解释，只返回 JSON。';
+    return visionJSON(file, cfg, prompt).then(function (data) {
+      if (!data || typeof data !== 'object') return null;
+      var rec = {
+        date: (data.date || '').toString().replace(/\s/g, ''),
+        start: (data.start || '').toString().replace(/\s/g, ''),
+        end: (data.end || '').toString().replace(/\s/g, ''),
+        total: toInt(data.totalMinutes),
+        deep: toInt(data.deep),
+        light: toInt(data.light),
+        rem: toInt(data.rem),
+        awake: toInt(data.awake),
+        efficiency: toInt(data.efficiency),
+        awakenings: toInt(data.awakenings),
+        quality: ['good', 'normal', 'bad'].indexOf(data.quality) >= 0 ? data.quality
+          : (data.efficiency != null && data.efficiency >= 90) ? 'good'
+          : (data.efficiency != null && data.efficiency < 75) ? 'bad' : 'normal',
+        source: 'cloud'
+      };
+      if (!rec.date && !rec.start && !rec.end && rec.total == null) return null;
+      return rec;
+    });
+  }
+
   global.Ocr = {
     recognizeLocal: recognizeLocal,
     recognizeCloud: recognizeCloud,
     recognizeCloudTasks: recognizeCloudTasks,
+    recognizeCloudSleep: recognizeCloudSleep,
     binarize: binarize,
     normalizeImage: normalizeImage,
     buildGrid: buildGrid,

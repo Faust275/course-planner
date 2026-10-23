@@ -1150,6 +1150,8 @@
         root.appendChild(navCard);
 
         /* ---- 首页卡片开关 ---- */
+        // 语料是懒加载的，这里要用到篇数，先展开（仅打开设置时付一次成本）
+        if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
         var dailyCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
         dailyCard.appendChild(el('div', { class: 'section-title' }, ['首页卡片']));
         dailyCard.appendChild(el('p', {
@@ -1444,8 +1446,9 @@
           el('div', { class: 'section-title' }, ['自动备份']),
           el('p', {
             style: { fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '清空数据、导入备份或粘贴同步码覆盖前，会自动在本机存一份快照（最多保留 ' +
-                  Store.BK_MAX + ' 份）。误操作后可以回到上一份，不用手动先导出。'
+            text: '清空数据、导入备份或粘贴同步码覆盖前会自动存一份快照（最多 ' + Store.BK_MAX +
+                  ' 份）；此外每天首次打开会存一份「每日自动」快照（最多 ' + Store.BK_DAILY_MAX +
+                  ' 份），两类互不挤占。误操作后可在这里回到之前的版本。'
           }),
           el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' } }, [
             el('button', {
@@ -1632,7 +1635,7 @@
     { key: 'diet', name: '饮食与热量', desc: '每日热量目标、三餐配比、营养素', icon: V.icons.quadrant, color: '#f97316', group: 'record' },
     { key: 'stats', name: '时间统计', desc: '待办统计分页与今日本周记录卡片', icon: V.icons.chart, color: '#10b981', group: 'record' },
     { key: 'gpa', name: '成绩与 GPA', desc: '自定义绩点换算规则、导出成绩单', icon: V.icons.chart, color: '#10b981', group: 'record' },
-    { key: 'remind', name: '上课提醒', desc: '页面内提醒与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'record' },
+    { key: 'remind', name: '上课与待办提醒', desc: '页面内提醒（上课 / 待办到期）与导出 .ics 到系统日历', icon: V.icons.clock, color: '#f59e0b', group: 'record' },
     /* 奖励与目标 */
     { key: 'goals', name: '目标', desc: '月末复盘提示、在办数量上限', icon: V.icons.target, color: '#f59e0b', group: 'award' },
     { key: 'reward', name: '奖励机制', desc: '森林积分与抽卡合成玉，可切换', icon: V.icons.jade, color: '#00a89a', group: 'award' },
@@ -1689,6 +1692,10 @@
     inPage.appendChild(row('提示音', '一声很短的正弦音，不会打断别人', el('input', {
       type: 'checkbox', checked: !!o.sound,
       onchange: function (e) { o.sound = e.target.checked; save(); }
+    })));
+    inPage.appendChild(row('待办到期提醒', '已逾期或今天到期的待办，每条一天提醒一次', el('input', {
+      type: 'checkbox', checked: o.taskDue !== false,
+      onchange: function (e) { o.taskDue = e.target.checked; save(); }
     })));
     if (global.Remind) {
       var today = Remind.todayLessons();

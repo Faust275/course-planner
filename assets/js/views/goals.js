@@ -154,7 +154,38 @@
       }, [V.svg(V.icons.trash, 14), '删除']));
     }
     card.appendChild(acts);
-    return card;
+
+  /* ---- 长按拖动排序（整卡可拖，按钮 / KR 行不触发） ---- */
+  if (global.DragGesture) {
+    var beforeOrder = null;
+    DragGesture.makeDraggable(card, {
+      ignore: 'button, input, textarea, a, .goal-kr, .icon-btn',
+      menuTitle: '目标「' + g.title + '」',
+      menu: function () {
+        return DragGesture.orderMenuItems('goals', g.id, function (x) { return !x.archivedAt; });
+      },
+      onStart: function () {
+        beforeOrder = DragGesture.orderedIds(card.parentNode, '.cp-goal-card');
+      },
+      onMove: function (c) {
+        DragGesture.moveWithin(card.parentNode, card, c.overEl, c.evt.clientY, '.cp-goal-card');
+        DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-goal-card');
+      },
+      onEnd: function (c) {
+        var ids = DragGesture.orderedIds(card.parentNode, '.cp-goal-card');
+        if (ids.length > 1) {
+          Store.reorderInView('goals', ids);
+          if (beforeOrder && beforeOrder.join(',') !== ids.join(',')) {
+            UI.toastAction('已调整目标顺序', {
+              onAction: function () { Store.reorderInView('goals', beforeOrder); }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  return card;
   }
 
   function archive(g) {
@@ -295,7 +326,12 @@
             onclick: function () { openGoalDialog(); }
           }, [V.svg(V.icons.plus, 16), '新建目标'])));
       } else {
-        active.forEach(function (g) { host.appendChild(goalCard(g, false)); });
+        host.appendChild(el('div', {
+          style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '-2px 0 10px' }
+        }, ['长按卡片可拖动调整顺序']));
+        var activeWrap = el('div', { class: 'goal-active-list' });
+        active.forEach(function (g) { activeWrap.appendChild(goalCard(g, false)); });
+        host.appendChild(activeWrap);
       }
 
       if (archived.length) {

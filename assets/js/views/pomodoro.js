@@ -18,6 +18,7 @@
     total: 0,      // 本次总秒
     duration: 45,  // 设定分钟（默认 45，便于达到 ≥40 的种树门槛）
     taskId: '',
+    queue: [],     // 专注队列：待办 id 顺序，结算后可「开始下一个」
     tags: '',
     treeId: '',    // 本次专注播下/养护的树
     warned60: false
@@ -199,9 +200,137 @@
       ]));
       card.appendChild(durRow);
 
-      // 选择待办（只列顶层任务，子任务进父任务里做）
+      // 关联待办：拖到上方圆环=本次专注，拖到下方队列=排队；下拉兜底
       var pending = Store.rootPending();
       if (pending.length) {
+        function pickTask(id, silent) {
+          T.taskId = id;
+          var tk = id ? Store.getTask(id) : null;
+          if (tk && tk.tags && tk.tags.length) T.tags = tk.tags.join(',');
+          if (tk && !silent) UI.toast('已关联待办：' + tk.title);
+          self.render();
+        }
+        function isOverRing(el0) {
+          return !!(el0 && el0.closest && el0.closest('.cp-timer-ring-wrap'));
+        }
+        function isOverQueue(el0) {
+          return !!(el0 && el0.closest && el0.closest('.cp-pomo-queue'));
+        }
+
+        /* ---- 队列容器先建好，供托盘拖放引用 ---- */
+        var queueWrap = el('div', { class: 'pomo-queue' });
+        var queueList = el('div', { class: 'pomo-queue-list' });
+        var queueHint = el('div', { class: 'pomo-queue-hint', text: '把待办拖到这里排队，或点待办菜单「加入专注队列」' });
+        queueWrap.appendChild(queueList);
+        queueWrap.appendChild(queueHint);
+
+        function pruneQueue() {
+          T.queue = (T.queue || []).filter(function (id) { return !!Store.getTask(id); });
+        }
+        function enqueue(id) {
+          pruneQueue();
+          if (id === T.taskId) { UI.toast('这条正在专注，无需排队'); return; }
+          if (T.queue.indexOf(id) >= 0) { UI.toast('已在专注队列中'); return; }
+          T.queue.push(id);
+          persistTimer();
+          UI.toast('已加入专注队列');
+          self.render();
+        }
+        function dequeue(id) {
+          T.queue = (T.queue || []).filter(function (x) { return x !== id; });
+          persistTimer();
+          self.render();
+        }
+        function startNext() {
+          pruneQueue();
+          var id = T.queue.shift();
+          if (!id) return;
+          pickTask(id, true);
+          start();
+          persistTimer();
+        }
+        function renderQueue() {
+          pruneQueue();
+          queueList.innerHTML = '';
+          T.queue.forEach(function (id) {
+            var t = Store.getTask(id);
+            if (!t) return;
+            var qchip = el('div', { class: 'pomo-qchip', dataset: { id: id }, title: '拖动可调整顺序' }, [
+              el('span', { class: 'pomo-qchip-name', text: t.title }),
+              el('button', {
+                class: 'pomo-qchip-x', title: '移出队列', text: '×',
+                onclick: function (e) { e.stopPropagation(); dequeue(id); }
+              })
+            ]);
+            if (global.DragGesture) {
+              DragGesture.makeDraggable(qchip, {
+                ignore: 'button',
+                onMove: function (c) {
+                  DragGesture.moveWithin(queueList, qchip, c.overEl, c.evt.clientY, '.cp-pomo-qchip');
+                  DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-pomo-qchip');
+                },
+                onEnd: function () {
+                  var ids = DragGesture.orderedIds(queueList, '.cp-pomo-qchip');
+                  if (ids.length) { T.queue = ids; persistTimer(); self.render(); }
+                }
+              });
+            }
+            queueList.appendChild(qchip);
+          });
+          queueHint.style.display = T.queue.length ? 'none' : '';
+          queueWrap.classList.toggle('has-items', T.queue.length > 0);
+        }
+        renderQueue();
+
+        var tray = el('div', { class: 'pomo-tray' });
+        pending.forEach(function (t) {
+          var chip = el('div', {
+            class: 'pomo-chip' + (t.id === T.taskId ? ' active' : ''),
+            dataset: { id: t.id },
+            title: '拖进上方圆环开始专注，或拖进下方队列排队',
+            text: t.title
+          });
+          chip.addEventListener('click', function () { pickTask(t.id); });
+          if (global.DragGesture) {
+            DragGesture.makeDraggable(chip, {
+              menuTitle: '待办「' + t.title + '」',
+              menu: function () {
+                return [
+                  { label: '关联为本次专注', onClick: function () { pickTask(t.id); } },
+                  { label: '加入专注队列', hint: '结算后依次专注', onClick: function () { enqueue(t.id); } }
+                ];
+              },
+              onMove: function (c) {
+                var ring = isOverRing(c.overEl);
+                ringWrap.classList.toggle('cp-drop-active', ring);
+                queueWrap.classList.toggle('cp-drop-active', !ring && isOverQueue(c.overEl));
+              },
+              onEnd: function (c) {
+                ringWrap.classList.remove('cp-drop-active');
+                queueWrap.classList.remove('cp-drop-active');
+                if (isOverRing(c.overEl)) pickTask(t.id);
+                else if (isOverQueue(c.overEl)) enqueue(t.id);
+              }
+            });
+          }
+          tray.appendChild(chip);
+        });
+        card.appendChild(V.field('待办（拖进圆环=本次，拖进队列=排队）', tray, '点一下也能直接关联'));
+        UI.hintOnce('pomo-drag', '把待办拖进上方圆环开始专注，或拖进下方队列依次专注。');
+
+        card.appendChild(V.field('专注队列', queueWrap,
+          T.queue.length ? '队列中 ' + T.queue.length + ' 条，结算后可「开始下一个」' : '把待办拖进来，依次专注'));
+
+        var qfirst = T.queue.length ? Store.getTask(T.queue[0]) : null;
+        if (qfirst && !T.running) {
+          card.appendChild(el('button', {
+            class: 'btn btn-primary',
+            style: { width: '100%', marginBottom: '6px' },
+            onclick: startNext
+          }, ['开始下一个：' + qfirst.title]));
+        }
+
+        // 下拉兜底（保留原有交互，方便键盘/无拖动场景）
         var opts = [{ value: '', label: '不关联待办' }].concat(pending.map(function (t) {
           return { value: t.id, label: t.title };
         }));
@@ -212,7 +341,7 @@
           if (tk && tk.tags && tk.tags.length) T.tags = tk.tags.join(',');
           self.render();
         });
-        card.appendChild(V.field('本次专注的待办', sel));
+        card.appendChild(V.field('或从下拉选择', sel));
       }
 
       // 本次标签（用于按标签统计）
@@ -537,6 +666,16 @@
     }
   }
 
+  /** 统一持久化计时状态（含队列），避免各处漏传字段 */
+  function persistTimer(over) {
+    var o = {
+      running: T.running, endAt: T.endAt, left: Math.round(T.left), duration: T.duration,
+      taskId: T.taskId, tags: T.tags, treeId: T.treeId, queue: (T.queue || []).slice()
+    };
+    if (over) Object.keys(over).forEach(function (k) { o[k] = over[k]; });
+    Store.saveTimer(o);
+  }
+
   function start() {
     T.total = T.duration * 60;
     T.left = T.total;
@@ -549,7 +688,7 @@
       var seed = Store.seedTree(Store.pomodoro.selectedSpecies);
       if (seed) T.treeId = seed.id;
     }
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: true, endAt: T.endAt, left: 0 });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -560,7 +699,7 @@
     T.running = false;
     stopTick();
     if (global.WhiteNoise) WhiteNoise.stop();
-    Store.saveTimer({ running: false, endAt: 0, left: Math.round(T.left), duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: false, endAt: 0, left: Math.round(T.left) });
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
     UI.toast('已暂停');
@@ -569,7 +708,7 @@
   function resume() {
     T.endAt = Date.now() + T.left * 1000;
     T.running = true;
-    Store.saveTimer({ running: true, endAt: T.endAt, left: 0, duration: T.duration, taskId: T.taskId, tags: T.tags, treeId: T.treeId });
+    persistTimer({ running: true, endAt: T.endAt, left: 0 });
     startTick();
     var v = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
     if (v && App.currentId === 'pomodoro') v.render();
@@ -634,7 +773,7 @@
   /** 提前停止后的收尾（清空计时器状态并重绘） */
   function afterStopEarly() {
     T.treeId = '';
-    Store.saveTimer({ running: false, endAt: 0, left: 0, duration: T.duration, taskId: '', tags: T.tags, treeId: '' });
+    persistTimer({ running: false, endAt: 0, left: 0, taskId: '', treeId: '' });
     T.left = T.duration * 60;
     T.total = T.duration * 60;
     var v0 = App.views.filter(function (x) { return x.id === 'pomodoro'; })[0];
@@ -712,6 +851,7 @@
     if (!t) return;
     T.duration = t.duration || 45;
     T.taskId = t.taskId || '';
+    T.queue = Array.isArray(t.queue) ? t.queue.filter(function (x) { return !!x; }) : [];
     T.tags = t.tags || '';
     T.treeId = t.treeId || '';
     T.total = T.duration * 60;

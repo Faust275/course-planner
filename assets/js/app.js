@@ -9,7 +9,35 @@
   var App = {
     views: [],
     current: null,
-    currentId: 'schedule'
+    currentId: 'schedule',
+
+    /* ---------- 跨视图通信总线 ----------
+       取代散落在各处的 window.__cp* 私有全局变量，统一挂在 App 下，
+       避免「一个视图往 window 上挂个字段、另一个视图去读」这种隐式契约。
+       目前承载「待办 → 日历」的接力高亮。 */
+    bus: {
+      _relay: null,                 // { taskId, at }
+
+      /** 把一条待办「接力」给目标视图（跳过去后高亮它） */
+      setRelay: function (taskId) {
+        this._relay = taskId ? { taskId: taskId, at: Date.now() } : null;
+      },
+
+      /** 取接力信息；超过 maxAgeMs 视为过期并丢弃。
+          取到后**不**立刻清空：进入视图时 mount + onEnter 会连着渲染两次，
+          两次都要命中，所以由 clearRelay(at) 在渲染收尾时显式清。 */
+      peekRelay: function (maxAgeMs) {
+        var r = this._relay;
+        if (!r || !r.taskId) return null;
+        if (Date.now() - r.at > (maxAgeMs || 8000)) { this._relay = null; return null; }
+        return r;
+      },
+
+      /** 消费掉接力标记；传 at 时只在标记未被替换的情况下清，防止误清新接力 */
+      clearRelay: function (at) {
+        if (this._relay && (at == null || this._relay.at === at)) this._relay = null;
+      }
+    }
   };
 
   function sortViews() {
@@ -57,7 +85,7 @@
     // 侧边栏：全部启用项
     list.forEach(function (v) {
       nav.appendChild(UI.el('button', {
-        class: 'nav-item', id: 'nav-' + v.id,
+        class: 'nav-item', id: 'nav-' + v.id, dataset: { view: v.id },
         onclick: function () { go(v.id); }
       }, [UI.svg(v.icon, 20), UI.el('span', { text: v.name })]));
     });
@@ -67,7 +95,7 @@
     if (list.length > MAX_TABS) shown = list.slice(0, MAX_TABS - 1);
     shown.forEach(function (v) {
       tabbar.appendChild(UI.el('button', {
-        class: 'tabbar-item', id: 'tab-' + v.id,
+        class: 'tabbar-item', id: 'tab-' + v.id, dataset: { view: v.id },
         onclick: function () { go(v.id); }
       }, [UI.svg(v.icon, 22), UI.el('span', { text: v.name })]));
     });
@@ -237,7 +265,7 @@
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (!hadController) { hadController = true; return; }
       if (document.getElementById('cpUpdateToast')) return;
-      var btn = UI.el('button', { class: 'update-btn', onclick: function () { location.reload(); } }, ['立即刷新']);
+      var btn = UI.el('button', { class: 'update-btn', onclick: function () { if (global.Store && Store.flushSave) Store.flushSave(); location.reload(); } }, ['立即刷新']);
       var node = UI.el('div', { class: 'toast info', id: 'cpUpdateToast' }, [
         UI.el('span', { text: '应用已更新' }),
         btn

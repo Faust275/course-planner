@@ -207,6 +207,102 @@
     }, 1900);
   }
 
+  /**
+   * 带「撤销」按钮的轻提示。用于拖动排序 / 改期等易误操作的落点：
+   * 点击撤销在有效期内执行 onAction（通常是恢复到操作前的状态）。
+   * @param {string} msg
+   * @param {{actionText?:string, onAction?:Function, duration?:number}} [opts]
+   */
+  function toastAction(msg, opts) {
+    opts = opts || {};
+    var root = document.getElementById('toastRoot');
+    if (!root) return null;
+    var closed = false;
+    var node = el('div', { class: 'toast toast-action' }, [
+      svg('M20 6L9 17l-5-5', 16),
+      el('span', { class: 'toast-msg', text: msg }),
+      el('button', {
+        class: 'toast-act',
+        text: opts.actionText || '撤销',
+        onclick: function () {
+          close();
+          if (opts.onAction) { try { opts.onAction(); } catch (e) {} }
+        }
+      })
+    ]);
+    function close() {
+      if (closed) return;
+      closed = true;
+      node.classList.add('cp-out');
+      setTimeout(function () { node.remove(); }, 220);
+    }
+    root.appendChild(node);
+    setTimeout(close, opts.duration || 5000);
+    return { close: close };
+  }
+
+  /**
+   * 「移动到…」动作面板：给拖动提供键盘 / 右键 / 长按的无障碍替代入口。
+   * @param {string} title
+   * @param {Array<{label:string, hint?:string, danger?:boolean, onClick?:Function, sep?:boolean}>} items
+   */
+  function moveMenu(title, items) {
+    items = (items || []).filter(Boolean);
+    if (!items.length) return null;
+    var list = el('div', { class: 'move-menu' });
+    var m = modal({ title: title || '移动到…', width: '380px', body: list });
+    items.forEach(function (it) {
+      if (it.sep) { list.appendChild(el('div', { class: 'move-sep' })); return; }
+      list.appendChild(el('button', {
+        class: 'move-item' + (it.danger ? ' danger' : ''),
+        onclick: function () {
+          m.close();
+          if (it.onClick) setTimeout(it.onClick, 0);
+        }
+      }, [
+        el('span', { class: 'move-item-label', text: it.label }),
+        it.hint ? el('span', { class: 'move-item-hint', text: it.hint }) : null
+      ]));
+    });
+    return m;
+  }
+
+  /**
+   * 一次性提示气泡：用于「长按可拖动」这类隐藏能力。
+   * 同一会话只弹一次；用户点「知道了」后写入 localStorage，之后不再打扰。
+   */
+  var hintShown = {};
+  function hintOnce(key, text, opts) {
+    opts = opts || {};
+    if (hintShown[key]) return null;
+    try { if (localStorage.getItem('cp_hint_' + key)) return null; } catch (e) {}
+    var root = document.getElementById('toastRoot');
+    if (!root) return null;
+    var closed = false;
+    var node = el('div', { class: 'toast toast-hint' }, [
+      svg('M12 16v-5M12 8v.01M12 3l9.5 16.5H2.5L12 3z', 16),
+      el('span', { class: 'toast-msg', text: text }),
+      el('button', {
+        class: 'toast-act', text: opts.okText || '知道了',
+        onclick: function () { remember(); close(); }
+      })
+    ]);
+    function remember() {
+      hintShown[key] = 1;
+      try { localStorage.setItem('cp_hint_' + key, '1'); } catch (e) {}
+    }
+    function close() {
+      if (closed) return;
+      closed = true;
+      node.classList.add('cp-out');
+      setTimeout(function () { node.remove(); }, 220);
+    }
+    root.appendChild(node);
+    hintShown[key] = 1;
+    setTimeout(function () { if (!closed) close(); }, opts.duration || 9000);
+    return { close: close, remember: remember };
+  }
+
   /* ---------- 横滑手势 ----------
    * 给视图根节点挂左右滑动：左滑（手指向左）触发 handlers.left，右滑触发 handlers.right。
    * 用于课表切周、月历切月。三道防误触：
@@ -254,6 +350,8 @@
       close: function () {
         box.classList.remove('cp-show');
         wrap.style.background = 'transparent';
+        // 无论用哪种方式关闭，都摘掉 Esc 监听，避免多次开关后 keydown 监听越积越多
+        document.removeEventListener('keydown', onKey);
         setTimeout(function () {
           wrap.remove();
           openCount = Math.max(0, openCount - 1);
@@ -861,7 +959,8 @@
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
     cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
-    toast: toast, modal: modal, confirm: confirm, showAchievement: showAchievement,
+    toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,
+    modal: modal, confirm: confirm, showAchievement: showAchievement,
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,

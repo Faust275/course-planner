@@ -314,7 +314,8 @@
       lead: 15,      // 提前多少分钟
       sound: true,
       exams: true,   // 导出的日历里含考试
-      events: true   // 含重要日程
+      events: true,  // 含重要日程
+      taskDue: true  // 待办到期（已逾期 / 今日到期）页面内提醒
     };
   }
 
@@ -522,6 +523,58 @@
     return out.sort(function (a, b) { return a.startMin - b.startMin; });
   }
 
+  /** 'HH:MM' -> 当天分钟数；解析不了返回 null */
+  function timeToMin(s) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    return (+m[1]) * 60 + (+m[2]);
+  }
+
+  /**
+   * 待办到期提醒：只管「已逾期」和「今日到期」，每条一天只弹一次。
+   * 与上课提醒共用同一套页面内策略（零权限、零兼容问题），见文件头说明。
+   * 明天以后的一概不打扰——那属于计划，不属于提醒。
+   */
+  function checkTaskDue(o, dk, nowMin) {
+    if (!o.taskDue) return;
+    var lead = +o.lead || 0;
+    var MAX = 3;                                   // 一次最多弹 3 条，剩下的合并成一条汇总
+
+    var overdue = (Store.overdueTasks ? Store.overdueTasks() : []).map(function (t) {
+      return { t: t, left: DateUtil.daysLeft(t.dueDate) };
+    }).sort(function (a, b) { return a.left - b.left; });        // 逾期最久的在前
+
+    var today = (Store.todayTasks ? Store.todayTasks() : []).filter(function (t) {
+      if (!t.dueTime) return true;                              // 只有日期，当天弹一次
+      var m = timeToMin(t.dueTime);
+      if (m == null) return true;
+      return nowMin >= m - lead;                                // 有具体时刻就按 lead 提前
+    }).sort(function (a, b) {
+      return (a.dueTime || '99:99') < (b.dueTime || '99:99') ? -1 : 1;
+    });
+
+    var list = overdue.concat(today.map(function (t) { return { t: t, left: 0 }; }));
+    var total = list.length, n = 0;
+    list.slice(0, MAX).forEach(function (it) {
+      var key = dk + '|task|' + it.t.id;
+      if (fired[key]) return;
+      fired[key] = 1;
+      var txt = (it.left < 0 ? '待办已逾期：' : '今日到期：') + (it.t.title || '未命名待办');
+      if (it.t.dueTime) txt += '（' + it.t.dueTime + '）';
+      if (it.left < 0) txt += ' · 逾期 ' + Math.abs(it.left) + ' 天';
+      UI.toast(txt);
+      n++;
+    });
+    if (n && o.sound) beep();
+    if (n && total > n) {
+      var mk = dk + '|task|__more';
+      if (!fired[mk]) {
+        fired[mk] = 1;
+        UI.toast('另有 ' + (total - n) + ' 条待办到期，去「待办」看看');
+      }
+    }
+  }
+
   function check() {
     var o = opts();
     if (!o.on) return;
@@ -544,6 +597,9 @@
       UI.toast(txt);
       if (o.sound) beep();
     });
+
+    // 待办到期（逾期 / 今日到期）
+    checkTaskDue(o, dk, nowMin);
 
     // 番茄钟自然跑完（不是手动停的）时提示一下
     var t = Store.pomodoro && Store.pomodoro.timer;

@@ -7,6 +7,13 @@
  * 用多源词频（wordfreq zipf / google-10000 / 教材熟悉度）
  * 界定为「专四且非高考」范围后取全集
  * ========================================================== */
+/**
+ * 惰性加载：整份语料（约 800KB 字面量）包在函数体里，V8 只做预解析、不立即构造，
+ * 首屏不必为「今日 / 设置」之外的功能付解析成本。首次需要时调用 window.__cpLoadDaily()。
+ */
+window.__cpLoadDaily = function () {
+  if (window.Daily) return window.Daily;
+
 (function (global) {
   'use strict';
 
@@ -5489,5 +5496,9 @@
 
   global.Daily = Daily;
 })(window);
+
+  return window.Daily;
+};
+
 
 

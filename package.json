@@ -1,0 +1,18 @@
+{
+  "name": "course-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "单文件课程规划 PWA：待办 / 课表 / 番茄钟 / 日记 / 复盘 / 养成。源码在 assets/js，由 build.py 内联为 index.html。",
+  "scripts": {
+    "build": "python3 build.py",
+    "test": "node tests/run.mjs",
+    "lint": "eslint .",
+    "e2e": "node tests/run-e2e.mjs",
+    "ci": "npm run build && npm run test && npm run lint"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.0.0",
+    "playwright": "^1.64.1"
+  }
+}

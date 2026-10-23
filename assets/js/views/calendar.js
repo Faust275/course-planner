@@ -11,6 +11,8 @@
 
   var cursor = null;     // { y, m }
   var selected = null;   // 选中日期 YYYY-MM-DD
+  var relayHighlight = null;  // 从待办页接力过来、需要在「待办抽屉」里高亮的待办 id
+  var relayToastedId = null;  // 避免 mount + onEnter 双渲染时重复弹提示
   var onlyMine = false;  // 是否只看有内容的日子（预留）
   var calTab = 'calendar';   // 分页：calendar 日历 / agenda 日程（日程来自 agenda.js 的 AgendaPane）
   var COURSE_COLOR = '#0ea5e9';   // 时间块里课程统一显示为该色（与「学习/课程」主色一致），不再用每门课各自颜色
@@ -90,6 +92,22 @@
       root.innerHTML = '';
       ensureCursor();
 
+      /* 跨视图接力：从待办页拖到「日历」入口过来时，定位到今天并在待办抽屉里高亮它。
+         进入视图时 mount + onEnter 会连续渲染两次，所以这里不立刻清标记，
+         而是保留 500ms，让两次渲染都能命中；之后再清掉避免误高亮。 */
+      (function () {
+        var bus = (global.App && global.App.bus) ? App.bus : null;
+        var relay = bus ? bus.peekRelay(8000) : null;
+        if (relay) {
+          var id = relay.taskId, at = relay.at;
+          var d = today0();
+          selected = DateUtil.toStr(d);
+          cursor = { y: d.getFullYear(), m: d.getMonth() };
+          relayHighlight = id;
+          setTimeout(function () { if (bus) bus.clearRelay(at); }, 500);
+        }
+      })();
+
       /* ---- 分页：日历 / 日程 ---- */
       var paneBar = el('div', { class: 'pane-tabs' });
       [
@@ -120,12 +138,12 @@
       /* ================= 月份头 ================= */
       var head = el('div', { class: 'week-bar', style: { marginBottom: '12px' } }, [
         el('div', { class: 'week-nav' }, [
-          el('button', { class: 'icon-btn', onclick: function () { shiftMonth(-1); view.render(); } }, [V.svg(V.icons.left)]),
+          el('button', { class: 'icon-btn', dataset: { calNav: 'prev' }, title: '上个月（把日程拖到这里可改到上月同日）', onclick: function () { shiftMonth(-1); view.render(); } }, [V.svg(V.icons.left)]),
           el('div', { class: 'week-label' }, [
             el('span', { text: y + ' 年 ' + (m + 1) + ' 月' }),
             el('small', { text: monthSummary(y, m) })
           ]),
-          el('button', { class: 'icon-btn', onclick: function () { shiftMonth(1); view.render(); } }, [V.svg(V.icons.right)])
+          el('button', { class: 'icon-btn', dataset: { calNav: 'next' }, title: '下个月（把日程拖到这里可改到下月同日）', onclick: function () { shiftMonth(1); view.render(); } }, [V.svg(V.icons.right)])
         ]),
         el('div', { class: 'week-meta' }, [
           (y !== today0().getFullYear() || m !== today0().getMonth()) ? el('button', {
@@ -175,7 +193,7 @@
         var box = el('div', { class: 'card', style: { padding: '4px 8px' } });
         upcoming.forEach(function (e) {
           var d = DateUtil.parse(e.date);
-          box.appendChild(el('div', {
+          var row = el('div', {
             class: 'task-row',
             onclick: function () {
               cursor = { y: d.getFullYear(), m: d.getMonth() };
@@ -191,7 +209,9 @@
               ])
             ]),
             el('span', { class: 'chip chip-primary', text: '日程' })
-          ]));
+          ]);
+          dragEventToCell(row, e.id, e.date);
+          box.appendChild(row);
         });
         up.appendChild(box);
         root.appendChild(up);
@@ -226,6 +246,7 @@
         (isToday ? ' today' : '') +
         (isSel ? ' sel' : '') +
         (isFuture ? ' future' : ''),
+      dataset: { date: ds },
       onclick: function () {
         selected = ds;
         if (d.getMonth() !== cursor.m) {
@@ -248,6 +269,121 @@
       ])
     ]);
     return cell;
+  }
+
+  /* ==========================================================
+   * 拖动：把事件拖到别的日格 → 改期
+   * 拖动源：选中日详情里的日程行 / 未来 7 天日程行
+   * 落点：月格（cp-cal-cell，带 data-date）
+   * ========================================================== */
+  function clearCellHint() {
+    var ns = document.querySelectorAll('.cp-cal-cell.cp-drop-cell');
+    for (var i = 0; i < ns.length; i++) ns[i].classList.remove('cp-drop-cell');
+  }
+
+  /* ---- 拖到月份导航 ‹ › 松手：改到相邻月同一天（边缘翻月的可落地形态） ---- */
+  function dropNavDir(overEl) {
+    var b = overEl && overEl.closest && overEl.closest('[data-cal-nav]');
+    return b ? b.getAttribute('data-cal-nav') : null;
+  }
+  function clearNavHot() {
+    var ns = document.querySelectorAll('.cp-cal-nav-hot');
+    for (var i = 0; i < ns.length; i++) ns[i].classList.remove('cp-cal-nav-hot');
+  }
+  function navHotButton(overEl) {
+    clearNavHot();
+    var b = overEl && overEl.closest && overEl.closest('[data-cal-nav]');
+    if (b) b.classList.add('cp-cal-nav-hot');
+    return b;
+  }
+  function sameDayShiftMonth(srcDate, dir) {
+    var base = srcDate ? DateUtil.parse(srcDate) : null;
+    if (!base) base = today0();
+    var ny = base.getFullYear(), nm = base.getMonth() + (dir === 'next' ? 1 : -1);
+    var dim = new Date(ny, nm + 1, 0).getDate();
+    var day = Math.min(base.getDate(), dim);
+    var d = new Date(ny, nm, day);
+    return { ds: DateUtil.toStr(d), y: ny, m: nm };
+  }
+
+  function dragEventToCell(node, eventId, sourceDate) {
+    if (!global.DragGesture) return;
+    var oldDate = sourceDate;
+    DragGesture.makeDraggable(node, {
+      ignore: '.cal-color',
+      menuTitle: '日程',
+      menu: function () { return DragGesture.dateMenuItems('event', eventId); },
+      onMove: function (c) {
+        clearCellHint();
+        if (navHotButton(c.overEl)) return;   // 悬停翻月按钮时只高亮按钮
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== sourceDate) cell.classList.add('cp-drop-cell');
+      },
+      onEnd: function (c) {
+        clearCellHint(); clearNavHot();
+        var dir = dropNavDir(c.overEl);
+        if (dir) {
+          var t = sameDayShiftMonth(sourceDate, dir);
+          Store.updateEvent(eventId, { date: t.ds });
+          cursor = { y: t.y, m: t.m }; selected = t.ds; view.render();
+          V.toastAction('已改期到 ' + t.ds.slice(5).replace('-', '/'), {
+            onAction: function () { if (oldDate) { var od = DateUtil.parse(oldDate); cursor = { y: od.getFullYear(), m: od.getMonth() }; selected = oldDate; } Store.updateEvent(eventId, { date: oldDate }); }
+          });
+          return;
+        }
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var targetDs = cell && cell.getAttribute('data-date');
+        if (targetDs && targetDs !== sourceDate) {
+          Store.updateEvent(eventId, { date: targetDs });
+          V.toastAction('已改期到 ' + targetDs.slice(5).replace('-', '/'), {
+            onAction: function () { Store.updateEvent(eventId, { date: oldDate }); }
+          });
+        }
+      }
+    });
+  }
+
+  /** 待办抽屉 → 拖到日期格，直接改这条待办的截止日期（待办↔日历桥接） */
+  function dragTaskToCell(node, task) {
+    if (!global.DragGesture) return;
+    var src = task.dueDate || '';
+    DragGesture.makeDraggable(node, {
+      ignore: '.cal-color',
+      menuTitle: '待办「' + task.title + '」',
+      menu: function () { return DragGesture.dateMenuItems('task', task.id); },
+      onMove: function (c) {
+        clearCellHint();
+        if (navHotButton(c.overEl)) return;
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== src) cell.classList.add('cp-drop-cell');
+      },
+      onEnd: function (c) {
+        clearCellHint(); clearNavHot();
+        var dir = dropNavDir(c.overEl);
+        if (dir) {
+          var t = sameDayShiftMonth(src || '', dir);
+          Store.updateTask(task.id, { dueDate: t.ds });
+          cursor = { y: t.y, m: t.m }; selected = t.ds; view.render();
+          V.toastAction('「' + task.title + '」截止日改到 ' + t.ds.slice(5).replace('-', '/'), {
+            onAction: function () {
+              if (src) { var od = DateUtil.parse(src); cursor = { y: od.getFullYear(), m: od.getMonth() }; selected = src; }
+              Store.updateTask(task.id, { dueDate: src });
+            }
+          });
+          return;
+        }
+        var cell = c.overEl && c.overEl.closest('.cp-cal-cell');
+        var ds = cell && cell.getAttribute('data-date');
+        if (ds && ds !== src) {
+          Store.updateTask(task.id, { dueDate: ds });
+          V.toastAction('「' + task.title + '」截止日改到 ' + ds.slice(5).replace('-', '/'), {
+            onAction: function () { Store.updateTask(task.id, { dueDate: src }); }
+          });
+        }
+      }
+    });
   }
 
   function monthSummary(y, m) {
@@ -329,16 +465,18 @@
 
     /* ---- 日程 ---- */
     if (events.length) {
-      card.appendChild(el('div', { class: 'cal-sub' }, ['日程']));
+      card.appendChild(el('div', { class: 'cal-sub' }, ['日程（可拖动改期）']));
       events.forEach(function (e) {
-        card.appendChild(el('div', { class: 'cal-line', onclick: function () {
+        var row = el('div', { class: 'cal-line', onclick: function () {
           if (global.EventDetail) global.EventDetail.open(e.id);
         } }, [
           el('span', { class: 'cal-time', text: e.start }),
           el('i', { class: 'cal-color', style: { background: '#ec4899' } }),
           el('span', { class: 'cal-name', text: e.title + (e.location ? ' · ' + e.location : '') }),
           e.done ? el('span', { class: 'chip chip-green', text: '已完成' }) : null
-        ]));
+        ]);
+        dragEventToCell(row, e.id, ds);
+        card.appendChild(row);
       });
     }
 
@@ -628,6 +766,15 @@
       var da = a.dueDate || '9999-99-99', db = b.dueDate || '9999-99-99';
       return da < db ? -1 : da > db ? 1 : 0;
     });
+    // 接力进来的待办优先展示，避免被挤到 8 条之外
+    if (relayHighlight) {
+      for (var ri = 0; ri < pend.length; ri++) {
+        if (pend[ri].id === relayHighlight) {
+          pend.unshift(pend.splice(ri, 1)[0]);
+          break;
+        }
+      }
+    }
     pend = pend.slice(0, 8);
 
     wrap.appendChild(el('div', { class: 'section-title' }, [
@@ -654,16 +801,34 @@
       var tag = [];
       if (planned) tag.push('计划 ' + TimeUtil.humanMin(planned));
       if (actual) tag.push('实际 ' + TimeUtil.humanMin(actual));
-      wrap.appendChild(el('div', {
-        class: 'tb-drawer-row',
+      var isRelay = relayHighlight && t.id === relayHighlight;
+      var row = el('div', {
+        class: 'tb-drawer-row' + (isRelay ? ' relay-hl' : ''),
         onclick: function () { paintPlanned(ds, t); }
       }, [
         el('i', { class: 'cal-color', style: { background: '#0ea5e9' } }),
         el('span', { class: 'tb-drawer-name', text: t.title }),
         t.dueDate ? el('span', { class: 'chip', text: DateUtil.human(t.dueDate) }) : null,
         tag.length ? el('span', { class: 'tb-drawer-tag', text: tag.join(' · ') }) : null
-      ]));
+      ]);
+      // 跨视图桥接：把待办拖到上方任意日期格 → 直接改截止日期
+      dragTaskToCell(row, t);
+      wrap.appendChild(row);
     });
+
+    if (relayHighlight) {
+      var hl = relayHighlight;
+      relayHighlight = null;
+      var rt = Store.getTask(hl);
+      if (rt && relayToastedId !== hl) {
+        relayToastedId = hl;
+        V.toast('已把「' + rt.title + '」带到日历：拖到某天改期，或点一下排今天', 'info');
+      }
+      setTimeout(function () {
+        var n = wrap.querySelector('.cp-relay-hl');
+        if (n && n.scrollIntoView) { try { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {} }
+      }, 80);
+    }
     return wrap;
   }
 

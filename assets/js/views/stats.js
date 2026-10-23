@@ -163,6 +163,9 @@
       /* ---------- 周热力条 ---------- */
       root.appendChild(heatCard(st));
 
+      /* ---------- 计划 vs 实际偏差 ---------- */
+      root.appendChild(planDeviationCard());
+
       /* ---------- 逐日记录量 ----------
          只在 8–35 天时给：更短的话上面已经有逐日热力条，更长的话
          chartDaily 会自动聚合成周，和上面的周热力条重复，还容易被误读成「一天 69 小时」。 */
@@ -526,6 +529,70 @@
    *   跨度短（本周 / 今天）→ 按天分组，一格一天，否则只有一格没什么可看
    * 颜色一律按**日均**着色：首尾的不满周如果按总量算会显得特别浅，误导。
    * ========================================================== */
+  /* ==========================================================
+   * 计划 vs 实际偏差
+   * ----------------------------------------------------------
+   * 复用 Store.planProgress 的 target（计划量）与 value（实际量）。
+   * 复盘时真正有用的往往不是「完成率 78%」这种漂亮数字，
+   * 而是「还差 5 次」这种缺口，所以这里把差值直接摆出来，按差距大到小排。
+   * ========================================================== */
+  function planDeviationCard() {
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['计划 vs 实际']));
+
+    var plans = (Store.state.plans || []).filter(function (p) { return p && p.target > 0; });
+    if (!plans.length) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)' },
+        text: '还没有带目标的计划。建一个打卡或累加型计划，这里就能看到它差多少。'
+      }));
+      return card;
+    }
+
+    var rows = plans.map(function (p) {
+      var pg = Store.planProgress(p);
+      return { p: p, plan: pg.target, actual: pg.value, diff: pg.value - pg.target, pct: pg.pct };
+    }).sort(function (a, b) { return Math.abs(b.diff) - Math.abs(a.diff); });   // 差距最大的在前
+
+    var sumPlan = 0, sumActual = 0;
+    rows.forEach(function (r) { sumPlan += r.plan; sumActual += r.actual; });
+    var sumDiff = sumActual - sumPlan;
+    var sumPct = sumPlan ? Math.round(sumActual / sumPlan * 100) : 0;
+
+    card.appendChild(el('div', {
+      style: { fontSize: '12px', color: 'var(--text-3)', margin: '2px 0 10px' },
+      text: '合计 计划 ' + sumPlan + ' / 实际 ' + sumActual +
+            '（' + (sumDiff >= 0 ? '+' : '') + sumDiff + '，达成 ' + sumPct + '%）'
+    }));
+
+    rows.forEach(function (r) {
+      var over = r.diff >= 0;
+      card.appendChild(el('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 0',
+          borderTop: '1px solid rgba(128,128,128,0.18)'
+        }
+      }, [
+        el('div', { style: { flex: '1', minWidth: '0' } }, [
+          el('div', {
+            style: { fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+            text: r.p.title
+          }),
+          el('div', {
+            style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '2px' },
+            text: '计划 ' + r.plan + ' · 实际 ' + r.actual
+          })
+        ]),
+        el('span', {
+          class: 'chip',
+          style: { color: over ? '#10b981' : '#ef4444', flex: 'none' },
+          text: (over ? '+' : '') + r.diff + '（' + r.pct + '%）'
+        })
+      ]));
+    });
+    return card;
+  }
+
   function heatCard(st) {
     var card = el('div', { class: 'card cp-chart-card' });
     var days = st.cur.daily;

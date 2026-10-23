@@ -176,6 +176,9 @@
         return;
       }
 
+      root.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '0 0 10px' }
+      }, ['长按卡片可拖动调整顺序']));
       var wrap = el('div', { class: 'plan-list' });
       list.forEach(function (p) { wrap.appendChild(planCard(p, view)); });
       root.appendChild(wrap);
@@ -264,11 +267,39 @@
           onclick: function (e) { e.stopPropagation(); openAddValueDialog(p, view); }
         }, ['+ 记一笔' + (p.type === 'duration' ? '时长' : '进度')]));
       }
-      card.appendChild(row);
-    }
-
-    return card;
+    card.appendChild(row);
   }
+
+  /* ---- 长按拖动排序（整卡可拖，按钮区不触发） ---- */
+  if (global.DragGesture) {
+    var beforeOrder = null;
+    DragGesture.makeDraggable(card, {
+      ignore: 'button, .plan-check-btn, .plan-cell, input, textarea, a, .icon-btn',
+      menuTitle: '计划「' + p.title + '」',
+      menu: function () { return DragGesture.orderMenuItems('plans', p.id); },
+      onStart: function () {
+        beforeOrder = DragGesture.orderedIds(card.parentNode, '.cp-plan-card');
+      },
+      onMove: function (c) {
+        DragGesture.moveWithin(card.parentNode, card, c.overEl, c.evt.clientY, '.cp-plan-card');
+        DragGesture.showDropHint(c.overEl, c.evt.clientY, '.cp-plan-card');
+      },
+      onEnd: function (c) {
+        var ids = DragGesture.orderedIds(card.parentNode, '.cp-plan-card');
+        if (ids.length > 1) {
+          Store.reorderInView('plans', ids);
+          if (beforeOrder && beforeOrder.join(',') !== ids.join(',')) {
+            UI.toastAction('已调整计划顺序', {
+              onAction: function () { Store.reorderInView('plans', beforeOrder); }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  return card;
+}
 
   function checkinWithAnim(id, dateStr, view, card) {
     var res = Store.togglePlanCheckin(id, dateStr);

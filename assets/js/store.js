@@ -8,6 +8,11 @@
   'use strict';
 
   var KEY = 'course-planner:v1';
+  var SCHEMA_VERSION = 3;          // 数据结构版本（导出/导入都写这个）
+  var BLOB_BG = 'cp-blob-background';
+  var BLOB_PET = 'cp-blob-pet';
+  var saveTimer = null;            // 保存去抖句柄
+  var blobCache = { bg: null, pet: null };   // 已落盘的大图，避免重复写
 
   /* ---------- 持久化抽象：优先 IndexedDB，file:// 或隐私模式回退 localStorage ---------- */
   var Persist = (function () {
@@ -64,7 +69,7 @@
         });
       }).catch(function (e) {
         /* IDB 不可用（隐私/配额），回退 localStorage */
-        try { localStorage.setItem(key, str); resolve(); }
+        try { localStorage.setItem(key, str); }
         catch (e2) { return Promise.reject(e2); }
       });
     }
@@ -158,7 +163,7 @@
     var start = DateUtil.addDays(DateUtil.weekStart(today), -7 * 8);
     var sid = uid('sem');
     return {
-      version: 2,
+      version: 3,          // 与 SCHEMA_VERSION 保持一致（单测沙箱只摘部分函数，这里写死）
       model: 2,          // 数据模型版本：2 = 课程支持多时段 slots[]
       semesters: [{
         id: sid,
@@ -2219,6 +2224,28 @@
     };
   }
 
+  /**
+   * 版本化结构迁移：只做「无法靠字段特征判断」的升级，逐级递进。
+   * 字段补齐仍留在 ensure 里——两条路一起跑，导入任何来源的旧档都能兜住。
+   */
+  function migrateSchema(st) {
+    if (!st || typeof st !== 'object') return st;
+    var from = Number(st.version) || 1;
+    if (from > SCHEMA_VERSION) return st;   // 更新版本的数据不在旧代码里强行降级
+    if (from < 3) {
+      // v3：手动排序 order 字段 + 专注队列 timer.queue（幂等）
+      var mx = 0;
+      (st.tasks || []).forEach(function (t) { if (typeof t.order === 'number' && t.order > mx) mx = t.order; });
+      var seq = 1;
+      (st.tasks || []).forEach(function (t) { if (typeof t.order !== 'number') t.order = mx + (seq++); });
+      if (st.pomodoro && st.pomodoro.timer && !Array.isArray(st.pomodoro.timer.queue)) {
+        st.pomodoro.timer.queue = [];
+      }
+    }
+    st.version = SCHEMA_VERSION;
+    return st;
+  }
+
   var Store = {
     COLORS: COLORS,
     DAY_NAMES: DAY_NAMES,
@@ -2339,15 +2366,42 @@
       }
       if (!state || !state.version) state = defaultState();
 
+      // 大图外置：主 state 里只存空串，这里把图补回内存，渲染逻辑无需改动
+      try {
+        var bgBlob = await Persist.load(BLOB_BG);
+        var petBlob = await Persist.load(BLOB_PET);
+        if (state.settings) {
+          if (bgBlob && state.settings.background && !state.settings.background.dataUrl) state.settings.background.dataUrl = bgBlob;
+          if (petBlob && state.settings.pet && !state.settings.pet.src) state.settings.pet.src = petBlob;
+        }
+        blobCache.bg = bgBlob || null;
+        blobCache.pet = petBlob || null;
+      } catch (e) { /* 大图读取失败不影响主流程 */ }
+
       // 兼容补齐字段（日程 / 象限 / 记账 / 设置…）
       this.ensure();
       this.settleGoals();      // 上次关闭期间到期的目标，这里补结算
       this.save();
+      // 页面要走了，把去抖中的保存立刻落盘
+      var self = this;
+      if (!this._flushHooked && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        this._flushHooked = true;
+        window.addEventListener('pagehide', function () { self.flushSave(); });
+        if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'hidden') self.flushSave();
+          });
+        }
+      }
+      // 每日自动快照：跨天首次启动补一份；异步执行，不阻塞启动
+      this.maybeDailyBackup();
       return state;
     },
 
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
+      if (!state) state = defaultState();
+      migrateSchema(state);      // 版本升级：必须早于 validateSchema（否则默认值会盖掉旧结构）
       hoistLegacy(state);        // 旧值抢救：必须早于 validateSchema，否则旧值会被默认值覆盖、再也搬不动
       state = validateSchema(state);
       var ds = defaultState();
@@ -2443,6 +2497,13 @@
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
+      // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
+      state.sleeps.forEach(function (s) {
+        ['deep', 'light', 'rem', 'awake', 'efficiency', 'awakenings'].forEach(function (k) {
+          if (s[k] === undefined) s[k] = null;
+        });
+        if (!s.source) s.source = 'manual';
+      });
       // 进行中的睡眠计时：字段不全就丢弃，避免半截状态一直转下去
       if (state.sleepSession && (!state.sleepSession.date || !state.sleepSession.start ||
           typeof state.sleepSession.at !== 'number')) {
@@ -2452,6 +2513,12 @@
       if (!Array.isArray(state.courseExceptions)) state.courseExceptions = [];
       if (!state.tasks) state.tasks = [];
       if (!Array.isArray(state.taskArchive)) state.taskArchive = [];
+      // 旧任务补 order 字段（用于「待办手动排序」）：按当前最大值顺延，保证唯一
+      (function () {
+        var mx = 0, i = 1;
+        state.tasks.forEach(function (t) { if (typeof t.order === 'number' && t.order > mx) mx = t.order; });
+        state.tasks.forEach(function (t) { if (typeof t.order !== 'number') { t.order = mx + i; i++; } });
+      })();
       if (!state.achievements || typeof state.achievements !== 'object') state.achievements = { done: {} };
       if (!state.achievements.done || typeof state.achievements.done !== 'object') state.achievements.done = {};
       if (!state.usage || typeof state.usage !== 'object') state.usage = {};
@@ -2507,17 +2574,62 @@
       return state;
     },
 
-    save: function () {
+    /**
+     * 保存。默认去抖 250ms：勾选待办、拖动排序这类高频操作不会每次都
+     * 序列化整个 state 再写库。计时等关键状态传 true 立即落盘。
+     */
+    save: function (immediate) {
+      if (immediate) return this.flushSave();
+      if (saveTimer) return;
       var self = this;
-      var str;
-      try { str = JSON.stringify(state); } catch (e) { console.warn('序列化失败', e); return; }
-      Persist.save(KEY, str).catch(function (e) {
+      saveTimer = setTimeout(function () { saveTimer = null; self._saveNow(); }, 250);
+    },
+
+    /** 立刻把待写状态落盘（页面隐藏 / 计时操作 / 测试用） */
+    flushSave: function () {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      return this._saveNow();
+    },
+
+    _saveNow: function () {
+      var self = this;
+      var bg = '', pet = '';
+      try {
+        if (state.settings && state.settings.background) bg = state.settings.background.dataUrl || '';
+        if (state.settings && state.settings.pet) pet = state.settings.pet.src || '';
+      } catch (e) {}
+
+      // 大图不进主 state：临时清空 → 序列化 → 还原。主状态因此保持很小。
+      var bgBackup = '', petBackup = '';
+      if (state.settings && state.settings.background && bg) { bgBackup = bg; state.settings.background.dataUrl = ''; }
+      if (state.settings && state.settings.pet && pet) { petBackup = pet; state.settings.pet.src = ''; }
+      var str = '';
+      try { str = JSON.stringify(state); }
+      catch (e) { console.warn('序列化失败', e); }
+      finally {
+        if (state.settings && state.settings.background) state.settings.background.dataUrl = bgBackup;
+        if (state.settings && state.settings.pet) state.settings.pet.src = petBackup;
+      }
+      if (!str) return Promise.resolve();
+
+      // 先写大图、再写主状态；图被清空时同步删除，避免下次启动又被塞回来
+      var chain = Promise.resolve();
+      if (bg && bg !== blobCache.bg) {
+        chain = chain.then(function () { return Persist.save(BLOB_BG, bg); }).then(function () { blobCache.bg = bg; });
+      } else if (!bg && blobCache.bg) {
+        chain = chain.then(function () { return Persist.remove(BLOB_BG); }).then(function () { blobCache.bg = null; });
+      }
+      if (pet && pet !== blobCache.pet) {
+        chain = chain.then(function () { return Persist.save(BLOB_PET, pet); }).then(function () { blobCache.pet = pet; });
+      } else if (!pet && blobCache.pet) {
+        chain = chain.then(function () { return Persist.remove(BLOB_PET); }).then(function () { blobCache.pet = null; });
+      }
+
+      return chain.then(function () { return Persist.save(KEY, str); }).catch(function (e) {
         console.warn('保存失败', e);
         if (!self.quotaWarned) {
           self.quotaWarned = true;
-          if (global.UI && UI.toast) {
-            UI.toast('本地存储空间不足，建议换一张更小的背景图', 'err');
-          }
+          if (global.UI && UI.toast) UI.toast('本地存储空间不足，建议换一张更小的背景图', 'err');
         }
       });
     },
@@ -2527,7 +2639,10 @@
     /* ===== 自动备份：破坏性操作前的回滚点 ===== */
     BK_PREFIX: 'cp-backup-',
     BK_INDEX: 'cp-backup-index',
-    BK_MAX: 5,
+    BK_DAILY_KEY: 'cp-daily-backup-date',
+    BK_MAX: 5,           // 手动 / 覆盖前的回滚点，最多 5 份
+    BK_DAILY_MAX: 2,     // 每日自动快照，最多 2 份，且不挤占上面那 5 份
+    BK_TOTAL_BYTES: 4 * 1024 * 1024,  // 备份总量软上限：超出则丢弃最旧的，避免 IndexedDB 无限膨胀
 
     /** 存一份当前数据的快照；返回备份元信息（异步，不阻塞调用方） */
     backupNow: function (reason) {
@@ -2580,17 +2695,56 @@
       });
     },
 
-    /** 只保留最近 BK_MAX 份，删掉更老的 */
+    /**
+     * 按来源分层裁剪：每日自动最多 BK_DAILY_MAX 份，其余（手动 / 清空 / 覆盖前）
+     * 最多 BK_MAX 份。这样每日快照不会把手动回滚点挤掉。
+     */
     _bkTrim: function () {
       var self = this;
       return this._bkReadIndex().then(function (list) {
-        if (list.length <= self.BK_MAX) return list;
-        var keep = list.slice(0, self.BK_MAX);
-        var drop = list.slice(self.BK_MAX);
+        var daily = [], other = [];
+        list.forEach(function (m) { (m.reason === '每日自动' ? daily : other).push(m); });
+        var keep = other.slice(0, self.BK_MAX).concat(daily.slice(0, self.BK_DAILY_MAX));
+        // 总量配额：从新到旧累计，超出 BK_TOTAL_BYTES 的最旧备份一并丢弃，防 IndexedDB 膨胀
+        var total = 0;
+        keep = keep.filter(function (m) {
+          total += (m.bytes || 0);
+          return total <= self.BK_TOTAL_BYTES;
+        });
+        keep.sort(function (a, b) { return b.ts - a.ts; });
+        var keepKeys = {};
+        keep.forEach(function (m) { keepKeys[m.key] = 1; });
+        var drop = list.filter(function (m) { return !keepKeys[m.key]; });
+        if (!drop.length) return keep;
         return Promise.all(drop.map(function (m) { return Persist.remove(m.key); }))
           .then(function () { return Persist.save(self.BK_INDEX, JSON.stringify(keep)); })
           .then(function () { return keep; });
       });
+    },
+
+    /**
+     * 每日自动快照：跨天首次启动补一份。用独立 key 记住「今天已备份」，
+     * 不写进同步数据；数据为空时 backupNow 返回 null，不落日期，之后有数据再补。
+     */
+    maybeDailyBackup: function () {
+      var self = this;
+      var today;
+      try { today = DateUtil.toStr(DateUtil.today()); } catch (e) { today = ''; }
+      if (!today) return Promise.resolve(false);
+      return Persist.load(this.BK_DAILY_KEY).then(function (last) {
+        if (last === today) return false;
+        return self.listBackups().then(function (list) {
+          var exists = list.some(function (m) {
+            return m.reason === '每日自动' && DateUtil.toStr(new Date(m.ts)) === today;
+          });
+          var p = exists ? Promise.resolve(true)
+                         : self.backupNow('每日自动').then(function (meta) { return !!meta; });
+          return p.then(function (ok) {
+            if (!ok) return false;
+            return Persist.save(self.BK_DAILY_KEY, today).then(function () { return true; });
+          });
+        });
+      }).catch(function () { return false; });
     },
 
     /** 列出备份（新的在前） */
@@ -3084,6 +3238,7 @@
 
     /** 收藏的诗词（索引 → 内容） */
     favPoems: function () {
+      if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
       var list = (global.Daily && Daily.poems) || [];
       var out = [];
       this.fav().poems.forEach(function (i) {
@@ -3095,6 +3250,7 @@
 
     /** 收藏的单词（按词形查回完整释义） */
     favWords: function () {
+      if (!global.Daily && typeof global.__cpLoadDaily === 'function') global.__cpLoadDaily();
       var list = (global.Daily && Daily.words) || [];
       var map = {};
       list.forEach(function (w, i) { if (!map[w.w]) map[w.w] = { idx: i, item: w }; });
@@ -3167,7 +3323,7 @@
     gpaConfig: function () {
       var ds = defaultState();
       var g = (state.settings && state.settings.gpa) || ds.settings.gpa;
-      var rules = (Array.isArray(g.rules) && g.rules.length) ? g.rules : defaultGpaRules();
+      var rules = (Array.isArray(g.rules) && g.rules.length) ? g.rules : Store.defaultGpaRules();
       rules = rules.map(function (r) {
         return { min: Number(r.min) || 0, gp: Number(r.gp) || 0 };
       }).sort(function (a, b) { return b.min - a.min; });
@@ -3379,6 +3535,8 @@
         doneAt: ''
       };
       state.tasks.push(t);
+      // 维护一个单调自增的 order，作为「手动排序」字段的默认值
+      (function () { var m = 0; state.tasks.forEach(function (x) { if (typeof x.order === 'number' && x.order > m) m = x.order; }); t.order = m + 1; })();
       // 新增子任务后，父任务的进度可能变了；若设置要求「全完成自动完成父」，这里也要生效
       if (t.parentId) this.syncParent(t.parentId);
       if (this.markAction) this.markAction('task', 1);
@@ -3514,6 +3672,58 @@
       if (parentId) this.syncParent(parentId);
       this.emit();
       return { removed: removed, kept: kept };
+    },
+
+    /**
+     * 批量删除（单事务）：遵循与 removeTask 相同的 orphanKeep 规则。
+     * 返回 { removed, kept, snapshot, ids }；snapshot 用于「撤销」整份恢复。
+     */
+    removeTasks: function (ids) {
+      ids = (ids || []).filter(Boolean);
+      if (!ids.length) return { removed: 0, kept: 0, snapshot: null, ids: [] };
+      var set = {};
+      ids.forEach(function (id) { set[id] = 1; });
+      var o = subOpts(state.settings);
+      var snapshot = JSON.parse(JSON.stringify(state.tasks));
+      var removeSet = {};
+      state.tasks.forEach(function (t) { if (set[t.id]) removeSet[t.id] = 1; });
+
+      var kept = 0;
+      if (o.orphanKeep) {
+        // 保留子任务：选中父任务的子任务提升为顶层（子任务自己被选中时仍删除）
+        state.tasks.forEach(function (t) {
+          if (t.parentId && set[t.parentId] && !set[t.id]) { t.parentId = ''; kept++; }
+        });
+      } else {
+        // 一并删除：选中父任务的全部直属子任务
+        state.tasks.forEach(function (t) {
+          if (t.parentId && set[t.parentId]) removeSet[t.id] = 1;
+        });
+      }
+
+      // 被删掉子任务、但父任务还在的，父任务联动一次（与单条删除一致）
+      var affectedParents = {};
+      state.tasks.forEach(function (t) {
+        if (removeSet[t.id] && t.parentId && !removeSet[t.parentId]) affectedParents[t.parentId] = 1;
+      });
+
+      var removedIds = [];
+      state.tasks = state.tasks.filter(function (t) {
+        if (removeSet[t.id]) { removedIds.push(t.id); return false; }
+        return true;
+      });
+      var self = this;
+      Object.keys(affectedParents).forEach(function (pid) { self.syncParent(pid); });
+      this.emit();
+      return { removed: removedIds.length, kept: kept, snapshot: snapshot, ids: removedIds };
+    },
+
+    /** 从删除快照整份恢复，用于撤销 */
+    restoreTasks: function (snapshot) {
+      if (!Array.isArray(snapshot)) return false;
+      state.tasks = JSON.parse(JSON.stringify(snapshot));
+      this.emit();
+      return true;
     },
 
     getTask: function (id) {
@@ -4002,11 +4212,19 @@
     addSleep: function (data) {
       var r = {
         id: uid('s'),
-        date: data.date || DateUtil.toStr(DateUtil.today()),   // 记录所属日
+        date: data.date || DateUtil.toStr(DateUtil.today()),   // 记录所属日（入睡日）
         start: data.start || '23:00',                          // 入睡时间
         end: data.end || '07:00',                              // 醒来时间（可跨午夜）
         quality: data.quality || 'normal',                     // good / normal / bad
-        note: (data.note || '').trim()
+        note: (data.note || '').trim(),
+        // 睡眠结构（深睡/浅睡/REM/清醒时长，分钟）；手环/截图/CSV/HC 可填，手动计时留空
+        deep: data.deep != null ? Number(data.deep) : null,
+        light: data.light != null ? Number(data.light) : null,
+        rem: data.rem != null ? Number(data.rem) : null,
+        awake: data.awake != null ? Number(data.awake) : null,
+        efficiency: data.efficiency != null ? Number(data.efficiency) : null,  // 睡眠效率 %
+        awakenings: data.awakenings != null ? Number(data.awakenings) : null, // 清醒次数
+        source: data.source || 'manual'   // manual | timer | shot | csv | hc
       };
       // 记录类发分：当天首条睡眠记录给 4 分（防重复刷）；push 前判断，避免把自己算进去
       var isFirst = !state.sleeps.some(function (s) { return s.date === r.date; });
@@ -4049,6 +4267,41 @@
       var d = DateUtil.parse(dateStr) || DateUtil.today();
       var next = DateUtil.toStr(DateUtil.addDays(d, 1));
       return sleepByNight(state.sleeps, dateStr, next);
+    },
+
+    /** 这条睡眠记录的「醒来日」（跨午夜时比记录日 +1 天）。用于"用昨夜睡眠算今日状态"。 */
+    wakeDateOf: function (rec) {
+      if (!rec || !rec.date) return '';
+      var d = DateUtil.parse(rec.date);
+      if (!d) return rec.date;
+      var overnight = !!(rec.end && rec.start && rec.end < rec.start);
+      return DateUtil.toStr(DateUtil.addDays(d, overnight ? 1 : 0));
+    },
+
+    /**
+     * 取用于「某天状态推算」的那条睡眠（按夜归属）：
+     *   1) 优先：醒来日正好是 dayStr 的（即昨夜睡的、今早醒的）；
+     *   2) 退路：记录日就是 dayStr 且不跨午夜；
+     *   3) 再退路：最近一条（之前某夜）作为近似。
+     * 不改变 sleepByNight 的统计口径（仍按入睡日拆账），只在选择层做按夜归属。
+     */
+    sleepForDay: function (dayStr) {
+      var self = this;
+      var list = (state.sleeps || []).slice();
+      var exact = list.filter(function (s) { return self.wakeDateOf(s) === dayStr; });
+      if (exact.length) {
+        return exact.sort(function (a, b) { return a.start < b.start ? 1 : a.start > b.start ? -1 : 0; })[0];
+      }
+      var sameDay = list.filter(function (s) { return s.date === dayStr; });
+      if (sameDay.length) return sameDay[0];
+      var sorted = list.slice().sort(function (a, b) {
+        var wa = self.wakeDateOf(a), wb = self.wakeDateOf(b);
+        return wa < wb ? 1 : wa > wb ? -1 : 0;
+      });
+      for (var i = 0; i < sorted.length; i++) {
+        if (self.wakeDateOf(sorted[i]) <= dayStr) return sorted[i];
+      }
+      return null;
     },
 
     /* ===== 睡眠计时：点一下开始，再点一下结束 ===== */
@@ -5631,7 +5884,7 @@
     /** 保存计时器状态（刷新后仍可恢复） */
     saveTimer: function (t) {
       state.pomodoro.timer = t;
-      this.save();
+      this.save(true);   // 计时状态要能经得起立刻刷新
     },
 
     /* ===== 计划 ===== */
@@ -5767,6 +6020,65 @@
     removeGoal: function (id) {
       state.goals = (state.goals || []).filter(function (x) { return x.id !== id; });
       this.emit();
+    },
+
+    /**
+     * 列表内手动排序：仅对「当前可见（已筛选）的那批 id」重排，
+     * 其余隐藏项保持原位置不变，避免跨筛选串序。
+     * 用场景：计划页筛选后拖拽、目标页在办/归档分区内拖拽。
+     * @param {string} key   state 上的数组字段名（'plans' | 'goals' | 'tasks'）
+     * @param {string[]} visibleIdsNewOrder 落点后可见条目的 id 顺序
+     */
+    reorderInView: function (key, visibleIdsNewOrder) {
+      var arr = state[key];
+      if (!arr || !visibleIdsNewOrder || !visibleIdsNewOrder.length) return;
+      var set = {};
+      visibleIdsNewOrder.forEach(function (id) { set[id] = 1; });
+      var ordered = [], seen = {};
+      visibleIdsNewOrder.forEach(function (id) {
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i].id === id && !seen[id]) { ordered.push(arr[i]); seen[id] = 1; break; }
+        }
+      });
+      var ptr = 0;
+      state[key] = arr.map(function (x) { return set[x.id] ? ordered[ptr++] : x; });
+      this.emit();
+    },
+
+    /**
+     * 在「可见子集」里上移 / 下移一项（用于「移动到…」菜单的无障碍排序）。
+     * filterFn 决定哪些项参与排序（如待办只排顶层、目标只排未归档）。
+     * 只在数组里交换两项的绝对位置，隐藏项保持原位。
+     */
+    moveAmong: function (key, id, dir, filterFn) {
+      var arr = state[key];
+      if (!arr) return false;
+      var idxs = [];
+      for (var i = 0; i < arr.length; i++) { if (!filterFn || filterFn(arr[i])) idxs.push(i); }
+      var pos = -1;
+      for (var k = 0; k < idxs.length; k++) { if (arr[idxs[k]].id === id) { pos = k; break; } }
+      if (pos < 0) return false;
+      var np = pos + dir;
+      if (np < 0 || np >= idxs.length) return false;
+      var a = idxs[pos], b = idxs[np], tmp = arr[a];
+      arr[a] = arr[b]; arr[b] = tmp;
+      this.emit();
+      return true;
+    },
+
+    /** 在「可见子集」里置顶 / 置底（edge: 'top' | 'bottom'） */
+    moveEdgeAmong: function (key, id, edge, filterFn) {
+      var arr = state[key];
+      if (!arr) return false;
+      var idxs = [];
+      for (var i = 0; i < arr.length; i++) { if (!filterFn || filterFn(arr[i])) idxs.push(i); }
+      var pos = -1;
+      for (var k = 0; k < idxs.length; k++) { if (arr[idxs[k]].id === id) { pos = k; break; } }
+      if (pos < 0) return false;
+      var item = arr.splice(idxs[pos], 1)[0];
+      if (edge === 'top') arr.unshift(item); else arr.push(item);
+      this.emit();
+      return true;
     },
 
     /** 归档 = 留档：不删、不清空数据，只是从「在办」挪到下面 */
@@ -6755,7 +7067,7 @@
       // 以默认结构打底再逐项覆盖：defaultState 里的每个顶层键都保证存在，
       // 以后新增顶层字段（如 shop）不会因为这份清单漏登记而在导入时凭空消失。
       var next = Object.assign({}, ds, obj);
-      next.version = 2;
+      next.version = Number(obj.version) || 1;   // 交给 ensure() 里的 migrateSchema 升级
       next.model = obj.model || 2;
       next.semesters = (obj.semesters && obj.semesters.length) ? obj.semesters : [
         Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})

@@ -386,8 +386,17 @@
     setTimeout(function () { input.focus(); }, 120);
   }
 
+  /** 首次用到语料时再展开（quotes-data.js 已改为惰性函数） */
+  function ensureDaily() {
+    if (!window.Daily && typeof window.__cpLoadDaily === 'function') window.__cpLoadDaily();
+    return window.Daily;
+  }
+
   global.DailyCards = {
-    section: section, openPoem: openPoem, openWord: openWord, openQuiz: openQuiz
+    section: function () { ensureDaily(); return section.apply(null, arguments); },
+    openPoem: function () { ensureDaily(); return openPoem.apply(null, arguments); },
+    openWord: function () { ensureDaily(); return openWord.apply(null, arguments); },
+    openQuiz: function () { ensureDaily(); return openQuiz.apply(null, arguments); }
   };
 })(window);
 

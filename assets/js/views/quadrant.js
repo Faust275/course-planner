@@ -693,22 +693,60 @@
   }
 
   /* ==========================================================
-   * 睡眠记录弹窗
+   * 睡眠记录弹窗（手动填写 + 截图一键导入）
    * ========================================================== */
   var SleepDialog = {
     open: function (dateStr, id) {
       var isEdit = !!id;
       var r = id ? Store.getSleep(id) : null;
       var quality = r ? r.quality : 'normal';
+      var saveDate = dateStr;     // 截图带日期时可能改写
+      var imported = false;       // 是否来自截图导入
 
-      var fStart = V.input({ type: 'time', value: r ? r.start : '23:30' });
-      var fEnd = V.input({ type: 'time', value: r ? r.end : '07:00' });
-      var fQuality = V.segment([
+      function numOrNull(v) {
+        v = String(v == null ? '' : v).trim();
+        if (!v) return null;
+        var n = Number(v);
+        return isFinite(n) ? n : null;
+      }
+
+      var qualityOpts = [
         { value: 'good', label: '睡得好' },
         { value: 'normal', label: '一般' },
         { value: 'bad', label: '没睡好' }
-      ], quality, function (v) { quality = v; });
+      ];
+      var fStart = V.input({ type: 'time', value: r ? r.start : '23:30' });
+      var fEnd = V.input({ type: 'time', value: r ? r.end : '07:00' });
+      var fQuality = V.segment(qualityOpts, quality, function (v) { quality = v; });
+      // 记下每个选项的 value，便于截图回填时同步高亮
+      Array.prototype.forEach.call(fQuality.querySelectorAll('button'), function (b, i) { b.dataset.value = qualityOpts[i].value; });
+      function setQuality(v) {
+        quality = v;
+        Array.prototype.forEach.call(fQuality.querySelectorAll('button'), function (b) {
+          var on = b.dataset.value === v;
+          b.classList.toggle('active', on);
+          b.classList.toggle('cp-active', on);
+        });
+      }
       var fNote = V.input({ placeholder: '可选，例如：睡前刷手机太久', value: r ? r.note : '' });
+
+      // 睡眠结构（可选）：手环 / 截图才有；折叠，导入时自动展开
+      var fDeep = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.deep != null ? r.deep : '' });
+      var fLight = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.light != null ? r.light : '' });
+      var fRem = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.rem != null ? r.rem : '' });
+      var fAwake = V.input({ type: 'number', min: 0, placeholder: '分钟', value: r && r.awake != null ? r.awake : '' });
+      var fEff = V.input({ type: 'number', min: 0, max: 100, placeholder: '%', value: r && r.efficiency != null ? r.efficiency : '' });
+      var fAwakeCount = V.input({ type: 'number', min: 0, placeholder: '次', value: r && r.awakenings != null ? r.awakenings : '' });
+
+      var stageBox = el('div', { style: { display: 'none', marginTop: '4px' } }, [
+        el('div', { class: 'field-row' }, [V.field('深睡(分)', fDeep), V.field('浅睡(分)', fLight)]),
+        el('div', { class: 'field-row' }, [V.field('REM(分)', fRem), V.field('清醒(分)', fAwake)]),
+        el('div', { class: 'field-row' }, [V.field('睡眠效率(%)', fEff), V.field('清醒次数', fAwakeCount)])
+      ]);
+      var stageToggle = el('button', {
+        class: 'btn btn-sm', style: { margin: '2px 0 6px' },
+        onclick: function () { stageBox.style.display = stageBox.style.display === 'none' ? '' : 'none'; }
+      }, ['＋ 睡眠结构（可选，手环/截图才有）']);
 
       var preview = el('div', { class: 'preview-box' });
       function refresh() {
@@ -720,6 +758,89 @@
       fEnd.addEventListener('input', refresh);
       refresh();
 
+      function prefill(rec) {
+        if (rec.start) fStart.value = rec.start;
+        if (rec.end) fEnd.value = rec.end;
+        if (rec.quality) setQuality(rec.quality);
+        if (rec.date) saveDate = rec.date;
+        fDeep.value = rec.deep != null ? rec.deep : '';
+        fLight.value = rec.light != null ? rec.light : '';
+        fRem.value = rec.rem != null ? rec.rem : '';
+        fAwake.value = rec.awake != null ? rec.awake : '';
+        fEff.value = rec.efficiency != null ? rec.efficiency : '';
+        fAwakeCount.value = rec.awakenings != null ? rec.awakenings : '';
+        stageBox.style.display = (rec.deep != null || rec.light != null || rec.rem != null ||
+          rec.awake != null || rec.efficiency != null || rec.awakenings != null) ? '' : 'none';
+        imported = true;
+        refresh();
+      }
+
+      function runSleepOCR(files) {
+        if (!global.Ocr) { UI.toast('当前环境不支持识别', 'err'); return; }
+        var list = Array.prototype.slice.call(files || []);
+        if (!list.length) return;
+        // 设置里勾了「云端识别」且填了接口，就走云端多模态视觉；否则本地 tesseract
+        var oc = (Store.state.settings && Store.state.settings.ocr) || {};
+        var useCloud = oc.prefer === 'cloud' && oc.endpoint && oc.apiKey;
+        var progText = el('b', { text: '正在识别第 1/' + list.length + ' 张…（' + (useCloud ? '云端' : '本地') + '）' });
+        var prog = V.modal({ title: '识别睡眠截图', body: el('div', { class: 'ocr-busy' }, [
+          el('div', { class: 'ocr-spinner' }), progText
+        ]) });
+        var results = [], errs = [];
+
+        function localParse(file) {
+          return global.Ocr.recognizeLocal(file, function () {}).then(function (res) {
+            if (res && res.words && res.words.length) {
+              var lines = global.TaskShot.linesFromWords(res.words).map(function (l) { return l.text; });
+              return global.SleepModel.parseSleepShot(lines);
+            }
+            return null;
+          });
+        }
+
+        function next(idx) {
+          if (idx >= list.length) {
+            prog.close();
+            var rec = global.SleepModel.mergeShotResults(results);
+            if (!rec || (!rec.start && !rec.end && rec.total == null)) {
+              UI.toast('没从截图里读到睡眠数据' + (errs.length ? '（' + errs.length + ' 张识别失败）' : ''), 'err');
+              return;
+            }
+            prefill(rec);
+            UI.toast('已从 ' + results.length + ' 张截图填入，请核对后保存' + (rec.date ? '（日期 ' + rec.date + '）' : ''));
+            return;
+          }
+          progText.textContent = '正在识别第 ' + (idx + 1) + '/' + list.length + ' 张…（' + (useCloud ? '云端' : '本地') + '）';
+
+          var p;
+          if (useCloud) {
+            // 云端优先；失败（如超时/接口错）自动回退本地 OCR
+            p = global.Ocr.recognizeCloudSleep(list[idx], oc).catch(function () { return localParse(list[idx]); });
+          } else {
+            p = localParse(list[idx]);
+          }
+          p.then(function (r) {
+            if (r) results.push(r);
+            next(idx + 1);
+          }).catch(function () {
+            errs.push(idx);
+            next(idx + 1);
+          });
+        }
+        next(0);
+      }
+
+      function pickSleepShot() {
+        var input = document.createElement('input');
+        input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+        input.onchange = function () {
+          var fs = input.files;
+          if (fs && fs.length) runSleepOCR(fs);
+          input.remove();
+        };
+        input.click();
+      }
+
       var m = V.modal({
         title: isEdit ? '编辑睡眠' : '记录睡眠',
         body: [
@@ -730,6 +851,8 @@
           preview,
           el('div', { style: { height: '14px' } }),
           V.field('睡眠质量', fQuality),
+          stageToggle,
+          stageBox,
           V.field('备注', fNote)
         ],
         footer: el('div', { class: 'modal-foot' }, [
@@ -744,9 +867,18 @@
             }
           }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
           el('button', {
+            class: 'btn', style: { marginLeft: 'auto' },
+            onclick: function () { pickSleepShot(); }
+          }, [V.svg(V.icons.camera, 16), '从截图导入']),
+          el('button', {
             class: 'btn btn-primary', text: '保存',
             onclick: function () {
-              var d = { date: dateStr, start: fStart.value, end: fEnd.value, quality: quality, note: fNote.value };
+              var d = {
+                date: saveDate, start: fStart.value, end: fEnd.value, quality: quality, note: fNote.value,
+                deep: numOrNull(fDeep.value), light: numOrNull(fLight.value), rem: numOrNull(fRem.value),
+                awake: numOrNull(fAwake.value), efficiency: numOrNull(fEff.value), awakenings: numOrNull(fAwakeCount.value),
+                source: imported ? 'shot' : (r && r.source) || 'manual'
+              };
               if (!d.start || !d.end) { UI.toast('请填写时间', 'err'); return; }
               if (isEdit) Store.updateSleep(id, d); else Store.addSleep(d);
               m.close();
