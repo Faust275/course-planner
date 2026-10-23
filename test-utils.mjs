@@ -23,9 +23,11 @@ export function startServer() {
     fs.createReadStream(fp).pipe(res);
   });
   return new Promise((resolve) => {
-    server.listen(0, () => {
+    // 显式绑定 127.0.0.1：CI（GitHub Actions）里 localhost 可能先解析到 IPv6 ::1，
+    // 而服务器只监听 IPv4，会导致 page.goto 立即 ECONNREFUSED。这里两边统一用 IPv4。
+    server.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
-      resolve({ server, port, base: `http://localhost:${port}`, close: () => server.close() });
+      resolve({ server, port, base: `http://127.0.0.1:${port}`, close: () => server.close() });
     });
   });
 }
