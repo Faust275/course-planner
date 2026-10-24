@@ -130,9 +130,14 @@ check('ICS 里有换教室的单独事件（新地点）', B2.hasNewLoc && B2.ha
  * C. 调课：今天的课调到本周周六
  * ========================================================== */
 console.log('C. 调课补课');
-const TO_DATE = await evaljs(() =>
-  DateUtil.toStr(DateUtil.addDays(DateUtil.weekStart(DateUtil.today()), 5)) // 本周周六
-);
+const TO_DATE = await evaljs(() => {
+  var t = DateUtil.today();
+  var sat = DateUtil.addDays(DateUtil.weekStart(t), 5);          // 本周周六
+  // 今天正好是周六时，调到「本周六」等于原地调课，原日期自然还有课，断言必然失败。
+  // 这种情况退到周五，保证目标日期与原日期不同（与星期几无关，哪天跑都对）。
+  if (DateUtil.toStr(sat) === DateUtil.toStr(t)) sat = DateUtil.addDays(sat, -1);
+  return DateUtil.toStr(sat);
+});
 const S_C = { ...SETUP, toDate: TO_DATE };
 await evaljs((s) => {
   Store.addCourseException({ courseId: s.courseId, date: s.today, type: 'move', toDate: s.toDate });

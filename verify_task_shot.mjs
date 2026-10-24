@@ -1,6 +1,17 @@
 // Playwright 端到端：截图 → 候选清单 → 勾选/改标题 → 批量添加
 // OCR 用 mock 返回固定词，避免依赖外部模型下载；覆盖 UI 全链路与写库结果。
 import { chromium } from 'playwright';
+import { writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
+
+// 自造上传用的 fixture：OCR 在下面被 mock 掉，图片内容不重要，但文件必须存在。
+// 原先直接写死 /tmp/shot-test.png，那台机器上有就过、CI 上没有就 ENOENT。
+const SHOT = path.join(os.tmpdir(), 'shot-test.png');
+writeFileSync(SHOT, Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+));
 
 const URL = process.env.URL || 'http://localhost:8303/index.html';
 const b = await chromium.launch();
@@ -45,7 +56,7 @@ const txt = await dlg.textContent();
 check('说明里讲清「不直接写入」', /勾选并确认后才写入/.test(txt), txt.slice(0, 60));
 
 /* ---- 2. 选图 → 预览 ---- */
-await dlg.locator('input[type=file]').first().setInputFiles('/tmp/shot-test.png');
+await dlg.locator('input[type=file]').first().setInputFiles(SHOT);
 await p.waitForTimeout(400);
 check('选中后有预览图', await dlg.locator('.cp-ocr-preview img').count() === 1);
 

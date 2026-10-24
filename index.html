@@ -16801,7 +16801,8 @@ window.DragGesture = (function () {
     task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
     event:  { key: 'events',  view: 'calendar', tab: 'agenda', name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
-    goal:   { key: 'goals',   view: 'plans',    name: '目标', order: 5 },
+    // 目标挂在 plans 视图的 goals 分页下，必须带 tab，否则跳过去会停在默认「常规周课表」分页
+    goal:   { key: 'goals',   view: 'plans',    tab: 'goals', name: '目标', order: 5 },
     note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 6 },
     diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 7 },
     ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 8 }
@@ -16967,6 +16968,7 @@ window.DragGesture = (function () {
           type: type,
           typeName: meta.name,
           view: meta.view,
+          tab: meta.tab,          // 目标分页（如 目标→plans 的 goals 分页），App.go / setTab 会用到
           id: rec.id || '',
           title: f.title,
           titleHits: th,
@@ -17076,6 +17078,8 @@ window.DragGesture = (function () {
     pendingFocus = { type: r.type, id: r.id };
     var opts = r.tab ? { tab: r.tab } : null;
     if (App.currentId === r.view) {
+      // 已在目标视图时不会走 App.go，这里必须自己切分页，否则会停在原来的分页上
+      if (r.tab && App.current && App.current.setTab) App.current.setTab(r.tab);
       afterView(r.view);
     } else {
       App.go(r.view, opts);
@@ -34746,7 +34750,8 @@ window.DragGesture = (function () {
     diary: { name: '日记', desc: '凌晨归属与心情统计' },
     diet: { name: '饮食与热量', desc: '每日热量目标、三餐配比与营养素' },
     data: { name: '数据管理', desc: '同步码、备份文件与清空' },
-    remind: { name: '上课提醒', desc: '页面内提醒，以及导出到系统日历' },
+    // 名称需与下方设置列表（「上课与待办提醒」）保持一致：提醒范围已含待办到期
+    remind: { name: '上课与待办提醒', desc: '页面内提醒（上课 / 待办到期），以及导出到系统日历' },
     about: { name: '使用提示', desc: '各模块的用法说明' },
     guide: { name: '新手教程', desc: '重新看一遍每个模块怎么用' },
     pet: { name: '桌宠（开发）', desc: '龙泡泡桌宠：开发者开关与本地素材注入，仅自用' }

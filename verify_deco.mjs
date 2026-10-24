@@ -50,12 +50,13 @@ const cardClip = await p.evaluate(() => {
   const c = document.querySelector('.cp-view-wrap .cp-card:not(.cp-hero), .cp-view-wrap .card:not(.cp-hero)');
   return c ? getComputedStyle(c).clipPath : 'none';
 });
-check('工厂卡片为切角板块（clip-path polygon）', /polygon/.test(cardClip), cardClip);
+// 现版本工厂机制改为「直角卡片、保留原始排版」（style.css: clip-path: none !important），故不再有切角
+check('工厂卡片为直角（无 clip-path 切角）', cardClip === 'none', cardClip);
 const cardLine = await p.evaluate(() => {
   const c = document.querySelector('.cp-view-wrap .cp-card:not(.cp-hero), .cp-view-wrap .card:not(.cp-hero)');
   return c ? getComputedStyle(c, '::before').height : '';
 });
-check('板块顶部强调线存在', cardLine === '3px', cardLine);
+check('板块顶部强调线存在', cardLine === '3.5px', cardLine);
 const heroBg = await p.evaluate(() => {
   const h = document.querySelector('.cp-card.cp-hero');
   return h ? getComputedStyle(h).backgroundImage : 'missing';

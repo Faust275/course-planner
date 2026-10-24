@@ -55,6 +55,9 @@ const out = await p.evaluate(() => {
     bgImg: !!(full.settings && full.settings.background && full.settings.background.dataUrl),
     asrKey: !!(full.settings && full.settings.asr && full.settings.asr.apiKey)
   };
+  // 显式要求带密钥的导出（设置页「导出（含密钥）」走的就是这条路径）
+  const fullK = JSON.parse(S.exportJSON('full', { includeKeys: true }));
+  r.fullWithKeys = !!(fullK.settings && fullK.settings.asr && fullK.settings.asr.apiKey);
   // 同步往返：标准档导入 -> 本机日记应保留，密钥仍脱敏、图片不带
   const diaryBefore = S.state.diaries.length;
   S.importJSON(S.exportJSON('standard'));
@@ -83,7 +86,9 @@ const checks = [
   ['精简档保留课程', out.lite.courses === 8],
   ['全量档含日记', out.full.hasDiary === true],
   ['全量档含背景图', out.full.bgImg === true],
-  ['全量档含密钥', out.full.asrKey === true],
+  // 备份默认剥离 API 密钥是刻意的安全设计（store.js exportJSON: 仅 includeKeys 才保留）
+  ['全量档默认剥离密钥', out.full.asrKey === false],
+  ['includeKeys=true 时全量档带密钥', out.fullWithKeys === true],
   ['同步往返日记保留', out.roundtrip.diaryPreserved === true],
   ['同步往返课程保留', out.roundtrip.coursesKept === true],
   ['同步往返背景已剥离', out.roundtrip.bgStripped === true],

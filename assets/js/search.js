@@ -26,7 +26,8 @@
     task:   { key: 'tasks',   view: 'tasks',    name: '待办', order: 2 },
     event:  { key: 'events',  view: 'calendar', tab: 'agenda', name: '日程', order: 3 },
     plan:   { key: 'plans',   view: 'plans',    name: '计划', order: 4 },
-    goal:   { key: 'goals',   view: 'plans',    name: '目标', order: 5 },
+    // 目标挂在 plans 视图的 goals 分页下，必须带 tab，否则跳过去会停在默认「常规周课表」分页
+    goal:   { key: 'goals',   view: 'plans',    tab: 'goals', name: '目标', order: 5 },
     note:   { key: 'notes',   view: 'notes',    name: '笔记', order: 6 },
     diary:  { key: 'diaries', view: 'notes',    name: '日记', order: 7 },
     ledger: { key: 'ledger',  view: 'ledger',   name: '账目', order: 8 }
@@ -192,6 +193,7 @@
           type: type,
           typeName: meta.name,
           view: meta.view,
+          tab: meta.tab,          // 目标分页（如 目标→plans 的 goals 分页），App.go / setTab 会用到
           id: rec.id || '',
           title: f.title,
           titleHits: th,
@@ -301,6 +303,8 @@
     pendingFocus = { type: r.type, id: r.id };
     var opts = r.tab ? { tab: r.tab } : null;
     if (App.currentId === r.view) {
+      // 已在目标视图时不会走 App.go，这里必须自己切分页，否则会停在原来的分页上
+      if (r.tab && App.current && App.current.setTab) App.current.setTab(r.tab);
       afterView(r.view);
     } else {
       App.go(r.view, opts);

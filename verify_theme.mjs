@@ -31,7 +31,7 @@ const read = () => p.evaluate(() => ({
 const s0 = await read();
 check('默认开启机制皮肤', s0.skin === true, s0);
 check('森林模式 → data-mech=tree', s0.mech === 'tree', s0.mech);
-check('自动强调色为自然绿 #37b24d', s0.primary === '#37b24d', s0.primary);
+check('自动强调色为自然绿 #2e7d32', s0.primary === '#2e7d32', s0.primary);
 
 /* ---------- 切到抽卡 → factory，青色强调 ---------- */
 const s1 = await p.evaluate(() => {
@@ -43,7 +43,7 @@ const s1 = await p.evaluate(() => {
   };
 });
 check('抽卡模式 → data-mech=factory', s1.mech === 'factory', s1.mech);
-check('自动强调色切换为工厂青 #1f9fb8', s1.primary === '#1f9fb8', s1.primary);
+check('自动强调色切换为工厂青 #0099d8', s1.primary === '#0099d8', s1.primary);
 
 /* ---------- 手动选色 → 覆盖机制色，结构仍为 factory ---------- */
 const s2 = await p.evaluate(() => {
@@ -82,7 +82,7 @@ const s4 = await p.evaluate(() => {
 });
 check('重新开启重置为自动跟随', s4.auto === true, s4.auto);
 check('重新开启恢复 data-mech=factory', s4.mech === 'factory', s4.mech);
-check('重新开启强调色回到 #1f9fb8', s4.primary === '#1f9fb8', s4.primary);
+check('重新开启强调色回到 #0099d8', s4.primary === '#0099d8', s4.primary);
 
 /* ---------- 深色：data-mode + 机制专属深色强调色 ---------- */
 const darkF = await p.evaluate(() => {
@@ -95,8 +95,8 @@ const darkF = await p.evaluate(() => {
   };
 });
 check('深色：data-mode=dark', darkF.mode === 'dark', darkF.mode);
-check('深色·抽卡强调色 = 荧光绿 #b8e653', darkF.primary === '#b8e653', darkF.primary);
-check('深色·抽卡底色为黑砖 #0a0c0f', darkF.bg === '#0a0c0f', darkF.bg);
+check('深色·抽卡强调色 = 终端青蓝 #00a2d8', darkF.primary === '#00a2d8', darkF.primary);
+check('深色·抽卡底色为碳灰终端 #111419', darkF.bg === '#111419', darkF.bg);
 
 const darkT = await p.evaluate(() => {
   Store.setRewardMode('forest');
@@ -108,7 +108,7 @@ const darkT = await p.evaluate(() => {
   };
 });
 check('深色·森林 data-mech=tree', darkT.mech === 'tree', darkT.mech);
-check('深色·森林强调色 = 微光绿 #5ec269', darkT.primary === '#5ec269', darkT.primary);
+check('深色·森林强调色 = 松林亮绿 #4caf50', darkT.primary === '#4caf50', darkT.primary);
 check('深色·森林底色 = 墨绿 #0f1712', darkT.bg === '#0f1712', darkT.bg);
 
 // 恢复浅色，避免影响后续设置页断言

@@ -50,11 +50,17 @@ await p.evaluate(() => { window.App.go('plans', { tab: 'goals' }); });
 await wait(500);
 let A = await p.evaluate(() => ({
   hash: location.hash,
-  pane: (document.querySelector('.cp-pane-tab.cp-active') || {}).textContent,
+  // 页面里有多组 pane-tab（内层还有「常规周课表 / 考试周备考看板」），
+  // 首个 .cp-pane-tab.cp-active 可能是内层那个，这里取属于「计划/目标」分页条的激活项
+  pane: (function () {
+    var hit = [].slice.call(document.querySelectorAll('.cp-pane-tab.cp-active'))
+      .filter(function (n) { return /^(目标|计划)/.test((n.textContent || '').trim()); })[0];
+    return hit ? (hit.textContent || '').trim() : null;
+  })(),
   action: (document.querySelector('#viewActions button') || {}).textContent,
   emptyTitle: (document.querySelector('#view-plans .cp-empty b') || {}).textContent
 }));
-check('目标分页高亮', A.pane === '目标', A.pane);
+check('目标分页高亮', /^目标/.test(A.pane || ''), A.pane);
 check('进目标页地址是 #/plans/goals', A.hash === '#/plans/goals', A.hash);
 check('右上角按钮跟着变成「新建目标」', /新建目标/.test(A.action || ''), A.action);
 check('没有目标时给空状态', /还没有在办的目标/.test(A.emptyTitle || ''), A.emptyTitle);
@@ -285,12 +291,19 @@ check('搜关键结果能搜到目标', H.some(x => x.type === '目标' && /综�
 const goalIdx = H.findIndex(x => x.type === '目标');
 await p.locator('.cp-s-result').nth(goalIdx).click();
 await wait(700);
-const H2 = await p.evaluate(() => ({
-  view: App.currentId,
-  pane: (document.querySelector('.cp-pane-tab.cp-active') || {}).textContent,
-  flash: !!document.querySelector('.cp-goal-flash') || true
-}));
-check('点结果跳到计划页的目标分页', H2.view === 'plans' && /^目标/.test(H2.pane || ''), H2);
+const H2 = await p.evaluate(() => {
+  const v = App.views.filter(function (x) { return x.id === 'plans'; })[0];
+  return {
+    view: App.currentId,
+    tab: v && v.getTab ? v.getTab() : null,
+    // 页面里有多组 pane-tab（内层还有「常规周课表 / 考试周备考看板」），
+    // 第一个 .cp-pane-tab.cp-active 往往是内层那个，所以改为判断是否存在激活的目标分页
+    paneHasGoal: [].slice.call(document.querySelectorAll('.cp-pane-tab.cp-active'))
+      .some(function (n) { return /^目标/.test((n.textContent || '').trim()); }),
+    hash: location.hash
+  };
+});
+check('点结果跳到计划页的目标分页', H2.view === 'plans' && H2.tab === 'goals' && H2.paneHasGoal, H2);
 await clearModals();
 
 /* ==========================================================

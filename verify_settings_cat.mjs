@@ -1,7 +1,8 @@
 // 临时验证：设置三级结构 + 移除汉堡
 import { chromium } from 'playwright';
 
-const BASE = 'http://localhost:8137/index.html';
+// 与其余老脚本一致：优先用运行器注入的 URL（共享静态服务器），本地直跑时回退固定端口
+const BASE = (process.env.URL || 'http://localhost:8137/index.html').split('#')[0];
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1280, height: 980 } });
 const errors = [];
