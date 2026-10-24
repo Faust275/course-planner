@@ -773,11 +773,20 @@
       var periods = Store.periods || [];
       var grid = {};
 
+      // 节假日停课：按列的实际日期查中国法定节假日，放假日当天不排课
+      var hb = {};
+      for (var _d = 1; _d <= 7; _d++) {
+        var _dt = Store.dateOf(weekNo, _d);
+        hb[_d] = (global.HolidayCN ? HolidayCN.lookup(DateUtil.toStr(_dt)) : null);
+      }
+
       // 1) 汇总每格课程（一门课的多时段在此展开为多条伪记录）
       Store.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
         Store.expandCourse(c, weekNo).forEach(function (p) {
+          // 法定放假日当天不排课（已在下方按整列标「休」覆盖，这里提前跳过更稳妥）
+          if (hb[p.day] && hb[p.day].type === 'holiday') return;
           var first = -1, last = -1;
           if (p.timeMode === 'custom') {
             if (!p.startTime) return;
@@ -805,6 +814,11 @@
       // 2) 生成指令：有冲突 -> 同格堆叠；无冲突 -> 合并连续同门课
       var out = {};
       for (var dayX = 1; dayX <= 7; dayX++) {
+        // 法定放假日：整列标记为「休」，不渲染课程（保证表格对齐，屏幕与导出一致）
+        if (hb[dayX] && hb[dayX].type === 'holiday') {
+          periods.forEach(function (pp, ri) { out[dayX + '|' + ri] = { type: 'holiday' }; });
+          continue;
+        }
         var rowList = {};
         periods.forEach(function (pp, ri) {
           if (grid[dayX + '|' + ri]) rowList[ri] = grid[dayX + '|' + ri];
@@ -1215,6 +1229,15 @@
             }
           }, [Store.settings.showWeekend ? '隐藏周末' : '显示周末']),
           el('button', {
+            class: 'btn btn-sm',
+            title: '显示 / 隐藏「休 / 班」法定节假日与调休标记',
+            onclick: function () {
+              var on = Store.settings.showHoliday === false;
+              Store.updateSettings({ showHoliday: on });
+              UI.toast(on ? '已显示节假日标记' : '已隐藏节假日标记');
+            }
+          }, [Store.settings.showHoliday === false ? '显示节假日' : '隐藏节假日']),
+          el('button', {
             class: 'btn btn-sm', onclick: function () { self.goWeek(Store.currentWeek()); }
           }, ['回到本周'])
         ])
@@ -1283,10 +1306,16 @@
       for (var d = 1; d <= dayCount; d++) {
         var date = Store.dateOf(weekNo, d);
         var isToday = DateUtil.toStr(date) === todayStr;
+        var hol = (global.HolidayCN && Store.settings.showHoliday !== false)
+          ? HolidayCN.lookup(DateUtil.toStr(date)) : null;
         trh.appendChild(el('th', { class: isToday ? 'today' : '' }, [
           el('div', { class: 'day-cell' }, [
             el('span', { class: 'dow', text: Store.DAY_NAMES[d - 1] }),
-            el('span', { class: 'date', text: DateUtil.mdShort(date) })
+            el('span', { class: 'date', text: DateUtil.mdShort(date) }),
+            hol ? el('span', {
+              class: 'hol-badge ' + (hol.type === 'holiday' ? 'hol-holiday' : 'hol-work'),
+              title: hol.name, text: hol.type === 'holiday' ? '休' : '班'
+            }) : null
           ])
         ]));
       }
@@ -1350,6 +1379,18 @@
             inst.items.forEach(function (p2) { holdS.appendChild(self.block(p2)); });
             cellS.appendChild(holdS);
             tr.appendChild(cellS);
+            continue;
+          }
+
+          if (inst && inst.type === 'holiday' && Store.settings.showHoliday !== false) {
+            var cellH = el('td', {
+              class: 'cell holiday-col' + (dc >= 6 ? ' we-off' : ''),
+              dataset: { day: dc, period: p.id }
+            });
+            cellH.appendChild(el('div', { class: 'tcell holiday-mark' }, [
+              el('span', { class: 'hol-rest', text: '休' })
+            ]));
+            tr.appendChild(cellH);
             continue;
           }
 
@@ -1432,6 +1473,16 @@
         })
       );
       root.appendChild(legend);
+
+      /* ---- 节假日图例 ---- */
+      if (Store.settings.showHoliday !== false && global.HolidayCN && HolidayCN.hasYear(todayStr.slice(0, 4))) {
+        root.appendChild(el('div', { class: 'card holi-note' }, [
+          el('span', { class: 'hol-badge hol-holiday', title: '法定放假日', text: '休' }),
+          el('span', { class: 'holi-text', text: '法定放假日停课' }),
+          el('span', { class: 'hol-badge hol-work', title: '调休补班', text: '班' }),
+          el('span', { class: 'holi-text', text: '调休补班（按实际上课）' })
+        ]));
+      }
     },
 
     block: function (p) {

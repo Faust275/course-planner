@@ -4293,3 +4293,37 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
   border-radius: 14px; box-shadow: var(--shadow);
 }
 .cp-task-bulkcount { flex: 1; font-size: 13px; font-weight: 600; }
+
+/* ===== 课表中国化：法定节假日 / 调休标记 ===== */
+.hol-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 1;
+  vertical-align: middle;
+}
+.hol-badge.hol-holiday { background: var(--red-tint, #fde8e8); color: var(--red); }
+.hol-badge.hol-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
+.day-cell { display: flex; align-items: baseline; justify-content: center; gap: 2px; }
+.day-cell .dow { font-weight: 600; }
+.day-cell .date { font-size: 11px; color: var(--text-3); }
+/* 放假日整列停课格 */
+.cell.holiday-col { background: var(--surface-2); }
+.tcell.holiday-mark { display: flex; align-items: center; justify-content: center; min-height: 34px; }
+.hol-rest { font-size: 15px; font-weight: 800; color: var(--red); letter-spacing: 2px; }
+.holi-note {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--text-2); padding: 10px 14px;
+}
+.holi-note .holi-text { margin-right: 10px; }
+
+/* 月历日期格的休/班角标 */
+.cal-cell { position: relative; }
+.cal-hol-badge {
+  position: absolute; top: 4px; right: 4px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  border-radius: 5px; font-size: 10px; font-weight: 700; line-height: 15px;
+  text-align: center;
+}
+.cal-hol-badge.cal-hol { background: var(--red-tint, #fde8e8); color: var(--red); }
+.cal-hol-badge.cal-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
+.cal-cell.holiday { background: var(--surface-2); }

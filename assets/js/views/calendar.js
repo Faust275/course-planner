@@ -234,6 +234,8 @@
     var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
     var examCourses = (Store.courses || []).filter(function (c) { return c.exam && c.exam.date === ds; });
+    var hol = (global.HolidayCN && Store.settings.showHoliday !== false)
+      ? HolidayCN.lookup(ds) : null;
 
     // 当天已记录的时间（分钟）
     var st = Store.dayStat(ds);
@@ -245,7 +247,8 @@
         (inMonth ? '' : ' out') +
         (isToday ? ' today' : '') +
         (isSel ? ' sel' : '') +
-        (isFuture ? ' future' : ''),
+        (isFuture ? ' future' : '') +
+        (hol && hol.type === 'holiday' ? ' holiday' : ''),
       dataset: { date: ds },
       onclick: function () {
         selected = ds;
@@ -256,8 +259,12 @@
       }
     }, [
       el('span', { class: 'cal-day', text: String(d.getDate()) }),
+      hol ? el('span', {
+        class: 'cal-hol-badge ' + (hol.type === 'holiday' ? 'cal-hol' : 'cal-work'),
+        title: hol.name, text: hol.type === 'holiday' ? '休' : '班'
+      }) : null,
       el('span', { class: 'cal-dots' }, [
-        courses.length ? el('i', { class: 'dot course', title: courses.length + ' 节课' }) : null,
+        (courses.length && !hol) ? el('i', { class: 'dot course', title: courses.length + ' 节课' }) : null,
         events.length ? el('i', { class: 'dot event', title: events.length + ' 个日程' }) : null,
         examCourses.length ? el('i', {
           class: 'dot exam',

@@ -4404,6 +4404,40 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 }
 .cp-task-bulkcount { flex: 1; font-size: 13px; font-weight: 600; }
 
+/* ===== 课表中国化：法定节假日 / 调休标记 ===== */
+.hol-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 1;
+  vertical-align: middle;
+}
+.hol-badge.hol-holiday { background: var(--red-tint, #fde8e8); color: var(--red); }
+.hol-badge.hol-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
+.day-cell { display: flex; align-items: baseline; justify-content: center; gap: 2px; }
+.day-cell .dow { font-weight: 600; }
+.day-cell .date { font-size: 11px; color: var(--text-3); }
+/* 放假日整列停课格 */
+.cell.holiday-col { background: var(--surface-2); }
+.tcell.holiday-mark { display: flex; align-items: center; justify-content: center; min-height: 34px; }
+.hol-rest { font-size: 15px; font-weight: 800; color: var(--red); letter-spacing: 2px; }
+.holi-note {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--text-2); padding: 10px 14px;
+}
+.holi-note .holi-text { margin-right: 10px; }
+
+/* 月历日期格的休/班角标 */
+.cal-cell { position: relative; }
+.cal-hol-badge {
+  position: absolute; top: 4px; right: 4px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  border-radius: 5px; font-size: 10px; font-weight: 700; line-height: 15px;
+  text-align: center;
+}
+.cal-hol-badge.cal-hol { background: var(--red-tint, #fde8e8); color: var(--red); }
+.cal-hol-badge.cal-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
+.cal-cell.holiday { background: var(--surface-2); }
+
 </style>
 <script>
 
@@ -5258,6 +5292,116 @@ window.AK_OPS = [
     dayEffect: dayEffect,
     moveIns: moveIns,
     forCourse: forCourse
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* ==========================================================
+ * 中国法定节假日 + 调休补班（课表中国化）
+ * ----------------------------------------------------------
+ * 数据来源：国务院办公厅《关于 2026 年部分节假日安排的通知》
+ *          （国办发明电〔2025〕7 号，2025-11-04 发布）
+ *
+ * 结构：CN_HOLIDAYS[年份] = { 'MM-DD': { type, name } }
+ *   type:
+ *     'holiday' —— 法定放假日（课表视为停课）
+ *     'work'    —— 调休补班（周末上班，课表视为上课日）
+ *
+ * 说明：
+ *   - 仅内置已由国务院正式公布的年份。新一年数据通常在前一年
+ *     11 月前后公布，届时往 CN_HOLIDAYS 里补一个年份对象即可。
+ *   - 各高校/单位对「调休补班当天上哪一天的课」规定不一，本模块
+ *     只负责标记「班」并保留课表原样（不自动替换成某工作日课表），
+ *     具体调课仍由用户用「单次调课」功能处理。
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var CN_HOLIDAYS = {
+    '2026': {
+      // 元旦
+      '01-01': { type: 'holiday', name: '元旦' },
+      '01-02': { type: 'holiday', name: '元旦' },
+      '01-03': { type: 'holiday', name: '元旦' },
+      '01-04': { type: 'work', name: '元旦调休补班' },
+
+      // 春节：2/15(腊月廿八)–2/23(正月初七) 放假，2/14、2/28 补班
+      '02-14': { type: 'work', name: '春节调休补班' },
+      '02-15': { type: 'holiday', name: '春节' },
+      '02-16': { type: 'holiday', name: '春节' },
+      '02-17': { type: 'holiday', name: '春节' },
+      '02-18': { type: 'holiday', name: '春节' },
+      '02-19': { type: 'holiday', name: '春节' },
+      '02-20': { type: 'holiday', name: '春节' },
+      '02-21': { type: 'holiday', name: '春节' },
+      '02-22': { type: 'holiday', name: '春节' },
+      '02-23': { type: 'holiday', name: '春节' },
+      '02-28': { type: 'work', name: '春节调休补班' },
+
+      // 清明节：4/4–4/6
+      '04-04': { type: 'holiday', name: '清明节' },
+      '04-05': { type: 'holiday', name: '清明节' },
+      '04-06': { type: 'holiday', name: '清明节' },
+
+      // 劳动节：5/1–5/5 放假，5/9 补班
+      '05-01': { type: 'holiday', name: '劳动节' },
+      '05-02': { type: 'holiday', name: '劳动节' },
+      '05-03': { type: 'holiday', name: '劳动节' },
+      '05-04': { type: 'holiday', name: '劳动节' },
+      '05-05': { type: 'holiday', name: '劳动节' },
+      '05-09': { type: 'work', name: '劳动节调休补班' },
+
+      // 端午节：6/19–6/21
+      '06-19': { type: 'holiday', name: '端午节' },
+      '06-20': { type: 'holiday', name: '端午节' },
+      '06-21': { type: 'holiday', name: '端午节' },
+
+      // 中秋节：9/25–9/27；国庆节 10/1–10/7，9/20、10/10 补班
+      '09-20': { type: 'work', name: '国庆调休补班' },
+      '09-25': { type: 'holiday', name: '中秋节' },
+      '09-26': { type: 'holiday', name: '中秋节' },
+      '09-27': { type: 'holiday', name: '中秋节' },
+      '10-01': { type: 'holiday', name: '国庆节' },
+      '10-02': { type: 'holiday', name: '国庆节' },
+      '10-03': { type: 'holiday', name: '国庆节' },
+      '10-04': { type: 'holiday', name: '国庆节' },
+      '10-05': { type: 'holiday', name: '国庆节' },
+      '10-06': { type: 'holiday', name: '国庆节' },
+      '10-07': { type: 'holiday', name: '国庆节' },
+      '10-10': { type: 'work', name: '国庆调休补班' }
+    }
+  };
+
+  /** 查某天（'YYYY-MM-DD'）的节假日信息；无则返回 null */
+  function lookup(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string' || dateStr.length < 10) return null;
+    var y = dateStr.slice(0, 4);
+    var md = dateStr.slice(5, 10);
+    var yr = CN_HOLIDAYS[y];
+    if (!yr) return null;
+    return yr[md] || null;
+  }
+
+  /** 某年全部节假日（按日期升序），用于设置页/图例展示 */
+  function yearHolidays(year) {
+    var yr = CN_HOLIDAYS[String(year)];
+    if (!yr) return [];
+    return Object.keys(yr).sort().map(function (md) {
+      return { date: String(year) + '-' + md, type: yr[md].type, name: yr[md].name };
+    });
+  }
+
+  /** 是否已有某年数据（没有数据的年份不显示任何标记） */
+  function hasYear(year) {
+    return !!CN_HOLIDAYS[String(year)];
+  }
+
+  global.HolidayCN = {
+    lookup: lookup,
+    yearHolidays: yearHolidays,
+    hasYear: hasYear,
+    data: CN_HOLIDAYS
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -8299,7 +8443,8 @@ window.AK_OPS = [
       if (!probe) return Promise.resolve(null);
       var n = (probe.courses || []).length + (probe.tasks || []).length +
               (probe.ledger || []).length + (probe.notes || []).length +
-              (probe.plans || []).length + (probe.events || []).length;
+              (probe.plans || []).length + (probe.events || []).length +
+              (probe.diaries || []).length;
       if (n === 0) return Promise.resolve(null);
 
       var meta = {
@@ -8308,7 +8453,8 @@ window.AK_OPS = [
         courses: (probe.courses || []).length,
         tasks: (probe.tasks || []).length,
         ledger: (probe.ledger || []).length,
-        notes: (probe.notes || []).length
+        notes: (probe.notes || []).length,
+        diaries: (probe.diaries || []).length
       };
       return Persist.save(key, str).then(function () {
         return self._bkAddIndex(meta);
@@ -18457,11 +18603,20 @@ window.DragGesture = (function () {
       var periods = Store.periods || [];
       var grid = {};
 
+      // 节假日停课：按列的实际日期查中国法定节假日，放假日当天不排课
+      var hb = {};
+      for (var _d = 1; _d <= 7; _d++) {
+        var _dt = Store.dateOf(weekNo, _d);
+        hb[_d] = (global.HolidayCN ? HolidayCN.lookup(DateUtil.toStr(_dt)) : null);
+      }
+
       // 1) 汇总每格课程（一门课的多时段在此展开为多条伪记录）
       Store.courses.forEach(function (c) {
         if (c.semesterId && c.semesterId !== sid) return;
         if (!Store.courseInWeek(c, weekNo)) return;
         Store.expandCourse(c, weekNo).forEach(function (p) {
+          // 法定放假日当天不排课（已在下方按整列标「休」覆盖，这里提前跳过更稳妥）
+          if (hb[p.day] && hb[p.day].type === 'holiday') return;
           var first = -1, last = -1;
           if (p.timeMode === 'custom') {
             if (!p.startTime) return;
@@ -18489,6 +18644,11 @@ window.DragGesture = (function () {
       // 2) 生成指令：有冲突 -> 同格堆叠；无冲突 -> 合并连续同门课
       var out = {};
       for (var dayX = 1; dayX <= 7; dayX++) {
+        // 法定放假日：整列标记为「休」，不渲染课程（保证表格对齐，屏幕与导出一致）
+        if (hb[dayX] && hb[dayX].type === 'holiday') {
+          periods.forEach(function (pp, ri) { out[dayX + '|' + ri] = { type: 'holiday' }; });
+          continue;
+        }
         var rowList = {};
         periods.forEach(function (pp, ri) {
           if (grid[dayX + '|' + ri]) rowList[ri] = grid[dayX + '|' + ri];
@@ -18899,6 +19059,15 @@ window.DragGesture = (function () {
             }
           }, [Store.settings.showWeekend ? '隐藏周末' : '显示周末']),
           el('button', {
+            class: 'btn btn-sm',
+            title: '显示 / 隐藏「休 / 班」法定节假日与调休标记',
+            onclick: function () {
+              var on = Store.settings.showHoliday === false;
+              Store.updateSettings({ showHoliday: on });
+              UI.toast(on ? '已显示节假日标记' : '已隐藏节假日标记');
+            }
+          }, [Store.settings.showHoliday === false ? '显示节假日' : '隐藏节假日']),
+          el('button', {
             class: 'btn btn-sm', onclick: function () { self.goWeek(Store.currentWeek()); }
           }, ['回到本周'])
         ])
@@ -18967,10 +19136,16 @@ window.DragGesture = (function () {
       for (var d = 1; d <= dayCount; d++) {
         var date = Store.dateOf(weekNo, d);
         var isToday = DateUtil.toStr(date) === todayStr;
+        var hol = (global.HolidayCN && Store.settings.showHoliday !== false)
+          ? HolidayCN.lookup(DateUtil.toStr(date)) : null;
         trh.appendChild(el('th', { class: isToday ? 'today' : '' }, [
           el('div', { class: 'day-cell' }, [
             el('span', { class: 'dow', text: Store.DAY_NAMES[d - 1] }),
-            el('span', { class: 'date', text: DateUtil.mdShort(date) })
+            el('span', { class: 'date', text: DateUtil.mdShort(date) }),
+            hol ? el('span', {
+              class: 'hol-badge ' + (hol.type === 'holiday' ? 'hol-holiday' : 'hol-work'),
+              title: hol.name, text: hol.type === 'holiday' ? '休' : '班'
+            }) : null
           ])
         ]));
       }
@@ -19034,6 +19209,18 @@ window.DragGesture = (function () {
             inst.items.forEach(function (p2) { holdS.appendChild(self.block(p2)); });
             cellS.appendChild(holdS);
             tr.appendChild(cellS);
+            continue;
+          }
+
+          if (inst && inst.type === 'holiday' && Store.settings.showHoliday !== false) {
+            var cellH = el('td', {
+              class: 'cell holiday-col' + (dc >= 6 ? ' we-off' : ''),
+              dataset: { day: dc, period: p.id }
+            });
+            cellH.appendChild(el('div', { class: 'tcell holiday-mark' }, [
+              el('span', { class: 'hol-rest', text: '休' })
+            ]));
+            tr.appendChild(cellH);
             continue;
           }
 
@@ -19116,6 +19303,16 @@ window.DragGesture = (function () {
         })
       );
       root.appendChild(legend);
+
+      /* ---- 节假日图例 ---- */
+      if (Store.settings.showHoliday !== false && global.HolidayCN && HolidayCN.hasYear(todayStr.slice(0, 4))) {
+        root.appendChild(el('div', { class: 'card holi-note' }, [
+          el('span', { class: 'hol-badge hol-holiday', title: '法定放假日', text: '休' }),
+          el('span', { class: 'holi-text', text: '法定放假日停课' }),
+          el('span', { class: 'hol-badge hol-work', title: '调休补班', text: '班' }),
+          el('span', { class: 'holi-text', text: '调休补班（按实际上课）' })
+        ]));
+      }
     },
 
     block: function (p) {
@@ -23741,6 +23938,8 @@ window.DragGesture = (function () {
     var courses = Store.coursesOnDate(ds);
     var events = Store.eventsOf(ds);
     var examCourses = (Store.courses || []).filter(function (c) { return c.exam && c.exam.date === ds; });
+    var hol = (global.HolidayCN && Store.settings.showHoliday !== false)
+      ? HolidayCN.lookup(ds) : null;
 
     // 当天已记录的时间（分钟）
     var st = Store.dayStat(ds);
@@ -23752,7 +23951,8 @@ window.DragGesture = (function () {
         (inMonth ? '' : ' out') +
         (isToday ? ' today' : '') +
         (isSel ? ' sel' : '') +
-        (isFuture ? ' future' : ''),
+        (isFuture ? ' future' : '') +
+        (hol && hol.type === 'holiday' ? ' holiday' : ''),
       dataset: { date: ds },
       onclick: function () {
         selected = ds;
@@ -23763,8 +23963,12 @@ window.DragGesture = (function () {
       }
     }, [
       el('span', { class: 'cal-day', text: String(d.getDate()) }),
+      hol ? el('span', {
+        class: 'cal-hol-badge ' + (hol.type === 'holiday' ? 'cal-hol' : 'cal-work'),
+        title: hol.name, text: hol.type === 'holiday' ? '休' : '班'
+      }) : null,
       el('span', { class: 'cal-dots' }, [
-        courses.length ? el('i', { class: 'dot course', title: courses.length + ' 节课' }) : null,
+        (courses.length && !hol) ? el('i', { class: 'dot course', title: courses.length + ' 节课' }) : null,
         events.length ? el('i', { class: 'dot event', title: events.length + ' 个日程' }) : null,
         examCourses.length ? el('i', {
           class: 'dot exam',
