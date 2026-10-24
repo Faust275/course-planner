@@ -7273,6 +7273,142 @@
       return null;
     },
 
+    /**
+     * 睡眠规律性（近 n 夜就寝/起床时刻的分散度 -> 0–100 得分）。
+     * 用圆周统计（circular mean / SD），避免「23:50 与 00:10」被线性均值算成中午。
+     *   - bedSD / wakeSD：就寝、起床时刻的圆周标准差（分钟）
+     *   - score：avgSD=0 ->100，avgSD≥90 ->0（90 分钟分散已基本谈不上规律）
+     */
+    sleepRegularity: function (n) {
+      n = n || 14;
+      var nights = [], today = DateUtil.today();
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        if (st && st.bed != null && st.wake != null) {
+          nights.push({ date: ds, bed: st.bed, wake: st.wake });
+        }
+      }
+      if (nights.length < 2) {
+        return { hasData: false, known: nights.length, bedSD: null, wakeSD: null,
+                 avgSD: null, score: null, bedMean: null, wakeMean: null, nights: nights };
+      }
+      function circMean(arr) {
+        var sx = 0, sy = 0;
+        arr.forEach(function (t) {
+          var a = t / 1440 * 2 * Math.PI;
+          sx += Math.cos(a); sy += Math.sin(a);
+        });
+        var ang = Math.atan2(sy, sx);
+        if (ang < 0) ang += 2 * Math.PI;
+        return ang / (2 * Math.PI) * 1440;
+      }
+      function circSD(arr) {
+        var sx = 0, sy = 0;
+        arr.forEach(function (t) {
+          var a = t / 1440 * 2 * Math.PI;
+          sx += Math.cos(a); sy += Math.sin(a);
+        });
+        var R = Math.sqrt(sx * sx + sy * sy) / arr.length;
+        if (R >= 1) return 0;
+        return Math.sqrt(-2 * Math.log(R)) * (1440 / (2 * Math.PI));
+      }
+      var bedVals = nights.map(function (x) { return x.bed; });
+      var wakeVals = nights.map(function (x) { return x.wake; });
+      var bedSD = circSD(bedVals), wakeSD = circSD(wakeVals);
+      var avgSD = (bedSD + wakeSD) / 2;
+      var score = Math.max(0, Math.min(100, Math.round(100 - (avgSD / 90) * 100)));
+      return {
+        hasData: true, known: nights.length,
+        bedSD: Math.round(bedSD), wakeSD: Math.round(wakeSD), avgSD: Math.round(avgSD),
+        score: score,
+        bedMean: Math.round(circMean(bedVals)),
+        wakeMean: Math.round(circMean(wakeVals)),
+        nights: nights
+      };
+    },
+
+    /**
+     * 深睡 / REM 占比（近 n 夜的平均占比 + 是否落在健康区间）。
+     * 健康区间取自小米详情页参考范围：深睡 15%–20%、REM 20%–25%。
+     * 没有深睡/REM 字段（只有总时长）的夜不计入占比统计。
+     */
+    deepRemRatio: function (n) {
+      n = n || 14;
+      var nights = [], today = DateUtil.today();
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        if (st && st.total > 0 && st.deep != null && st.rem != null) {
+          nights.push({
+            date: ds,
+            deepPct: st.deep / st.total * 100,
+            remPct: st.rem / st.total * 100,
+            total: st.total
+          });
+        }
+      }
+      if (!nights.length) {
+        return { hasData: false, known: 0, nights: nights };
+      }
+      var avg = function (k) {
+        var s = 0;
+        nights.forEach(function (x) { s += x[k]; });
+        return s / nights.length;
+      };
+      var ad = avg('deepPct'), ar = avg('remPct');
+      return {
+        hasData: true, known: nights.length,
+        avgDeep: Math.round(ad * 10) / 10,
+        avgRem: Math.round(ar * 10) / 10,
+        deepRange: [15, 20], remRange: [20, 25],
+        deepOk: ad >= 15 && ad <= 20,
+        remOk: ar >= 20 && ar <= 25,
+        nights: nights
+      };
+    },
+
+    /**
+     * 社交时差（Social Jet Lag）：上课日（有早八）与自由日（无早八/无课）的
+     * 「睡眠中点」之差。中点 = (就寝 + 醒来) / 2，用圆周差避免跨午夜误算。
+     *   - schoolMid / freeMid：两侧睡眠中点的圆周均值（分钟）
+     *   - gapMin：两者之差（分钟）
+     */
+    socialJetLag: function (n) {
+      n = n || 28;
+      var school = [], free = [], today = DateUtil.today();
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        if (!st || st.bed == null || st.wake == null) continue;
+        var mid = ((st.bed + st.wake) / 2) % 1440;
+        var load = this.courseLoadOn(ds);
+        if (load.has && load.isEarly) school.push(mid);
+        else free.push(mid);   // 无课日 + 有课但非早八，都算「自由日」
+      }
+      function circMean(arr) {
+        if (!arr.length) return null;
+        var sx = 0, sy = 0;
+        arr.forEach(function (t) { var a = t / 1440 * 2 * Math.PI; sx += Math.cos(a); sy += Math.sin(a); });
+        var ang = Math.atan2(sy, sx);
+        if (ang < 0) ang += 2 * Math.PI;
+        return ang / (2 * Math.PI) * 1440;
+      }
+      function circDiff(a, b) {
+        if (a == null || b == null) return null;
+        var d = Math.abs(a - b) % 1440;
+        return d > 720 ? 1440 - d : d;
+      }
+      var sm = circMean(school), fm = circMean(free);
+      return {
+        hasData: school.length > 0 || free.length > 0,
+        both: school.length > 0 && free.length > 0,
+        schoolMid: sm == null ? null : Math.round(sm), schoolN: school.length,
+        freeMid: fm == null ? null : Math.round(fm), freeN: free.length,
+        gapMin: circDiff(sm, fm)
+      };
+    },
+
     /* ===== 设置 ===== */
     updateSemester: function (data) {
       var cur = this.currentSemester();

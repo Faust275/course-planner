@@ -2,14 +2,17 @@
  * 视图：健康看板（联动展示，不做主动推送）
  * ----------------------------------------------------------
  * 把分散在 sleeps / metrics / meals / diet 的健康数据，经 Store.dayHealth
- * 收敛成每日档案，再以「看板」形式呈现 7 个联动洞察：
+ * 收敛成每日档案，再以「看板」形式呈现 10 个联动洞察：
  *   1) 精力预测（昨夜睡眠质量 → 今日精力，复用 SleepModel 质量系数）
  *   2) 睡眠债务（近 7 天滚动缺口 + 债务走势）
- *   3) 步数达成（今日 + 近 7 天迷你条）
- *   4) 热量收支（摄入 / 消耗 TDEE / 净热量 + 体重）
- *   5) 本周健康达成（睡眠达标夜 / 运动达标日 / 平均睡眠质量）
- *   6) 课表联动（早八日 vs 非早八日的睡眠对比 + 早八时刻的警觉度）
- *   7) 昼夜节律（今日警觉度曲线 + 瞌睡时段，复用 SleepModel）
+ *   3) 睡眠规律性（近 n 夜就寝/起床时刻圆周分散度 -> 规律性得分）
+ *   4) 深睡 / REM 占比（平均占比 + 是否落在健康区间）
+ *   5) 昼夜节律（今日警觉度曲线 + 瞌睡时段，复用 SleepModel）
+ *   6) 步数达成（今日 + 近 7 天迷你条）
+ *   7) 热量收支（摄入 / 消耗 TDEE / 净热量 + 体重）
+ *   8) 本周健康达成（睡眠达标夜 / 运动达标日 / 平均睡眠质量）
+ *   9) 课表联动（早八日 vs 非早八日的睡眠对比 + 早八时刻的警觉度）
+ *  10) 社交时差（上课日 vs 自由日睡眠中点差）
  * 数据源：安卓端 Health Connect 自动同步 + 手动/OCR 录入；网页端手动/OCR。
  * ========================================================== */
 (function (global) {
@@ -109,11 +112,14 @@
 
       root.appendChild(this.energyCard(h));
       root.appendChild(this.debtCard());
+      root.appendChild(this.regularityCard());
+      root.appendChild(this.deepRemCard());
+      root.appendChild(this.rhythmCard());
       root.appendChild(this.stepsCard());
       root.appendChild(this.kcalCard(h));
       root.appendChild(this.weekCard());
       root.appendChild(this.courseLinkCard());
-      root.appendChild(this.rhythmCard());
+      root.appendChild(this.socialJetLagCard());
     },
 
     /* ---------- 1) 精力预测 ---------- */
@@ -282,6 +288,180 @@
         c.appendChild(el('div', { style: { fontSize: '11px', color: '#22c55e', marginTop: '4px' },
           text: '没有累积缺口，作息保持得不错' }));
       }
+      return c;
+    },
+
+    /* ---------- 3) 睡眠规律性 ---------- */
+    regularityCard: function () {
+      var r = Store.sleepRegularity(14);
+      var c = card([sectionTitle(V.icons.clock, '睡眠规律性')]);
+      if (!r.hasData) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '需要至少 2 夜带起止时刻的睡眠记录，才能算规律性。' }));
+        return c;
+      }
+      var color = r.score >= 75 ? '#22c55e' : (r.score >= 60 ? '#eab308' : '#ef4444');
+      var label = r.score >= 75 ? '规律' : (r.score >= 60 ? '尚可' : '紊乱');
+      c.appendChild(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800', color: color }, text: r.score + ' 分' }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '规律性 · ' + label + ' · 近 ' + r.known + ' 夜' })
+      ]));
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat('±' + r.bedSD + '′', '就寝波动', 'var(--text-1)'),
+        stat('±' + r.wakeSD + '′', '起床波动', 'var(--text-1)')
+      ]));
+
+      /* 夜轨散布图：18:00 -> 次日 12:00，红=就寝 绿=起床，阴影带 = 均值±SD */
+      var W = 300, H = 70, T0 = 1080, T1 = 2160;
+      function mapX(t) {
+        var t2 = ((t % 1440) + 1440) % 1440;
+        if (t2 < T0) t2 += 1440;
+        if (t2 > T1) t2 = T1;
+        return (t2 - T0) / (T1 - T0) * W;
+      }
+      function band(mean, sd, color) {
+        var a = mapX(mean - sd), b = mapX(mean + sd);
+        return '<rect x="' + a.toFixed(1) + '" y="6" width="' + Math.max(2, (b - a)).toFixed(1) +
+          '" height="' + (H - 12) + '" style="fill:' + color + ';opacity:0.16;stroke:none"/>';
+      }
+      function meanLine(mean, color) {
+        var x = mapX(mean);
+        return '<line x1="' + x.toFixed(1) + '" y1="4" x2="' + x.toFixed(1) + '" y2="' + (H - 4) +
+          '" style="stroke:' + color + ';stroke-width:1.2;stroke-dasharray:3 3" opacity="0.85"/>';
+      }
+      function dots(arr, color) {
+        var s = '';
+        arr.forEach(function (t) {
+          var x = mapX(t);
+          s += '<circle cx="' + x.toFixed(1) + '" cy="' + (H / 2) + '" r="2.4" style="fill:' + color + ';stroke:none"/>';
+        });
+        return s;
+      }
+      var wrap = el('div', { style: { marginTop: '10px', maxWidth: '560px' } });
+      wrap.innerHTML =
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px;display:block;fill:none;stroke:none" preserveAspectRatio="none">' +
+          band(r.bedMean, r.bedSD, '#ef4444') + band(r.wakeMean, r.wakeSD, '#22c55e') +
+          meanLine(r.bedMean, '#ef4444') + meanLine(r.wakeMean, '#22c55e') +
+          dots(r.nights.map(function (x) { return x.bed; }), '#ef4444') +
+          dots(r.nights.map(function (x) { return x.wake; }), '#22c55e') +
+        '</svg>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:2px">' +
+          '<span>就寝 ' + SM.minToHHMM(r.bedMean) + ' · 起床 ' + SM.minToHHMM(r.wakeMean) + '</span>' +
+          '<span><span style="color:#ef4444">●</span>就寝 <span style="color:#22c55e">●</span>起床</span>' +
+        '</div>';
+      c.appendChild(wrap);
+      c.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--text-2)', marginTop: '4px', lineHeight: '1.55' },
+        text: '阴影带是各时刻的「均值 ± 标准差」。带越窄越规律；就寝与起床都集中，分数就高。' }));
+      return c;
+    },
+
+    /* ---------- 4) 深睡 / REM 占比 ---------- */
+    deepRemCard: function () {
+      var d = Store.deepRemRatio(14);
+      var c = card([sectionTitle(V.icons.moon, '深睡 / REM 占比')]);
+      if (!d.hasData) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '需要带深睡/REM 时长的睡眠记录（手环同步或 OCR 录入）才能算占比。' }));
+        return c;
+      }
+      function row(label, val, range, ok, color) {
+        var W = 300, max = 50;
+        function x(p) { return Math.max(0, Math.min(W, p / max * W)); }
+        var a = x(range[0]), b = x(range[1]), v = x(val);
+        var svg =
+          '<svg viewBox="0 0 ' + W + ' 20" style="width:100%;height:20px;display:block;fill:none;stroke:none" preserveAspectRatio="none">' +
+            '<rect x="0" y="6" width="' + W + '" height="8" rx="4" style="fill:var(--line-strong);opacity:0.5;stroke:none"/>' +
+            '<rect x="' + a.toFixed(1) + '" y="6" width="' + Math.max(1, (b - a)).toFixed(1) + '" height="8" style="fill:#22c55e;opacity:0.35;stroke:none"/>' +
+            '<rect x="0" y="6" width="' + v.toFixed(1) + '" height="8" rx="4" style="fill:' + color + ';stroke:none"/>' +
+            '<line x1="' + v.toFixed(1) + '" y1="2" x2="' + v.toFixed(1) + '" y2="18" style="stroke:#fff;stroke-width:1.5"/>' +
+          '</svg>';
+        var svgWrap = el('div', { style: { maxWidth: '560px' } });
+        svgWrap.innerHTML = svg;
+        return el('div', { style: { marginTop: '6px' } }, [
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '12px' } }, [
+            el('span', { text: label }),
+            el('span', { style: { color: ok ? '#22c55e' : '#eab308', fontWeight: '700' },
+              text: val + '% · 参考 ' + range[0] + '–' + range[1] + '%' + (ok ? ' ✓' : ' 偏离') })
+          ]),
+          svgWrap
+        ]);
+      }
+      c.appendChild(row('深睡', d.avgDeep, d.deepRange, d.deepOk, '#6366f1'));
+      c.appendChild(row('REM', d.avgRem, d.remRange, d.remOk, '#0ea5e9'));
+      var verdict;
+      if (d.deepOk && d.remOk) verdict = '深睡与 REM 都落在健康区间，睡眠结构完整，身体修复与记忆巩固都到位。';
+      else if (!d.deepOk && !d.remOk) verdict = '深睡、REM 都偏离参考区间，多半是睡眠不足或质量差，留意总时长与睡前刺激。';
+      else if (!d.deepOk) verdict = '深睡偏低：身体修复不够，试试提前就寝、减少睡前屏幕与酒精。';
+      else verdict = 'REM 偏低：梦境睡眠偏少，可能与压力、药物或饮酒有关，注意睡前放松。';
+      c.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--text-2)', marginTop: '8px', lineHeight: '1.55' }, text: verdict }));
+      return c;
+    },
+
+    /* ---------- 10) 社交时差 ---------- */
+    socialJetLagCard: function () {
+      var s = Store.socialJetLag(28);
+      var c = card([sectionTitle(V.icons.sun, '社交时差')]);
+      if (!s.hasData) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '需要睡眠记录才能算时差。上课日与自由日都会纳入对比。' }));
+        return c;
+      }
+      if (!s.both) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '目前只覆盖一侧（' + (s.schoolN ? '仅上课日 ' + s.schoolN + ' 夜' : '仅自由日 ' + s.freeN + ' 夜') + '），暂无可比结论。' }));
+        return c;
+      }
+      function fmtGap(g) {
+        if (g <= 0) return '0′';
+        var h = Math.floor(g / 60), m = g % 60;
+        if (h && m) return h + 'h' + m + '′';
+        if (h) return h + 'h';
+        return m + '′';
+      }
+      var gap = s.gapMin || 0;
+      var color = gap <= 30 ? '#22c55e' : (gap <= 60 ? '#eab308' : '#ef4444');
+      var label = gap <= 30 ? '几乎无' : (gap <= 60 ? '轻度' : '明显');
+      c.appendChild(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800', color: color }, text: fmtGap(gap) }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: '社交时差 · ' + label })
+      ]));
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(SM.minToHHMM(s.schoolMid), '上课日睡眠中点 · ' + s.schoolN + ' 夜', 'var(--text-1)'),
+        stat(SM.minToHHMM(s.freeMid), '自由日睡眠中点 · ' + s.freeN + ' 夜', 'var(--text-1)')
+      ]));
+
+      /* 夜轨：上课日中点 vs 自由日中点 */
+      var W = 300, H = 56, T0 = 1080, T1 = 2160;
+      function mapX(t) {
+        var t2 = ((t % 1440) + 1440) % 1440;
+        if (t2 < T0) t2 += 1440;
+        if (t2 > T1) t2 = T1;
+        return (t2 - T0) / (T1 - T0) * W;
+      }
+      function mk(mid, color) {
+        var x = mapX(mid);
+        return '<line x1="0" y1="' + (H / 2) + '" x2="' + W + '" y2="' + (H / 2) +
+            '" style="stroke:#9aa0ae;stroke-width:1;stroke-dasharray:3 3" opacity="0.4"/>' +
+          '<line x1="' + x.toFixed(1) + '" y1="6" x2="' + x.toFixed(1) + '" y2="' + (H - 6) +
+            '" style="stroke:' + color + ';stroke-width:2"/>' +
+          '<circle cx="' + x.toFixed(1) + '" cy="' + (H / 2) + '" r="4" style="fill:' + color + ';stroke:none"/>';
+      }
+      var wrap = el('div', { style: { marginTop: '10px', maxWidth: '560px' } });
+      wrap.innerHTML =
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px;display:block;fill:none;stroke:none" preserveAspectRatio="none">' +
+          mk(s.schoolMid, '#ef4444') + mk(s.freeMid, '#22c55e') +
+        '</svg>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);margin-top:2px">' +
+          '<span><span style="color:#ef4444">●</span>上课日中点 ' + SM.minToHHMM(s.schoolMid) + '</span>' +
+          '<span><span style="color:#22c55e">●</span>自由日中点 ' + SM.minToHHMM(s.freeMid) + '</span>' +
+        '</div>';
+      c.appendChild(wrap);
+      var verdict;
+      if (gap <= 30) verdict = '几乎没有社交时差，作息与课表一致，生物钟没有被周末「补觉」打乱。';
+      else if (gap <= 60) verdict = '轻度社交时差：自由日比上课日晚起约 ' + gap + ' 分钟，周末别一次补太多觉，免得周一更难起。';
+      else verdict = '明显社交时差（约 ' + Math.floor(gap / 60) + ' 小时）：自由日大幅后移，相当于每周末飞一个时区。慢慢把就寝往前挪，别靠周一强行早起硬扛。';
+      c.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--text-2)', marginTop: '6px', lineHeight: '1.55' }, text: verdict }));
       return c;
     },
 
