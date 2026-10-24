@@ -120,6 +120,8 @@
       root.appendChild(this.weekCard());
       root.appendChild(this.courseLinkCard());
       root.appendChild(this.socialJetLagCard());
+      root.appendChild(this.lowSleepCard());
+      root.appendChild(this.focusCorrCard());
     },
 
     /* ---------- 1) 精力预测 ---------- */
@@ -600,6 +602,65 @@
             text: label + ' ' + w.start + '–' + w.end
           });
         })));
+      return c;
+    },
+
+    /* ---------- 低质量睡眠连续预警 ---------- */
+    lowSleepCard: function () {
+      var s = Store.lowSleepStreak();
+      var c = card([sectionTitle(V.icons.moon, '睡眠预警')]);
+      if (!s.has) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '近 14 天没有睡眠记录，录入后这里会提示连续低质量睡眠与近 7 天平均质量。' }));
+        return c;
+      }
+      if (s.streak >= 2) {
+        c.appendChild(el('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px',
+            borderRadius: '10px', background: 'var(--red-tint, #fde8e8)', color: 'var(--red)',
+            fontSize: '13px', fontWeight: '600', marginBottom: '8px' }
+        }, [
+          el('span', { text: '⚠️ 已连续 ' + s.streak + ' 天睡眠不佳（质量<50%），注意补觉' })
+        ]));
+      } else {
+        c.appendChild(el('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px',
+            borderRadius: '10px', background: 'var(--surface-2)', color: 'var(--text-2)',
+            fontSize: '13px', marginBottom: '8px' }
+        }, [
+          el('span', { text: s.lowCount7 ? ('近 14 天有 ' + s.lowCount7 + ' 天睡眠不佳，但已中断') : '近期睡眠节奏平稳，没有连续低质量' })
+        ]));
+      }
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px' } }, [
+        stat(s.avg7 == null ? '—' : s.avg7 + '%', '近 7 天平均质量', 'var(--text-1)'),
+        stat(s.lowCount7, '近 14 天低质夜', 'var(--text-1)')
+      ]));
+      return c;
+    },
+
+    /* ---------- 睡眠 ↔ 专注相关性 ---------- */
+    focusCorrCard: function () {
+      var r = Store.sleepFocusCorr(28);
+      var c = card([sectionTitle(V.icons.clock, '睡眠 × 专注')]);
+      if (!r.has) {
+        c.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: '需要「同时有睡眠记录 + 专注记录」的日期 ≥ 5 天才能看出相关性（当前 ' +
+            (r.n || 0) + ' 天）。多记几天睡眠、多用番茄钟即可解锁。' }));
+        return c;
+      }
+      var rColor = r.r >= 0.3 ? '#22c55e' : (r.r >= 0 ? '#eab308' : '#ef4444');
+      var rText = r.r >= 0.5 ? '强正相关' : (r.r >= 0.3 ? '中等正相关' : (r.r >= 0 ? '弱正相关' : '负相关'));
+      c.appendChild(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800', color: rColor }, text: (r.r > 0 ? '+' : '') + r.r }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: 'Pearson 相关系数 · ' + rText + ' · 样本 ' + r.n + ' 天' })
+      ]));
+      var goodTxt = r.goodAvg == null ? '—' : r.goodAvg + ' 分钟';
+      var badTxt = r.badAvg == null ? '—' : r.badAvg + ' 分钟';
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(goodTxt, '睡眠好(≥70%)日均专注', 'var(--green)'),
+        stat(badTxt, '睡眠差(<50%)日均专注', 'var(--red)')
+      ]));
       return c;
     }
   };

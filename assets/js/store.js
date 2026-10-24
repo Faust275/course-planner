@@ -7411,6 +7411,76 @@
       };
     },
 
+    /** 近 n 天夜间质量序列（按醒来日归属，复用 nightStats） */
+    recentNights: function (n) {
+      n = n || 14;
+      var today = DateUtil.today(), out = [];
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        out.push({ date: ds, q: st ? st.q : null, min: st ? st.total : null });
+      }
+      return out;
+    },
+
+    /** 连续低质量睡眠预警：从最近往回数连续 q<0.5 的夜，并给近 7 天平均质量 */
+    lowSleepStreak: function () {
+      var nights = this.recentNights(14).filter(function (x) { return x.q != null; });
+      var streak = 0;
+      for (var i = nights.length - 1; i >= 0; i--) {
+        if (nights[i].q != null && nights[i].q < 0.5) streak++;
+        else break;
+      }
+      var last7 = this.recentNights(7).filter(function (x) { return x.q != null; });
+      var avg = last7.length ? last7.reduce(function (s, x) { return s + x.q; }, 0) / last7.length : null;
+      var lowCount7 = nights.filter(function (x) { return x.q != null && x.q < 0.5; }).length;
+      return {
+        has: nights.length > 0,
+        streak: streak,
+        avg7: avg == null ? null : Math.round(avg * 100),
+        lowCount7: lowCount7
+      };
+    },
+
+    /** 睡眠 ↔ 专注相关性：有睡眠记录且有专注记录的同日配对，算 Pearson r 与分组均值 */
+    sleepFocusCorr: function (n) {
+      n = n || 28;
+      var today = DateUtil.today();
+      var focusByDate = {};
+      var sessions = (state.pomodoro && state.pomodoro.sessions) || [];
+      sessions.forEach(function (s) {
+        if (!s.date || s.minutes == null) return;
+        focusByDate[s.date] = (focusByDate[s.date] || 0) + s.minutes;
+      });
+      var pairs = [];
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        if (!st || st.q == null) continue;
+        if (focusByDate[ds] == null) continue;
+        pairs.push({ q: st.q, f: focusByDate[ds] });
+      }
+      if (pairs.length < 5) return { has: false, n: pairs.length };
+      var n2 = pairs.length;
+      var mq = pairs.reduce(function (s, p) { return s + p.q; }, 0) / n2;
+      var mf = pairs.reduce(function (s, p) { return s + p.f; }, 0) / n2;
+      var cov = 0, vq = 0, vf = 0;
+      pairs.forEach(function (p) {
+        var dq = p.q - mq, df = p.f - mf;
+        cov += dq * df; vq += dq * dq; vf += df * df;
+      });
+      var r = (vq && vf) ? cov / Math.sqrt(vq * vf) : 0;
+      var good = pairs.filter(function (p) { return p.q >= 0.7; });
+      var bad = pairs.filter(function (p) { return p.q < 0.5; });
+      var avg = function (arr) {
+        return arr.length ? Math.round(arr.reduce(function (s, p) { return s + p.f; }, 0) / arr.length) : null;
+      };
+      return {
+        has: true, n: n2, r: Math.round(r * 100) / 100,
+        goodAvg: avg(good), badAvg: avg(bad), goodN: good.length, badN: bad.length
+      };
+    },
+
     /* ===== 设置 ===== */
     updateSemester: function (data) {
       var cur = this.currentSemester();
