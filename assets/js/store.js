@@ -3375,18 +3375,28 @@
 
     /**
      * 汇总若干学期的成绩
-     * @returns { count, scored, credits, creditsScored, weighted, average }
+     * @param {string[]} semesterIds
+     * @param {Array} [overrides] 可选：模拟用覆盖 [{semesterId, key, score}]，
+     *        命中则用 score 替换该门课的实际成绩（不写回数据，仅供 what-if 预览）
+     * @returns { count, scored, credits, creditsScored, weighted, average, gpa }
      */
-    gradeSummary: function (semesterIds) {
+    gradeSummary: function (semesterIds, overrides) {
       var self = this;
       var ids = semesterIds || [state.currentSemesterId];
+      var ov = {};
+      (overrides || []).forEach(function (o) {
+        if (o && o.key) ov[o.semesterId + '\u0000' + o.key] = o.score;
+      });
       var list = [];
       ids.forEach(function (sid) {
         self.gradeList(sid).forEach(function (r) {
+          var score = r.root ? self.computeGrade(r.root) : null;
+          var mk = sid + '\u0000' + r.key;
+          if (Object.prototype.hasOwnProperty.call(ov, mk)) score = ov[mk];
           list.push({
             name: r.name,
             credit: Number(r.credit) || 0,
-            score: r.root ? self.computeGrade(r.root) : null,
+            score: score,
             semesterId: sid
           });
         });

@@ -177,6 +177,34 @@
     var gpaEl = el('i', { class: 'gr-gpa', text: '' });
     var treeBox = el('div', { class: 'gr-tree' });
 
+    /* ---- what-if：假设这门总评 X 分，整体 GPA / 加权均分变成多少 ---- */
+    var wiInp = V.input({
+      type: 'number', min: '0', max: '150', step: '0.5', value: '',
+      placeholder: '例如 85', class: 'input'
+    });
+    var wiOut = el('div', { class: 'gr-whatif-out' });
+
+    function refreshWhatIf() {
+      var ids = scopeIds();
+      var base = Store.gradeSummary(ids);
+      var hy = parseFloat(wiInp.value);
+      if (wiInp.value === '' || isNaN(hy)) {
+        wiOut.innerHTML = '<span class="gr-wi-hint">输入一个假设总评，看看整体 GPA 怎么变</span>';
+        return;
+      }
+      var after = Store.gradeSummary(ids, [{ semesterId: semesterId, key: rec.key, score: hy }]);
+      var dg = (base.gpa != null && after.gpa != null) ? after.gpa - base.gpa : null;
+      var dw = (base.weighted != null && after.weighted != null) ? after.weighted - base.weighted : null;
+      var gColor = dg == null ? 'inherit' : (dg > 0.004 ? 'var(--green)' : dg < -0.004 ? 'var(--red)' : 'inherit');
+      var parts = [];
+      parts.push('整体 GPA <b>' + gpa2(base.gpa) + '</b> → <b style="color:' + gColor + '">' + gpa2(after.gpa) + '</b>');
+      if (dg != null && Math.abs(dg) > 0.004) parts.push('<span class="gr-wi-delta ' + (dg > 0 ? 'up' : 'down') + '">' + (dg > 0 ? '+' : '') + gpa2(dg) + '</span>');
+      parts.push('加权均分 ' + fmt(base.weighted, 1) + ' → <b>' + fmt(after.weighted, 1) + '</b>');
+      if (dw != null && Math.abs(dw) > 0.05) parts.push('<span class="gr-wi-delta ' + (dw > 0 ? 'up' : 'down') + '">' + (dw > 0 ? '+' : '') + fmt(dw, 1) + '</span>');
+      wiOut.innerHTML = parts.join('　');
+    }
+    wiInp.addEventListener('input', refreshWhatIf);
+
     function refresh() {
       computedEls.forEach(function (x) {
         var v = Store.computeGrade(x.node);
@@ -189,6 +217,7 @@
       }
       var gp = Store.gpaOf(t);
       gpaEl.textContent = (gp == null ? '' : '折合绩点 ' + gpa2(gp) + ' / ' + fmt(Store.gpaConfig().scale, 1));
+      if (wiInp) refreshWhatIf();
     }
 
     function findParent(node, id, parent) {
@@ -292,6 +321,11 @@
           gpaEl
         ]),
         treeBox,
+        el('div', { class: 'gr-whatif' }, [
+          el('div', { class: 'gr-whatif-head' }, ['模拟：这门考多少？']),
+          el('div', { class: 'gr-whatif-row' }, [wiInp]),
+          wiOut
+        ]),
         el('div', { class: 'ocr-hint', text: '每一行都能加子项：比如「平时」里再拆「作业」和「考勤」，权重按各层自动折算，没填的项不会拉低平均分。' })
       ],
       footer: el('div', { class: 'modal-foot' }, [

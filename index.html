@@ -4471,6 +4471,17 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
   .cp-lg-two-col > .cp-card { margin-bottom: 0; }
 }
 
+/* ===== 成绩 what-if 模拟 ===== */
+.cp-gr-whatif { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.cp-gr-whatif-head { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; }
+.cp-gr-whatif-row { display: flex; gap: 8px; align-items: center; }
+.cp-gr-whatif-row .cp-input { max-width: 150px; }
+.cp-gr-whatif-out { margin-top: 8px; font-size: 12.5px; color: var(--text-2); line-height: 1.75; }
+.cp-gr-whatif-out b { color: var(--text); }
+.cp-gr-wi-hint { color: var(--text-3); }
+.cp-gr-wi-delta.up { color: var(--green); font-weight: 600; }
+.cp-gr-wi-delta.down { color: var(--red); font-weight: 600; }
+
 </style>
 <script>
 
@@ -9188,18 +9199,28 @@ window.AK_OPS = [
 
     /**
      * 汇总若干学期的成绩
-     * @returns { count, scored, credits, creditsScored, weighted, average }
+     * @param {string[]} semesterIds
+     * @param {Array} [overrides] 可选：模拟用覆盖 [{semesterId, key, score}]，
+     *        命中则用 score 替换该门课的实际成绩（不写回数据，仅供 what-if 预览）
+     * @returns { count, scored, credits, creditsScored, weighted, average, gpa }
      */
-    gradeSummary: function (semesterIds) {
+    gradeSummary: function (semesterIds, overrides) {
       var self = this;
       var ids = semesterIds || [state.currentSemesterId];
+      var ov = {};
+      (overrides || []).forEach(function (o) {
+        if (o && o.key) ov[o.semesterId + '\u0000' + o.key] = o.score;
+      });
       var list = [];
       ids.forEach(function (sid) {
         self.gradeList(sid).forEach(function (r) {
+          var score = r.root ? self.computeGrade(r.root) : null;
+          var mk = sid + '\u0000' + r.key;
+          if (Object.prototype.hasOwnProperty.call(ov, mk)) score = ov[mk];
           list.push({
             name: r.name,
             credit: Number(r.credit) || 0,
-            score: r.root ? self.computeGrade(r.root) : null,
+            score: score,
             semesterId: sid
           });
         });
@@ -36600,6 +36621,34 @@ window.DragGesture = (function () {
     var gpaEl = el('i', { class: 'gr-gpa', text: '' });
     var treeBox = el('div', { class: 'gr-tree' });
 
+    /* ---- what-if：假设这门总评 X 分，整体 GPA / 加权均分变成多少 ---- */
+    var wiInp = V.input({
+      type: 'number', min: '0', max: '150', step: '0.5', value: '',
+      placeholder: '例如 85', class: 'input'
+    });
+    var wiOut = el('div', { class: 'gr-whatif-out' });
+
+    function refreshWhatIf() {
+      var ids = scopeIds();
+      var base = Store.gradeSummary(ids);
+      var hy = parseFloat(wiInp.value);
+      if (wiInp.value === '' || isNaN(hy)) {
+        wiOut.innerHTML = '<span class="gr-wi-hint">输入一个假设总评，看看整体 GPA 怎么变</span>';
+        return;
+      }
+      var after = Store.gradeSummary(ids, [{ semesterId: semesterId, key: rec.key, score: hy }]);
+      var dg = (base.gpa != null && after.gpa != null) ? after.gpa - base.gpa : null;
+      var dw = (base.weighted != null && after.weighted != null) ? after.weighted - base.weighted : null;
+      var gColor = dg == null ? 'inherit' : (dg > 0.004 ? 'var(--green)' : dg < -0.004 ? 'var(--red)' : 'inherit');
+      var parts = [];
+      parts.push('整体 GPA <b>' + gpa2(base.gpa) + '</b> → <b style="color:' + gColor + '">' + gpa2(after.gpa) + '</b>');
+      if (dg != null && Math.abs(dg) > 0.004) parts.push('<span class="gr-wi-delta ' + (dg > 0 ? 'up' : 'down') + '">' + (dg > 0 ? '+' : '') + gpa2(dg) + '</span>');
+      parts.push('加权均分 ' + fmt(base.weighted, 1) + ' → <b>' + fmt(after.weighted, 1) + '</b>');
+      if (dw != null && Math.abs(dw) > 0.05) parts.push('<span class="gr-wi-delta ' + (dw > 0 ? 'up' : 'down') + '">' + (dw > 0 ? '+' : '') + fmt(dw, 1) + '</span>');
+      wiOut.innerHTML = parts.join('　');
+    }
+    wiInp.addEventListener('input', refreshWhatIf);
+
     function refresh() {
       computedEls.forEach(function (x) {
         var v = Store.computeGrade(x.node);
@@ -36612,6 +36661,7 @@ window.DragGesture = (function () {
       }
       var gp = Store.gpaOf(t);
       gpaEl.textContent = (gp == null ? '' : '折合绩点 ' + gpa2(gp) + ' / ' + fmt(Store.gpaConfig().scale, 1));
+      if (wiInp) refreshWhatIf();
     }
 
     function findParent(node, id, parent) {
@@ -36715,6 +36765,11 @@ window.DragGesture = (function () {
           gpaEl
         ]),
         treeBox,
+        el('div', { class: 'gr-whatif' }, [
+          el('div', { class: 'gr-whatif-head' }, ['模拟：这门考多少？']),
+          el('div', { class: 'gr-whatif-row' }, [wiInp]),
+          wiOut
+        ]),
         el('div', { class: 'ocr-hint', text: '每一行都能加子项：比如「平时」里再拆「作业」和「考勤」，权重按各层自动折算，没填的项不会拉低平均分。' })
       ],
       footer: el('div', { class: 'modal-foot' }, [
