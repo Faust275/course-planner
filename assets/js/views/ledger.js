@@ -79,6 +79,10 @@
       /* ---------- 当月预算 ---------- */
       root.appendChild(budgetCard());
 
+      /* ---------- 吃饭的钱（近 30 天，有记录才出现） ---------- */
+      var foodK = foodCard();
+      if (foodK) root.appendChild(foodK);
+
       /* ---------- 范围切换 ---------- */
       var bar = el('div', { class: 'week-bar', style: { marginBottom: '12px' } }, [
         el('div', { class: 'week-label' }, [
@@ -405,6 +409,50 @@
    * ========================================================== */
   function hasCatBudget(b) {
     return b && b.categories && Object.keys(b.categories).length > 0;
+  }
+
+  /* ==========================================================
+   * 吃饭的钱：把饮食记录里的花费与热量放在一起看
+   * 记饮食时填的花费由 addMeal 自动进账本，这里只做汇总，不重复记账。
+   * ========================================================== */
+  function foodCard() {
+    var f = Store.foodSpend(30);
+    if (!f.has || f.cost <= 0) return null;
+
+    var c = el('div', { class: 'card lg-food', style: { padding: '14px 16px', marginBottom: '14px' } });
+    var head = el('div', { class: 'section-title' }, ['最近 30 天 · 吃饭']);
+    head.appendChild(el('button', {
+      class: 'btn btn-sm',
+      onclick: function () { App.go('health'); }
+    }, ['看饮食 ›']));
+    c.appendChild(head);
+
+    function cell(value, label, color) {
+      return el('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '86px' } }, [
+        el('span', { style: { fontSize: '18px', fontWeight: '700', color: color || 'var(--text-1)' }, text: value }),
+        el('span', { style: { fontSize: '11px', color: 'var(--text-3)' }, text: label })
+      ]);
+    }
+
+    c.appendChild(el('div', { style: { display: 'flex', gap: '20px', flexWrap: 'wrap', marginTop: '4px' } }, [
+      cell(money(f.cost), f.count + ' 顿合计'),
+      cell(f.perDayCost ? money(f.perDayCost) : '—', '日均（' + f.costDays + ' 天）'),
+      cell(f.perDayKcal ? f.perDayKcal + ' kcal' : '—', '日均热量'),
+      cell(f.costPer1k != null ? money(f.costPer1k) : '—', '每千卡')
+    ]));
+
+    var notes = [];
+    if (f.top && f.top.cost > 0) notes.push('最贵的一天 ' + f.top.date.slice(5) + ' · ' + money(f.top.cost));
+    if (f.freeMeals > 0) notes.push(f.freeMeals + ' 顿没记花费（日均只按记了的天数算）');
+    var goal = Number((Store.dietConfig() || {}).goal) || 0;
+    if (goal > 0 && f.perDayKcal > goal * 1.1) {
+      notes.push('日均热量比目标 ' + goal + ' kcal 高 ' + (f.perDayKcal - goal) + ' kcal');
+    }
+    if (notes.length) {
+      c.appendChild(el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: notes.join(' · ') }));
+    }
+    return c;
   }
 
   function budgetCard() {

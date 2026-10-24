@@ -120,6 +120,114 @@
         ]));
       })();
 
+      /* ---------- 昨晚睡成什么样 → 今天怎么安排 ----------
+         只在「健康看板开着 + 昨晚有记录 + 有明确倾向」时出现。
+         睡差了给「挪到明天」按钮，睡够了指个目标——都靠用户点，不自动改任何数据。 */
+      (function () {
+        var adv = Store.bodyAdvice(todayStr);
+        if (!adv.has || adv.dismissed) return;
+        if (adv.level !== 'low' && adv.level !== 'mild' && adv.level !== 'good') return;
+
+        var tone = adv.level === 'low'
+          ? { c: '#f59e0b', bg: 'rgba(245,158,11,.10)', bd: 'rgba(245,158,11,.35)', icon: V.icons.moon }
+          : adv.level === 'mild'
+            ? { c: '#ca8a04', bg: 'rgba(234,179,8,.09)', bd: 'rgba(234,179,8,.28)', icon: V.icons.moon }
+            : { c: '#16a34a', bg: 'rgba(34,197,94,.09)', bd: 'rgba(34,197,94,.30)', icon: V.icons.sun };
+
+        var qTxt = adv.q >= 0.7 ? '良好' : adv.q >= 0.55 ? '一般' : '偏差';
+        var title = adv.level === 'low'
+          ? ('昨晚只睡了 ' + TimeUtil.humanMin(adv.total) + ' · 今天先别扛')
+          : adv.level === 'mild'
+            ? ('昨晚 ' + TimeUtil.humanMin(adv.total) + ' · 略微欠了一点')
+            : ('昨晚 ' + TimeUtil.humanMin(adv.total) + ' · 状态在线');
+
+        var body;
+        if (adv.level === 'low') {
+          body = adv.heavy.length
+            ? ('这 ' + adv.heavy.length + ' 项是高耗能任务，建议挪到明天再做：')
+            : '今天没有必须今天完成的高耗能任务，先把轻松的推进，晚上早点躺下。';
+        } else if (adv.level === 'mild') {
+          body = '今天照常推进就好，但别再给自己加码，晚上早点躺下把这 40 分钟补回来。';
+        } else {
+          body = adv.heavy.length
+            ? ('适合啃硬骨头，建议首选「' + adv.heavy[0].title + '」。')
+            : '适合啃硬骨头，挑一件最难的先做。';
+        }
+
+        var rows = [];
+        if (adv.level === 'low' && adv.heavy.length) {
+          adv.heavy.forEach(function (t) {
+            rows.push(el('div', {
+              style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0' }
+            }, [
+              el('span', {
+                style: { flex: '1', minWidth: '0', fontSize: '13px', overflow: 'hidden',
+                         textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+                text: t.title,
+                title: t.title
+              }),
+              el('button', {
+                class: 'btn btn-sm',
+                style: { flex: 'none', padding: '2px 8px', fontSize: '12px' },
+                onclick: function () {
+                  Store.deferTaskTo(t.id, adv.tomorrow);
+                  V.toast('已挪到明天：' + t.title, 'ok');
+                  view.render();
+                }
+              }, ['→ 明天'])
+            ]));
+          });
+        }
+
+        root.appendChild(el('div', {
+          class: 'card cp-body-advice',
+          style: {
+            padding: '12px 14px', marginBottom: '14px',
+            background: tone.bg, border: '1px solid ' + tone.bd,
+            borderLeft: '3px solid ' + tone.c
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px' } }, [
+            el('span', { style: { color: tone.c, display: 'flex', flex: 'none', marginTop: '1px' } },
+              [V.svg(tone.icon, 16)]),
+            el('div', { style: { flex: '1', minWidth: '0' } }, [
+              el('div', { style: { fontWeight: '700', fontSize: '13.5px', color: tone.c }, text: title }),
+              el('div', { style: { fontSize: '12px', color: 'var(--text-2)', marginTop: '2px', lineHeight: '1.5' },
+                          text: body }),
+              el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '3px' },
+                          text: '睡眠质量 ' + qTxt + ' · 数据来自昨夜睡眠记录' + (adv.shortMin > 0 ? '，比目标少 ' + adv.shortMin + ' 分钟' : '') })
+            ]),
+            el('button', {
+              class: 'link-btn',
+              style: { flex: 'none', padding: '0 2px', fontSize: '15px', lineHeight: '1', color: 'var(--text-3)' },
+              title: '今天不再提示',
+              onclick: function () {
+                Store.dismissBodyTip(todayStr);
+                view.render();
+              }
+            }, ['×'])
+          ]),
+          rows.length ? el('div', { style: { marginTop: '6px' } },
+            rows.concat([el('button', {
+              class: 'link-btn',
+              style: { fontSize: '12px', marginTop: '2px' },
+              onclick: function () {
+                adv.heavy.forEach(function (t) { Store.deferTaskTo(t.id, adv.tomorrow); });
+                V.toast('已把 ' + adv.heavy.length + ' 项挪到明天', 'ok');
+                view.render();
+              }
+            }, ['全部挪到明天 ›'])])
+          ) : null,
+          adv.level === 'good' ? el('div', { style: { marginTop: '6px' } }, [
+            el('button', {
+              class: 'btn btn-sm',
+              style: { fontSize: '12px', padding: '3px 10px' },
+              onclick: function () { App.go('pomodoro'); }
+            }, ['去开始专注'])
+          ]) : null
+        ]));
+      })();
+
       /* ---------- 🎯 心愿干员到货备考动态 ---------- */
       (function () {
         if (!Store.pomodoro || Store.pomodoro.mode !== 'gacha' || !Store.wishlistForecast) return;

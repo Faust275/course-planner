@@ -1814,6 +1814,19 @@
         class: 'ocr-hint', style: { marginTop: '6px', fontWeight: '600', color: 'var(--text-2)' },
         text: line + (o.bedtime ? '' : ' —— 提醒目前是关闭的')
       }));
+
+      /* 你实际几点躺下：白噪音开睡眠定时时会自动记一笔，用来校准上面这个建议 */
+      var ons = Store.onsetStats ? Store.onsetStats(7) : null;
+      if (ons && ons.has) {
+        var gap = Math.round(ons.avgMin - Store.onsetAxisOf(plan.hhmm));
+        var tail = gap >= 20 ? ('，比你最近平均晚 ' + gap + ' 分钟') 
+                 : gap <= -20 ? ('，比你最近平均早 ' + (-gap) + ' 分钟') : '，和你最近的作息差不多';
+        bed.appendChild(el('div', {
+          class: 'ocr-hint', style: { marginTop: '2px' },
+          text: '最近 ' + ons.n + ' 次实际躺下平均 ' + ons.avgHHMM + tail +
+                '（在番茄钟开「睡眠定时」会自动记录）'
+        }));
+      }
     }
     root.appendChild(bed);
 

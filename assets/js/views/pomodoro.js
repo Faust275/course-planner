@@ -436,6 +436,54 @@
     ]);
     card.appendChild(volRow);
 
+    /* ---- 睡眠定时：到点自动淡出停止，并顺手记下「我躺下了」 ----
+       记这一笔不是为了统计播放时长，是为了让健康看板知道你到底几点躺下——
+       这是全应用里最准的「准备睡觉」信号，比事后回忆填表靠谱。 */
+    var timerRow = el('div', {
+      style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }
+    }, [el('span', { style: { fontSize: '13px', color: 'var(--text-muted)' }, text: '睡眠定时' })]);
+
+    [15, 30, 45, 60].forEach(function (min) {
+      var on = st.timerMin === min;
+      timerRow.appendChild(el('button', {
+        class: 'btn btn-sm' + (on ? ' btn-primary' : ''),
+        style: { borderRadius: '14px', padding: '3px 10px', fontSize: '12.5px' },
+        onclick: function () {
+          if (!wn.state().playing) wn.play();
+          wn.setTimer(min);
+          Store.logSleepOnset('', { min: min });
+          V.toast(min + ' 分钟后自动停止，已记下躺下时刻', 'ok');
+          view.render();
+        }
+      }, [min + ' 分钟']));
+    });
+    timerRow.appendChild(el('button', {
+      class: 'btn btn-sm',
+      style: { borderRadius: '14px', padding: '3px 10px', fontSize: '12.5px' },
+      onclick: function () { wn.setTimer(0); view.render(); }
+    }, ['关闭定时']));
+    card.appendChild(timerRow);
+
+    var ons = Store.onsetStats ? Store.onsetStats(7) : null;
+    if (ons && ons.has) {
+      var bedPlan = (global.Remind && global.Remind.bedtimePlan) ? global.Remind.bedtimePlan() : null;
+      var gapTxt = '';
+      if (bedPlan && bedPlan.hhmm) {
+        var gap = Math.round(ons.avgMin - Store.onsetAxisOf(bedPlan.hhmm));
+        if (gap >= 20) gapTxt = ' · 比就寝建议 ' + bedPlan.hhmm + ' 晚 ' + gap + ' 分钟';
+        else if (gap <= -20) gapTxt = ' · 比就寝建议 ' + bedPlan.hhmm + ' 早 ' + (-gap) + ' 分钟';
+      }
+      card.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.6' }
+      }, [
+        el('span', { text: '最近 ' + ons.n + ' 次平均 ' + ons.avgHHMM + ' 躺下' + gapTxt }),
+        st.timerMin ? el('span', {
+          style: { marginLeft: '8px', color: 'var(--primary)', fontWeight: '600' },
+          text: '· 剩余 ' + Math.ceil(st.timerLeft / 60) + ' 分钟'
+        }) : null
+      ]));
+    }
+
     return card;
   }
 

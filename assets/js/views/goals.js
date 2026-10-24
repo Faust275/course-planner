@@ -236,6 +236,11 @@
     });
     var text = Store.goalReviewText(lines, today);
 
+    /* 健康段：只在开了健康看板、本月又有记录时附在后面。
+       和目标数字放一起，是因为复盘时最容易漏掉的恰恰是「这个月身体怎么样」。 */
+    var healthLines = Store.healthReviewLines ? Store.healthReviewLines(today) : [];
+    if (healthLines.length) text += '\n\n【这个月的身体】\n' + healthLines.join('\n');
+
     var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '12px' } }, [
       el('div', { class: 'section-title' }, ['月末了，回顾一下']),
       el('div', { class: 'goal-note', text: '这个月几个目标推进得怎么样？点「写进日记」会把下面的数字填进今天的日记，剩下的交给你自己写。' }),

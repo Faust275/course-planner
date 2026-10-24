@@ -189,6 +189,7 @@
         // 健康看板总开关：默认关。装完只问一次（asked），没关联健康数据就不占导航位置。
         // 注意别和上面的 health（今日健康提示）混为一谈。
         healthOn: { enabled: false, asked: false },
+        bodyTipDay: '',   // 今日页「身体状态建议」被手动关掉的那天（YYYY-MM-DD），只压当天
         theme: 'indigo', customColor: '#4f46e5',
         themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
         themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
@@ -297,6 +298,9 @@
       sleeps: [],      // 睡眠记录
       metrics: [],     // 健康联动每日活动量：{ id, date, steps, calories, distance, source }
       weightLog: [],   // 体重记录（按天一条）：{ id, date, kg }
+      // 主动记录的「躺下时刻」：白噪音睡眠定时开始时写入（{ date, at:'23:35', min, src }）。
+      // 它不等于睡着——它只是「我准备睡了」的时间戳，所以和 sleeps（实测睡眠）分开存。
+      sleepOnsets: [],
       sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
@@ -706,6 +710,22 @@
       return (t < 600 ? '0' : '') + Math.floor(t / 60) + ':' + ((t % 60) < 10 ? '0' : '') + (t % 60);
     }
   };
+
+  /**
+   * 入睡时刻归一到「夜晚轴」：18:00 之后算当晚，凌晨（<12:00）按 +24h 记。
+   * 这样 23:40 和 01:20 能直接比早晚、求平均，不用先猜是不是跨了午夜。
+   */
+  function onsetAxis(hhmm) {
+    if (!/^\d{1,2}:\d{2}$/.test(hhmm || '')) return null;
+    var m = TimeUtil.toMin(hhmm);
+    return m < 12 * 60 ? m + 1440 : m;
+  }
+  /** 夜晚轴分钟 -> "HH:MM"（24:30 → "00:30"） */
+  function axisToHhmm(m) {
+    m = Math.round(m) % 1440;
+    if (m < 0) m += 1440;
+    return (m < 600 ? '0' : '') + Math.floor(m / 60) + ':' + (m % 60 < 10 ? '0' : '') + (m % 60);
+  }
 
   /** 用餐类型默认时长（分钟） */
   var MEAL_TYPES = [
@@ -4302,6 +4322,61 @@
       };
     },
 
+    /**
+     * 饮食开销：把「吃了多少」和「花了多少」放到一起看。
+     *
+     * 数据全部来自 meals（记饮食时填的花费会由 addMeal 自动进账本），
+     * 这里只做汇总，不重复记账。
+     *
+     * 平均口径分两种，别混：
+     *   perDayCost —— 只除以「真的有花费记录的天数」，没记账的日子不算 0 元
+     *   perDayKcal —— 只除以「有热量记录的天数」，同理
+     */
+    foodSpend: function (n) {
+      n = n || 30;
+      var from = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -n + 1));
+      var meals = (state.meals || []).filter(function (m) { return m && m.date && m.date >= from; });
+      var out = {
+        has: false, days: n, from: from, count: 0, cost: 0, kcal: 0,
+        costDays: 0, kcalDays: 0, perDayCost: 0, perDayKcal: 0,
+        costPer1k: null, byType: {}, top: null, freeMeals: 0
+      };
+      if (!meals.length) return out;
+
+      var costDays = {}, kcalDays = {}, byDay = {}, byType = {};
+      var cost = 0, kcal = 0, free = 0;
+
+      meals.forEach(function (m) {
+        var c = Number(m.cost) || 0;
+        var k = Number(m.kcal) || 0;
+        cost += c; kcal += k;
+        if (c > 0) costDays[m.date] = 1; else free++;
+        if (k > 0) kcalDays[m.date] = 1;
+
+        var t = m.type || 'other';
+        if (!byType[t]) byType[t] = { cost: 0, kcal: 0, n: 0 };
+        byType[t].cost += c; byType[t].kcal += k; byType[t].n++;
+        byDay[m.date] = (byDay[m.date] || 0) + c;
+      });
+
+      out.has = true;
+      out.count = meals.length;
+      out.cost = Math.round(cost * 100) / 100;
+      out.kcal = kcal;
+      out.freeMeals = free;
+      out.costDays = Object.keys(costDays).length;
+      out.kcalDays = Object.keys(kcalDays).length;
+      out.byType = byType;
+      out.perDayCost = out.costDays ? Math.round(cost / out.costDays * 100) / 100 : 0;
+      out.perDayKcal = out.kcalDays ? Math.round(kcal / out.kcalDays) : 0;
+      out.costPer1k = kcal > 0 ? Math.round(cost / (kcal / 1000) * 100) / 100 : null;
+
+      Object.keys(byDay).forEach(function (d) {
+        if (!out.top || byDay[d] > out.top.cost) out.top = { date: d, cost: Math.round(byDay[d] * 100) / 100 };
+      });
+      return out;
+    },
+
     /* ===== 睡眠记录 ===== */
     addSleep: function (data) {
       var r = {
@@ -4664,8 +4739,20 @@
       ];
     },
 
-    /** 获取当前时刻的生理精力评估与建议 */
+    /**
+     * 当前时刻的生理精力评估与建议。
+     *
+     * 先按「钟点节律」判一次（早/中/晚三个高峰段 + 午后低谷 + 夜间），
+     * 再用昨晚的睡眠修正——同一个 10:00，睡了 5 小时和睡了 8 小时不是一回事。
+     * 修正只在有睡眠记录时生效（无记录 / 健康看板关着就纯按节律走）。
+     */
     currentEnergyState: function (nowStr) {
+      var st = this._energyByClock(nowStr);
+      return this.applySleepToEnergy(st);
+    },
+
+    /** 纯节律判定（不看睡眠），供 currentEnergyState 与测试复用 */
+    _energyByClock: function (nowStr) {
       if (!nowStr) {
         var now = new Date();
         var h = String(now.getHours()).padStart(2, '0');
@@ -4714,6 +4801,39 @@
         label: '常规平稳期 · 精力稳定',
         advice: '精力处于平稳水平，适合常规作业、复习与计划打卡。'
       };
+    },
+
+    /**
+     * 用昨晚睡眠修正节律判定。
+     * 只做两件事：欠睡时把「黄金期」打折成平稳期（因为此时的高峰是假高峰），
+     * 以及在任何档位上补一句实话。不改 level 以外的东西，调用方判断逻辑不用动。
+     */
+    applySleepToEnergy: function (st) {
+      if (!st) return st;
+      var adv = this.bodyAdvice();
+      if (!adv.has || (adv.level !== 'low' && adv.level !== 'good')) return st;
+
+      var out = {};
+      Object.keys(st).forEach(function (k) { out[k] = st[k]; });
+      out.sleepLevel = adv.level;
+      out.sleepTotal = adv.total;
+      var dur = TimeUtil.humanMin(adv.total);
+
+      if (adv.level === 'low') {
+        if (out.level === 'high') {
+          out.level = 'medium';
+          out.isPeak = false;
+          out.sleepDamp = true;
+          out.label = out.label + '（昨晚欠睡，已降档）';
+          out.advice = '昨晚只睡了 ' + dur + '，这段时间的高峰是假高峰：' +
+                       '先做轻松的，高耗能的往后挪。';
+        } else {
+          out.advice = out.advice + '（昨晚只睡了 ' + dur + '，别再给自己加码。）';
+        }
+      } else if (out.level === 'high') {
+        out.advice = out.advice + '（昨晚睡了 ' + dur + '，这段可以加量。）';
+      }
+      return out;
     },
 
     /** 获取当前学期所有登记了考试的课程列表（按考试日期升序） */
@@ -7212,6 +7332,230 @@
                 (state.metrics && state.metrics.length) ||
                 (state.weightLog && state.weightLog.length) ||
                 (state.meals && state.meals.length));
+    },
+
+    /* ===== 健康 → 待办：昨晚睡成什么样，今天就别硬扛 ===== */
+    /**
+     * 今天该不该扛重活——把昨晚睡眠翻成一句能照做的安排建议。
+     *
+     * 只给建议，**不动任何数据**：真正的「挪到明天」由用户点按钮后走 deferTaskTo，
+     * 因为自动挪日期最招人烦——你不知道它为什么动，也不知道动了什么。
+     *
+     * 四档（阈值都从 nightStats 来，不引入新数据源）：
+     *   low   睡不足 6h 或质量 < 0.5   —— 别扛高耗能，给出可挪的任务
+     *   mild  不足 7h 或质量 < 0.62     —— 提醒一句，不给动作
+     *   good  ≥ 7.5h 且质量 ≥ 0.7      —— 适合攻坚，指一个目标
+     *   ok    其余                     —— 不打扰（UI 不渲染）
+     * 没记录 → unknown；健康看板关着 → off。两种情况 UI 都静默。
+     */
+    bodyAdvice: function (dateStr) {
+      var todayD = DateUtil.today();
+      var today = dateStr || DateUtil.toStr(todayD);
+      var out = {
+        has: false, level: 'off', date: today, total: 0, q: 0,
+        shortMin: 0, needMin: 480, heavy: [], canDefer: false,
+        dismissed: false, tomorrow: DateUtil.toStr(DateUtil.addDays(todayD, 1))
+      };
+      if (!this.healthEnabled()) return out;
+
+      var st = this.nightStats(today);
+      if (!st || !(st.total > 0)) { out.level = 'unknown'; return out; }
+
+      var SM = (typeof window !== 'undefined' && window.SleepModel) ||
+               (typeof global !== 'undefined' && global.SleepModel) || null;
+      var need = (SM && SM.CONST && SM.CONST.NEED_MIN) || 480;
+      var total = st.total;
+      var q = st.q == null ? 0.7 : st.q;
+
+      var level = 'ok';
+      if (total < 360 || q < 0.5) level = 'low';
+      else if (total < 420 || q < 0.62) level = 'mild';
+      else if (total >= 450 && q >= 0.7) level = 'good';
+
+      // 「今天到期 / 已逾期的高耗能任务」：口径与今日页一致（只看顶层、未完成）。
+      // 带子任务的父任务不算——挪父任务而子任务留在今天会让两边对不上。
+      var hasChild = {};
+      (state.tasks || []).forEach(function (t) { if (t && t.parentId) hasChild[t.parentId] = 1; });
+      var heavy = (state.tasks || []).filter(function (t) {
+        return t && !t.parentId && t.status !== 'done' && t.status !== 'archived' &&
+               !hasChild[t.id] && t.energy === 'high' && (!t.dueDate || t.dueDate <= today);
+      });
+      var rank = { high: 0, normal: 1, low: 2 };
+      heavy.sort(function (a, b) {
+        var ra = rank[a.priority] == null ? 1 : rank[a.priority];
+        var rb = rank[b.priority] == null ? 1 : rank[b.priority];
+        if (ra !== rb) return ra - rb;
+        return String(a.dueDate || '~') < String(b.dueDate || '~') ? -1 : 1;
+      });
+
+      out.has = true;
+      out.level = level;
+      out.total = total;
+      out.q = Math.round(q * 100) / 100;
+      out.shortMin = Math.max(0, need - total);
+      out.heavy = heavy.slice(0, 3);
+      out.canDefer = level === 'low' && out.heavy.length > 0;
+      out.dismissed = !!(state.settings && state.settings.bodyTipDay === today);
+      return out;
+    },
+
+    /** 关掉今天的身体状态建议（每天可以关一次，明天照常提醒） */
+    dismissBodyTip: function (dateStr) {
+      var d = dateStr || DateUtil.toStr(DateUtil.today());
+      if (!state.settings) state.settings = {};
+      state.settings.bodyTipDay = d;
+      this.save();
+      this.emit();
+    },
+
+    /**
+     * 把一条待办往后挪（默认明天）。只改截止日与截止时间，其余字段不动。
+     * 记一笔 deferredCount，方便以后做「这条总被推迟」的提醒。
+     */
+    deferTaskTo: function (id, dateStr) {
+      var t = this.getTask(id);
+      if (!t) return null;
+      t.dueDate = dateStr || DateUtil.toStr(DateUtil.addDays(DateUtil.today(), 1));
+      t.dueTime = '';
+      t.deferredCount = (Number(t.deferredCount) || 0) + 1;
+      this.save();
+      this.emit();
+      return t;
+    },
+
+    /* ===== 入睡时刻：白噪音睡眠定时回写 ===== */
+    /**
+     * 记一次「我准备睡了」。白噪音开睡眠定时时调用，不用用户再填表。
+     *
+     * 一天只留一条：同一天再开一次定时，保留**更早**的那个时刻
+     * （先听的是真正躺下的时间，后面是续播），定时分钟取更长的。
+     */
+    logSleepOnset: function (at, opts) {
+      opts = opts || {};
+      var hhmm = /^\d{1,2}:\d{2}$/.test(at || '') ? at : null;
+      if (!hhmm) {
+        var now = new Date();
+        hhmm = (now.getHours() < 10 ? '0' : '') + now.getHours() + ':' +
+               (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+      }
+      var dateStr = opts.date || DateUtil.toStr(DateUtil.today());
+      if (!state.sleepOnsets) state.sleepOnsets = [];
+
+      var ex = null;
+      state.sleepOnsets.forEach(function (o) { if (o && o.date === dateStr) ex = o; });
+      var mins = Number(opts.min) || 0;
+
+      if (ex) {
+        if (onsetAxis(hhmm) < onsetAxis(ex.at)) ex.at = hhmm;
+        ex.min = Math.max(Number(ex.min) || 0, mins);
+        ex.n = (Number(ex.n) || 1) + 1;
+      } else {
+        ex = { date: dateStr, at: hhmm, min: mins, src: opts.src || 'white-noise', n: 1 };
+        state.sleepOnsets.push(ex);
+      }
+      // 只留最近 120 天，避免常年累积把存档撑大
+      var keep = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -120));
+      state.sleepOnsets = state.sleepOnsets.filter(function (o) { return o && o.date >= keep; });
+
+      this.save();
+      this.emit();
+      return ex;
+    },
+
+    /**
+     * 最近 n 天的入睡时刻统计。
+     * avgMin 是「夜晚轴」分钟（24:30 表示凌晨 0:30），转显示用 axisToHhmm。
+     * 和就寝建议（bedtimePlan）对比时用 gapMin：正数 = 比建议晚多少分钟。
+     */
+    onsetStats: function (n) {
+      n = n || 7;
+      var from = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -n + 1));
+      var list = (state.sleepOnsets || []).filter(function (o) {
+        return o && o.date >= from && onsetAxis(o.at) != null;
+      }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+
+      var out = { has: false, n: list.length, days: n, list: list,
+                  avgMin: null, avgHHMM: '', earliest: '', latest: '', spread: 0 };
+      if (!list.length) return out;
+
+      var sum = 0, lo = Infinity, hi = -Infinity;
+      list.forEach(function (o) {
+        var m = onsetAxis(o.at);
+        sum += m;
+        if (m < lo) lo = m;
+        if (m > hi) hi = m;
+      });
+      out.has = true;
+      out.avgMin = sum / list.length;
+      out.avgHHMM = axisToHhmm(out.avgMin);
+      out.earliest = axisToHhmm(lo);
+      out.latest = axisToHhmm(hi);
+      out.spread = hi - lo;                 // 最早最晚差多少分钟 = 作息乱不乱
+      return out;
+    },
+
+    /** 最近一次记下的入睡时刻（HH:MM），没有则 '' */
+    latestOnset: function () {
+      var list = (state.sleepOnsets || []).slice().sort(function (a, b) {
+        return String(a.date) < String(b.date) ? 1 : -1;
+      });
+      return list.length ? list[0].at : '';
+    },
+
+    /** 把 'HH:MM' 归一到夜晚轴（24:30 → 凌晨 0:30），供 UI 与就寝建议比较早晚 */
+    onsetAxisOf: function (hhmm) { return onsetAxis(hhmm); },
+
+    /* ===== 月复盘的健康段 ===== */
+    /**
+     * 本月身体数据，整理成几行「只列数字、不写评价」的文字，接在目标复盘后面写进日记。
+     *
+     * 没开健康看板 / 本月什么记录都没有 → 返回空数组，复盘卡完全不提健康，
+     * 免得给不用这些功能的人塞一段空话。
+     */
+    healthReviewLines: function (monthStr) {
+      if (!this.healthEnabled()) return [];
+      var today = DateUtil.toStr(DateUtil.today());
+      var ym = String(monthStr || today).slice(0, 7);
+      var from = ym + '-01';
+      if (from > today) return [];                       // 看未来月份，没东西可总结
+
+      var needMin = (state.settings.health && Number(state.settings.health.sleepMinH) || 6) * 60;
+      var nights = 0, sumMin = 0, met = 0;
+      var stepSum = 0, stepDays = 0;
+
+      var cur = DateUtil.parse(from);
+      var guard = 0;
+      while (cur && DateUtil.toStr(cur) <= today && guard++ < 40) {
+        var ds = DateUtil.toStr(cur);
+        var st = this.nightStats(ds);
+        if (st && st.total > 0) { nights++; sumMin += st.total; if (st.total >= needMin) met++; }
+        var m = this.getMetric(ds);
+        if (m && Number(m.steps) > 0) { stepSum += Number(m.steps); stepDays++; }
+        cur = DateUtil.addDays(cur, 1);
+      }
+
+      var lines = [];
+      if (nights) {
+        lines.push('· 睡眠：平均 ' + TimeUtil.humanMin(sumMin / nights) + '（' + nights + ' 晚有记录），' +
+                   '睡够 ' + (needMin / 60) + ' 小时的有 ' + met + ' 晚');
+      }
+      if (stepDays) {
+        lines.push('· 步数：日均 ' + Math.round(stepSum / stepDays) + ' 步（' + stepDays + ' 天有记录）');
+      }
+
+      // 体重：本月第一条 vs 最新一条，只算本月内的变化
+      var wl = (state.weightLog || []).filter(function (w) { return w && w.date >= from && w.date <= today; })
+        .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      if (wl.length >= 2) {
+        var dKg = Math.round((wl[wl.length - 1].kg - wl[0].kg) * 10) / 10;
+        if (dKg !== 0) {
+          lines.push('· 体重：' + wl[0].kg + ' → ' + wl[wl.length - 1].kg + ' kg（' +
+                     (dKg > 0 ? '+' : '') + dKg + '）');
+        } else {
+          lines.push('· 体重：' + wl[0].kg + ' kg（本月没变）');
+        }
+      }
+      return lines;
     },
 
     get settings() { return state.settings; },

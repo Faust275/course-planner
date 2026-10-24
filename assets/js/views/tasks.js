@@ -942,11 +942,14 @@
           el('div', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, [
             el('button', {
               class: 'btn btn-sm' + (state.energyFilter ? ' btn-primary' : ''),
+              title: egState.sleepDamp ? '昨夜睡眠不足，黄金期已按睡眠降档' : '',
               onclick: function () {
                 state.energyFilter = !state.energyFilter;
                 view.render();
               }
-            }, [state.energyFilter ? '⚡ 已开启精力匹配' : '⚡ 匹配当前精力']),
+            }, [state.energyFilter
+              ? (egState.sleepDamp ? '⚡ 已按昨夜睡眠降档' : '⚡ 已开启精力匹配')
+              : '⚡ 匹配当前精力']),
             el('button', {
               class: 'btn btn-sm',
               title: '自定义精力高峰时段',

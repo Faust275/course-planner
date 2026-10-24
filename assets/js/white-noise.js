@@ -20,6 +20,16 @@
   var volume = 0.5;
   var isPlaying = false;
   var bufferCache = {};
+  /* 睡眠定时：到点自动淡出停止。timerMin=0 表示没开 */
+  var timerMin = 0;
+  var timerEnd = 0;
+  var timerHandle = null;
+
+  function clearTimer() {
+    if (timerHandle) { clearTimeout(timerHandle); timerHandle = null; }
+    timerMin = 0;
+    timerEnd = 0;
+  }
 
   function getAudioContext() {
     var AudioCtx = global.AudioContext || global.webkitAudioContext;
@@ -135,6 +145,7 @@
     },
 
     stop: function () {
+      clearTimer();
       if (!currentSource) {
         isPlaying = false;
         this.emitChange();
@@ -186,11 +197,44 @@
       }
     },
 
+    /**
+     * 睡眠定时（分钟）。min<=0 取消。
+     * 播放中才起效——没声音就不必计时。定时到点会自动停止并通知一次。
+     */
+    setTimer: function (min) {
+      min = Number(min) || 0;
+      clearTimer();
+      if (min <= 0 || !isPlaying) { this.emitChange(); return 0; }
+      timerMin = min;
+      timerEnd = Date.now() + min * 60000;
+      timerHandle = setTimeout(function () {
+        timerHandle = null;
+        var m = timerMin;
+        timerMin = 0; timerEnd = 0;
+        WhiteNoise.stop();
+        if (typeof WhiteNoise.onTimerEnd === 'function') {
+          try { WhiteNoise.onTimerEnd(m); } catch (e) {}
+        }
+        try {
+          if (global.UI && global.UI.toast) global.UI.toast('睡眠定时到了，伴音已关', 'ok');
+        } catch (e) {}
+      }, min * 60000);
+      this.emitChange();
+      return min;
+    },
+
+    timerLeft: function () {
+      if (!timerEnd) return 0;
+      return Math.max(0, Math.round((timerEnd - Date.now()) / 1000));
+    },
+  
     state: function () {
       return {
         playing: isPlaying,
         type: activeType,
         volume: volume,
+        timerMin: timerMin,
+        timerLeft: this.timerLeft(),
         sound: SOUNDS[activeType] || SOUNDS.rain
       };
     },

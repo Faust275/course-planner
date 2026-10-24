@@ -239,6 +239,18 @@
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '8px' },
           text: '还没有饮食记录。记一笔饮食、补上身高体重后，这里才会算出消耗与净热量。' }));
       }
+      // 吃饭花掉的钱：记饮食时填了花费就会自动进账本，这里只回显一句
+      var ms = Store.mealSummary(h.date);
+      if (ms.cost > 0) {
+        children.push(el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '8px' } }, [
+          el('span', { text: '今天吃喝 ¥' + round1(ms.cost) + ' · ' + ms.count + ' 笔' }),
+          el('button', {
+            class: 'link-btn',
+            style: { fontSize: '11.5px', marginLeft: '6px' },
+            onclick: function () { App.go('ledger'); }
+          }, ['记在账本 ›'])
+        ]));
+      }
       return card(children);
     },
 
