@@ -1329,16 +1329,18 @@
 
   /** 询问并执行全量数据同步覆盖 */
   function promptImportFullSync(jsonStr, parentModal) {
-    var obj;
-    try { obj = JSON.parse(jsonStr); } catch (e) { getUI().toast('同步内容不是有效的 JSON', 'err'); return; }
-    var parts = [];
-    if ((obj.courses || []).length) parts.push(obj.courses.length + ' 门课程');
-    if ((obj.tasks || []).length) parts.push(obj.tasks.length + ' 条待办');
-    if ((obj.plans || []).length) parts.push(obj.plans.length + ' 个计划');
-    if ((obj.ledger || []).length) parts.push(obj.ledger.length + ' 条账目');
+    var d;
+    try { d = getStore().diffImport(jsonStr); } catch (e) { getUI().toast('同步内容不是有效的备份：' + e.message, 'err'); return; }
+    var msg = d.empty
+      ? '⚠️ 收到的同步内容几乎是空的，覆盖后本机会被清空。覆盖前会自动备份，可以回滚。'
+      : (d.wipes.length
+          ? '⚠️ 有 ' + d.wipes.length + ' 类数据会被清空（' +
+            d.wipes.map(function (w) { return w.name; }).join('、') + '）。覆盖前会自动备份，可以回滚。'
+          : '已完整接收同步数据，覆盖前会自动备份当前数据，可以回滚。');
     V.confirm({
-      title: '扫码全量同步确认',
-      message: '已完整接收同步数据' + (parts.length ? '（含 ' + parts.join('、') + '）' : '') + '。\n是否覆盖同步到这台设备？（覆盖前会自动创建本地备份快照）',
+      title: '扫码全量同步 · 对比',
+      message: msg,
+      body: V.diffPanel(d),
       danger: true,
       okText: '确认覆盖同步'
     }).then(function (ok) {
@@ -1527,11 +1529,33 @@
               if (!res.ok) throw new Error('HTTP ' + res.status);
               return res.text();
             }).then(function (text) {
-              var bkPromise = Store.backupNow ? Store.backupNow('WebDAV同步覆盖前') : Promise.resolve();
-              return bkPromise.then(function () {
-                Store.importJSON(text);
-                statusEl.textContent = '✅ 已从云端拉取并恢复数据（原本地数据已自动备份）';
-                V.toast('WebDAV 云端同步完成');
+              // 以前这里是「拉到就直接覆盖」，连问都不问——云端文件可能是另一台设备
+              // 很久以前的旧版本，一键下去本机的新数据就没了。现在先摆对比再确认。
+              statusEl.textContent = '';
+              var d;
+              try { d = Store.diffImport(text); } catch (e) { throw new Error('云端文件不是有效的备份：' + e.message); }
+              var msg = d.empty
+                ? '⚠️ 云端那份几乎是空的，恢复后本机会被清空。恢复前会自动备份，可以回滚。'
+                : (d.wipes.length
+                    ? '⚠️ 有 ' + d.wipes.length + ' 类数据会被清空（' +
+                      d.wipes.map(function (w) { return w.name; }).join('、') + '）。恢复前会自动备份，可以回滚。'
+                    : '恢复前会自动备份当前数据，可以回滚。');
+              return V.confirm({
+                title: '从云端恢复 · 对比',
+                message: msg,
+                body: V.diffPanel(d),
+                danger: true, okText: '覆盖恢复'
+              }).then(function (ok) {
+                if (!ok) {
+                  statusEl.textContent = '已取消，本机数据没有改动';
+                  return;
+                }
+                var bkPromise = Store.backupNow ? Store.backupNow('WebDAV同步覆盖前') : Promise.resolve();
+                return bkPromise.then(function () {
+                  Store.importJSON(text);
+                  statusEl.textContent = '✅ 已从云端拉取并恢复数据（原本地数据已自动备份）';
+                  V.toast('WebDAV 云端同步完成');
+                });
               });
             }).catch(function (err) {
               statusEl.textContent = '❌ 拉取失败：' + (err && err.message ? err.message : '请求失败');

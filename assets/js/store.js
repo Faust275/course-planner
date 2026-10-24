@@ -365,6 +365,184 @@
     };
   }
 
+  /* ==========================================================
+   * 导入：归一化 + 覆盖前对比
+   * ========================================================== */
+
+  /**
+   * 把外部导入内容归一化成一份完整 state。importJSON 与 diffImport 共用，
+   * 保证「弹窗里说会变成什么」和「实际导入成什么」永远是同一套规则。
+   * 只返回新对象，不碰模块级 state。
+   */
+  function safeImportState(prev, obj) {
+    if (!obj || typeof obj !== 'object') throw new Error('数据格式不正确');
+    if (!obj.courses && !obj.tasks && !obj.settings && !obj.plans && !obj.ledger &&
+        !obj.notes && !obj.diaries && !obj.events && !obj.activities) {
+      throw new Error('没有找到可恢复的数据');
+    }
+    var ds = defaultState();
+    // 以默认结构打底再逐项覆盖：defaultState 里的每个顶层键都保证存在，
+    // 以后新增顶层字段（如 shop）不会因为这份清单漏登记而在导入时凭空消失。
+    var next = Object.assign({}, ds, obj);
+    next.version = Number(obj.version) || 1;   // 交给 ensure() 里的 migrateSchema 升级
+    next.model = obj.model || 2;
+    next.semesters = (obj.semesters && obj.semesters.length) ? obj.semesters : [
+      Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
+    ];
+    next.currentSemesterId = obj.currentSemesterId || '';
+    next.grades = obj.grades || {};
+    next.periods = (obj.periods && obj.periods.length) ? obj.periods : ds.periods;
+    next.courses = obj.courses || [];
+    next.courseExceptions = Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [];
+    next.tasks = obj.tasks || [];
+    next.taskSeq = obj.taskSeq || {};
+    next.settings = Object.assign({}, ds.settings, obj.settings || {});
+    next.pomodoro = Object.assign({}, ds.pomodoro, obj.pomodoro || {});
+    next.plans = obj.plans || [];
+    next.goals = Array.isArray(obj.goals) ? obj.goals : [];
+    next.achievements = obj.achievements || { done: {} };
+    next.ledger = obj.ledger || [];
+    next.notes = obj.notes || [];
+    // 日记特殊处理：同步码里根本没有 diaries 这个键。
+    // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
+    // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
+    next.diaries = Array.isArray(obj.diaries) ? obj.diaries : (prev && prev.diaries) || [];
+    next.taskArchive = Array.isArray(obj.taskArchive) ? obj.taskArchive : (prev && prev.taskArchive) || [];
+    next.events = obj.events || [];
+    next.activities = obj.activities || [];
+    next.meals = obj.meals || [];
+    next.sleeps = obj.sleeps || [];
+    next.sleepSession = null;   // 别人的计时不该跟着同步过来
+    next.usage = obj.usage || {};
+    next.shop = mergeShop(ds.shop, obj.shop);
+    // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
+    next.settings.subtask = Object.assign({}, ds.settings.subtask, next.settings.subtask || {});
+    // 日记同理：旧备份没有 diary 设置，逐项补，不整块覆盖
+    next.settings.diary = Object.assign({}, ds.settings.diary, next.settings.diary || {});
+    return next;
+  }
+
+  /** 课程在「另一台设备」上认得出是同一门课的键。不能用 id/semesterId——跨设备都是新生成的 */
+  function courseKey(c) {
+    return String(c && c.name || '') + '\u0000' + String(c && c.teacher || '');
+  }
+
+  /** 课程内容指纹（只取用户真正关心的几项，颜色/备注变了不算改动，避免误报） */
+  function courseShape(c) {
+    var slots = Array.isArray(c && c.slots) ? c.slots : [];
+    return JSON.stringify([
+      c && c.location || '',
+      String(slots.map(function (s) {
+        return [s.day, s.timeMode || '', s.periodId || '', s.startTime || '', s.endTime || '', s.location || ''].join('~');
+      }).sort().join('|')),
+      c ? (c.startWeek || 1) : 1,
+      c ? (c.endWeek || 0) : 0,
+      c && c.weekType || 'all',
+      Number(c && c.credit) || 0
+    ]);
+  }
+
+  function taskKey(t) {
+    return String(t && t.title || '') + '\u0000' + String(t && t.dueDate || '');
+  }
+
+  function taskShape(t) {
+    return JSON.stringify([!!(t && t.done), Number(t && t.priority) || 0]);
+  }
+
+  /**
+   * 逐项统计：条数、以及「按语义键」算出的新增 / 消失 / 改动条数。
+   * 轻量版只做到这里——字段级三路合并等于重写一个同步引擎，
+   * 而实际场景是自己的手机同步到自己的电脑，还有备份兜底。
+   */
+  function diffList(before, after, keyOf, shapeOf) {
+    var av = Array.isArray(after) ? after : [];
+    var bv = Array.isArray(before) ? before : [];
+    var out = { add: 0, gone: 0, mod: 0 };
+    if (!shapeOf) {
+      out.add = Math.max(0, av.length - bv.length);
+      out.gone = Math.max(0, bv.length - av.length);
+      return out;
+    }
+    var mapB = {};
+    bv.forEach(function (x) { var k = keyOf(x); if (!(k in mapB)) mapB[k] = x; });
+    var seen = {};
+    av.forEach(function (x) {
+      var k = keyOf(x);
+      if (!(k in mapB)) { out.add++; return; }
+      if (seen[k]) return;                       // 同键重复出现只算一次改动
+      seen[k] = 1;
+      if (shapeOf(mapB[k]) !== shapeOf(x)) out.mod++;
+    });
+    bv.forEach(function (x) { if (!seen[keyOf(x)]) { out.gone++; seen[keyOf(x)] = 1; } });
+    return out;
+  }
+
+  /** 各模块在对比表里的展示顺序与名字 */
+  var DIFF_MODULES = [
+    { key: 'courses',  name: '课程', keyOf: courseKey, shapeOf: courseShape },
+    { key: 'tasks',    name: '待办', keyOf: taskKey,   shapeOf: taskShape },
+    { key: 'plans',    name: '计划', keyOf: function (p) { return String(p && (p.title || p.name) || ''); } },
+    { key: 'ledger',   name: '记账' },
+    { key: 'notes',    name: '灵感' },
+    { key: 'diaries',  name: '日记' },
+    { key: 'events',   name: '日程' },
+    { key: 'activities', name: '活动' },
+    { key: 'meals',    name: '饮食' },
+    { key: 'sleeps',   name: '睡眠' },
+    { key: 'grades',   name: '成绩', isMap: true }
+  ];
+
+  function sizeOf(st, mod) {
+    var v = st ? st[mod.key] : null;
+    if (mod.isMap) return v && typeof v === 'object' ? Object.keys(v).length : 0;
+    return Array.isArray(v) ? v.length : 0;
+  }
+
+  function diffStates(cur, next) {
+    var rows = [];
+    DIFF_MODULES.forEach(function (mod) {
+      var before = sizeOf(cur, mod);
+      var after = sizeOf(next, mod);
+      var d = (before === 0 && after === 0)
+        ? { add: 0, gone: 0, mod: 0 }
+        : diffList(cur && cur[mod.key], next && next[mod.key], mod.keyOf, mod.shapeOf);
+      rows.push({ key: mod.key, name: mod.name, before: before, after: after, add: d.add, gone: d.gone, mod: d.mod });
+    });
+
+    // 「会被清空」比条数更值得先说：同步码的精简档会把一堆模块整个清掉
+    var wipes = rows.filter(function (r) { return r.before > 0 && r.after === 0; });
+    var totalBefore = rows.reduce(function (s, r) { return s + r.before; }, 0);
+    var totalAfter = rows.reduce(function (s, r) { return s + r.after; }, 0);
+    return {
+      rows: rows,
+      wipes: wipes,
+      totalBefore: totalBefore,
+      totalAfter: totalAfter,
+      // 备份几乎是空壳：这种情况下「覆盖」等于清库，必须让用户看清楚
+      empty: totalAfter === 0,
+      touched: rows.some(function (r) {
+        return r.add || r.gone || r.mod || r.before !== r.after;
+      })
+    };
+  }
+
+  /** 把 diff 结果拼成确认弹窗里的几行字 */
+  function diffLines(d) {
+    var lines = [];
+    d.rows.forEach(function (r) {
+      if (!r.before && !r.after) return;
+      var head = r.name + ' ' + r.before + ' → ' + r.after;
+      var bits = [];
+      if (r.add) bits.push('新增 ' + r.add);
+      if (r.gone) bits.push('消失 ' + r.gone);
+      if (r.mod) bits.push('改动 ' + r.mod);
+      if (r.before > 0 && r.after === 0) bits.push('会被清空');
+      lines.push(head + (bits.length ? '（' + bits.join(' · ') + '）' : '（无变化）'));
+    });
+    return lines;
+  }
+
   /**
    * 强 Schema 校验与迁移器 (Declarative Schema Validator & Sanitizer)
    * 对外部导入、旧备份、本地存储读入的数据进行深层结构检验与默认值修复，
@@ -8302,53 +8480,18 @@
       return JSON.stringify(out, null, 2);
     },
 
+    /** 覆盖前对比：只算不写。返回各模块的增减与「会被清空」清单，供确认弹窗展示 */
+    diffImport: function (input) {
+      var obj = typeof input === 'string' ? JSON.parse(input) : input;
+      var d = diffStates(state, safeImportState(state, obj));
+      d.lines = diffLines(d);
+      return d;
+    },
+
     importJSON: function (text) {
       var obj = JSON.parse(text);
-      if (!obj || typeof obj !== 'object') throw new Error('数据格式不正确');
-      if (!obj.courses && !obj.tasks && !obj.settings && !obj.plans && !obj.ledger &&
-          !obj.notes && !obj.diaries && !obj.events && !obj.activities) {
-        throw new Error('没有找到可恢复的数据');
-      }
-      var ds = defaultState();
       var prev = state;
-      // 以默认结构打底再逐项覆盖：defaultState 里的每个顶层键都保证存在，
-      // 以后新增顶层字段（如 shop）不会因为这份清单漏登记而在导入时凭空消失。
-      var next = Object.assign({}, ds, obj);
-      next.version = Number(obj.version) || 1;   // 交给 ensure() 里的 migrateSchema 升级
-      next.model = obj.model || 2;
-      next.semesters = (obj.semesters && obj.semesters.length) ? obj.semesters : [
-        Object.assign({ id: uid('sem') }, ds.semesters[0], obj.semester || {})
-      ];
-      next.currentSemesterId = obj.currentSemesterId || '';
-      next.grades = obj.grades || {};
-      next.periods = (obj.periods && obj.periods.length) ? obj.periods : ds.periods;
-      next.courses = obj.courses || [];
-      next.courseExceptions = Array.isArray(obj.courseExceptions) ? obj.courseExceptions : [];
-      next.tasks = obj.tasks || [];
-      next.taskSeq = obj.taskSeq || {};
-      next.settings = Object.assign({}, ds.settings, obj.settings || {});
-      next.pomodoro = Object.assign({}, ds.pomodoro, obj.pomodoro || {});
-      next.plans = obj.plans || [];
-      next.goals = Array.isArray(obj.goals) ? obj.goals : [];
-      next.achievements = obj.achievements || { done: {} };
-      next.ledger = obj.ledger || [];
-      next.notes = obj.notes || [];
-      // 日记特殊处理：同步码里根本没有 diaries 这个键。
-      // 如果是「文件备份」缺这个键，说明是老备份，保留本机日记；
-      // 如果明确给了数组（哪怕是空数组），就按给的来 —— 那是用户主动导入的完整备份。
-      next.diaries = Array.isArray(obj.diaries) ? obj.diaries : (prev && prev.diaries) || [];
-      next.taskArchive = Array.isArray(obj.taskArchive) ? obj.taskArchive : (prev && prev.taskArchive) || [];
-      next.events = obj.events || [];
-      next.activities = obj.activities || [];
-      next.meals = obj.meals || [];
-      next.sleeps = obj.sleeps || [];
-      next.sleepSession = null;   // 别人的计时不该跟着同步过来
-      next.usage = obj.usage || {};
-      next.shop = mergeShop(ds.shop, obj.shop);
-      // 旧备份没有 subtask 字段：逐项补齐，别让 Object.assign 把整个对象盖掉
-      next.settings.subtask = Object.assign({}, ds.settings.subtask, next.settings.subtask || {});
-      // 日记同理：旧备份没有 diary 设置，逐项补，不整块覆盖
-      next.settings.diary = Object.assign({}, ds.settings.diary, next.settings.diary || {});
+      var next = safeImportState(prev, obj);
       // 先挂上再校验（ensure 读的是模块级 state）；校验失败整体回滚，
       // 绝不让半成品状态留下来被 save() 落盘 —— 否则刷新后连启动都过不去。
       state = next;

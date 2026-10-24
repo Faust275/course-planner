@@ -2114,30 +2114,40 @@
       if (!file) return;
       var reader = new FileReader();
       reader.onload = function () {
+        var text = String(reader.result);
+        var d;
         try {
-          var obj = JSON.parse(String(reader.result));
-          var nc = (obj.courses || []).length;
-          var nt = (obj.tasks || []).length;
-          V.confirm({
-            title: '导入备份',
-            message: '将用备份中的 ' + nc + ' 门课程、' + nt + ' 条待办覆盖当前数据。当前数据无法恢复，确定继续吗？',
-            danger: true, okText: '覆盖导入'
-          }).then(function (ok) {
-            if (!ok) return;
-            Store.backupNow('导入备份前').then(function () {
-              try {
-                Store.importJSON(String(reader.result));
-                UI.toast('导入成功（已自动备份原数据）');
-                App.go('schedule');
-              } catch (err) {
-                // importJSON 内部失败会整体回滚，原数据原样还在
-                UI.toast('导入失败，已保留原数据：' + err.message, 'err');
-              }
-            });
-          });
+          d = Store.diffImport(text);
         } catch (e) {
-          UI.toast('文件不是有效的 JSON', 'err');
+          UI.toast(e.message === '没有找到可恢复的数据' ? e.message : '文件不是有效的 JSON', 'err');
+          return;
         }
+        // 覆盖前把「会变成什么样」摆出来，而不只是说「将用 X 门课覆盖」。
+        // 最容易吃亏的是「备份里没有的模块会被整个清空」，所以那句要单独顶到最前。
+        var msg = d.empty
+          ? '⚠️ 这份备份几乎是空的，导入后本机会被清空。覆盖前会自动备份一份，可以回滚。'
+          : (d.wipes.length
+              ? '⚠️ 有 ' + d.wipes.length + ' 类数据会被清空（' +
+                d.wipes.map(function (w) { return w.name; }).join('、') + '）。覆盖前会自动备份，可以回滚。'
+              : '覆盖前会自动备份当前数据，导入后可以在「备份与恢复」里回滚。');
+        V.confirm({
+          title: '导入备份 · 对比',
+          message: msg,
+          body: V.diffPanel(d),
+          danger: true, okText: '覆盖导入'
+        }).then(function (ok) {
+          if (!ok) return;
+          Store.backupNow('导入备份前').then(function () {
+            try {
+              Store.importJSON(text);
+              UI.toast('导入成功（已自动备份原数据）');
+              App.go('schedule');
+            } catch (err) {
+              // importJSON 内部失败会整体回滚，原数据原样还在
+              UI.toast('导入失败，已保留原数据：' + err.message, 'err');
+            }
+          });
+        });
       };
       reader.readAsText(file, 'utf-8');
     });
@@ -2335,18 +2345,20 @@
 
   function doImportSync(code, m) {
     unpackSync(code).then(function (json) {
-      var obj;
-      try { obj = JSON.parse(json); } catch (e) { throw new Error('内容不是有效的备份'); }
-      var parts = [];
-      if ((obj.courses || []).length) parts.push(obj.courses.length + ' 门课程');
-      if ((obj.tasks || []).length) parts.push(obj.tasks.length + ' 条待办');
-      if ((obj.plans || []).length) parts.push(obj.plans.length + ' 个计划');
-      if ((obj.ledger || []).length) parts.push(obj.ledger.length + ' 条账目');
-      if ((obj.notes || []).length) parts.push(obj.notes.length + ' 条灵感');
+      // 先算差异再问，而不是先问再算：用户点「覆盖同步」时应该已经知道
+      // 本机哪些东西会消失（精简档同步最典型——除了课表以外都被清掉）。
+      var d;
+      try { d = Store.diffImport(json); } catch (e) { throw new Error('内容不是有效的备份：' + e.message); }
+      var msg = d.empty
+        ? '⚠️ 这份同步内容几乎是空的，同步后本机会被清空。同步前会自动备份，可以回滚。'
+        : (d.wipes.length
+            ? '⚠️ 有 ' + d.wipes.length + ' 类数据会被清空（' +
+              d.wipes.map(function (w) { return w.name; }).join('、') + '）。同步前会自动备份，可以回滚。'
+            : '这台设备会被替换成上面这份内容。同步前会自动备份，可以回滚。');
       return V.confirm({
-        title: '同步到这台设备',
-        message: '将用这份备份' + (parts.length ? '（' + parts.join('、') + '）' : '') +
-                 '覆盖当前数据。这台设备上的现有内容会被替换，无法恢复。',
+        title: '同步到这台设备 · 对比',
+        message: msg,
+        body: V.diffPanel(d),
         danger: true, okText: '覆盖同步'
       }).then(function (ok) {
         if (!ok) return;

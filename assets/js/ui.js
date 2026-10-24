@@ -463,6 +463,71 @@
     });
   }
 
+  /**
+   * 覆盖前对比面板：把 Store.diffImport() 的结果渲染成「本机 → 导入后」的清单。
+   * 放在 UI 层是因为文件导入、同步码、二维码、WebDAV 四条路都要用同一张表。
+   * 只列有内容的模块；「会被清空」单独标红，那才是真正容易吃亏的地方。
+   */
+  function diffPanel(d) {
+    var box = el('div', { style: { fontSize: '12.5px', lineHeight: '1.9' } });
+
+    var head = el('div', {
+      style: {
+        display: 'flex', alignItems: 'baseline', gap: '6px',
+        paddingBottom: '6px', marginBottom: '4px',
+        borderBottom: '1px solid var(--line, #eee)', color: 'var(--text-3)'
+      }
+    }, [
+      el('span', { text: '本机 ' + d.totalBefore + ' 条' }),
+      el('span', { text: '→' }),
+      el('span', {
+        text: '导入后 ' + d.totalAfter + ' 条',
+        style: { fontWeight: '600', color: d.empty ? 'var(--red)' : 'var(--text-1)' }
+      })
+    ]);
+    box.appendChild(head);
+
+    var shown = 0;
+    d.rows.forEach(function (r) {
+      if (!r.before && !r.after) return;
+      shown++;
+      var wipe = r.before > 0 && r.after === 0;
+      var bits = [];
+      if (r.add) bits.push('+' + r.add);
+      if (r.gone) bits.push('-' + r.gone);
+      if (r.mod) bits.push('改 ' + r.mod);
+      if (wipe) bits.push('清空');
+
+      box.appendChild(el('div', {
+        style: { display: 'flex', alignItems: 'baseline', gap: '8px' }
+      }, [
+        el('span', {
+          text: r.name,
+          style: { flex: '0 0 44px', color: wipe ? 'var(--red)' : 'var(--text-2)' }
+        }),
+        el('span', {
+          text: r.before + ' → ' + r.after,
+          style: {
+            flex: '1', fontVariantNumeric: 'tabular-nums',
+            color: wipe ? 'var(--red)' : 'var(--text-1)'
+          }
+        }),
+        el('span', {
+          text: bits.join(' · '),
+          style: {
+            flex: '0 0 auto', fontSize: '11.5px',
+            color: wipe ? 'var(--red)' : (r.add || r.gone || r.mod ? 'var(--text-3)' : 'var(--text-4, #bbb)')
+          }
+        })
+      ]));
+    });
+
+    if (!shown) {
+      box.appendChild(el('div', { text: '两边都还没有内容', style: { color: 'var(--text-3)' } }));
+    }
+    return box;
+  }
+
   /* ---------- 表单构件 ---------- */
   function field(labelText, control, hint) {
     var children = [];
@@ -1135,7 +1200,7 @@
     cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,
-    modal: modal, confirm: confirm, showAchievement: showAchievement,
+    modal: modal, confirm: confirm, diffPanel: diffPanel, showAchievement: showAchievement,
     topClose: topClose,   // 关掉最上层弹窗（安卓返回键与遮罩点击复用）
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
