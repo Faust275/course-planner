@@ -7041,6 +7041,63 @@
       return { segments: sum.segments, idle: sum.idle, courses: courses, events: events };
     },
 
+    /* ===== 健康聚合（联动看板数据源） ===== */
+    /**
+     * 某天健康档案：把睡眠 / 活动 / 饮食 / 体重收敛成一个对象，
+     * 供健康看板与各模块联动读取。睡眠用「昨夜」（按醒来日归属到当天），复用 SleepModel 的质量算法。
+     */
+    dayHealth: function (dateStr) {
+      var SM = (typeof window !== 'undefined' && window.SleepModel) ||
+               (typeof global !== 'undefined' && global.SleepModel) || null;
+      var rec = this.sleepForDay(dateStr);                 // 昨夜（醒来日归属当天）
+      var night = rec && SM ? SM.normalizeNight(rec) : null;
+      var sleepQ = SM ? SM.qualityFactor(night) : 0.7;     // 0.3–1 睡眠质量系数
+      var sleepMin = night ? (night.total || 0)
+                           : (state.settings.trackSleep ? this.sleepMinutes(dateStr) : 0);
+
+      var metric = this.getMetric(dateStr);
+      var steps = metric ? Number(metric.steps) || 0 : 0;
+      var stepGoal = Number(state.settings.stepGoal) || 8000;
+
+      var ms = state.settings.trackMeal ? this.mealSummary(dateStr) : { kcal: 0 };
+      var kcalIn = ms.kcal || 0;
+      var tdee = this.estimateTDEE();
+      var tdeeVal = tdee ? tdee.tdee : null;
+      var netKcal = (tdeeVal != null) ? Math.round(kcalIn - tdeeVal) : null;
+
+      var prof = (this.dietConfig() && this.dietConfig().profile) || {};
+      var weight = Number(prof.weight) || null;
+      var sleepMinH = (state.settings.health && state.settings.health.sleepMinH) || 6;
+
+      return {
+        date: dateStr,
+        sleepQ: sleepQ, sleepMin: sleepMin, hasSleep: !!rec,
+        steps: steps, stepGoal: stepGoal,
+        stepPct: stepGoal > 0 ? Math.min(200, Math.round(steps / stepGoal * 100)) : 0,
+        kcalIn: kcalIn, tdee: tdeeVal, netKcal: netKcal,
+        weight: weight, sleepMinH: sleepMinH,
+        sleepMet: sleepMin >= sleepMinH * 60
+      };
+    },
+
+    /** 最近 n 天（含今天）的健康周报聚合，用于看板「本周达成」 */
+    healthWeek: function (n) {
+      n = n || 7;
+      var out = { days: n, sleepMetNights: 0, activeDays: 0, totalSteps: 0,
+                  sumQ: 0, hasQ: 0, avgQ: 0 };
+      var today = DateUtil.today();
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var h = this.dayHealth(ds);
+        if (h.sleepMet) out.sleepMetNights++;
+        if (h.stepPct >= 100) out.activeDays++;
+        out.totalSteps += h.steps;
+        if (h.hasSleep) { out.sumQ += h.sleepQ; out.hasQ++; }
+      }
+      out.avgQ = out.hasQ ? Math.round(out.sumQ / out.hasQ * 100) / 100 : 0;
+      return out;
+    },
+
     /* ===== 设置 ===== */
     updateSemester: function (data) {
       var cur = this.currentSemester();

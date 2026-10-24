@@ -3,11 +3,12 @@
 //       页面内切换时地址栏同步、手改地址切视图、manifest / shortcuts / 图标、
 //       设置页「桌面与快捷」分区与复制链接、file:// 单文件模式下不挂 manifest 且 0 报错
 import { chromium } from 'playwright';
-import { pathToFileURL } from 'node:url';
 
 const BASE = process.env.URL || 'http://localhost:8301/index.html';
+// 不能拿 URL.pathname 再喂给 pathToFileURL：Windows 下 pathname 是 `/C:/Users/...`，
+// 会被当成相对路径拼成 file:///C:/C:/Users/...（Linux 上恰好正确）。直接取 href 自带盘符。
 const FILE_URL = process.env.FILE_URL ||
-  pathToFileURL(new globalThis.URL('./index.html', import.meta.url).pathname).href;
+  new globalThis.URL('./index.html', import.meta.url).href;
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 1280, height: 980 } });

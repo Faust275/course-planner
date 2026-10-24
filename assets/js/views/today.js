@@ -86,6 +86,37 @@
       ]);
       root.appendChild(hero);
 
+      /* ---------- 健康联动快捷条（精力 / 净热量 / 步数） ---------- */
+      (function () {
+        var hh = Store.dayHealth(todayStr);
+        var eInfo = hh.sleepQ >= 0.8 ? ['充沛', '#22c55e']
+                   : hh.sleepQ >= 0.65 ? ['良好', '#84cc16']
+                   : hh.sleepQ >= 0.5 ? ['一般', '#eab308']
+                   : ['低电量', '#ef4444'];
+        var netTxt = hh.netKcal != null
+          ? ('净热量 ' + (hh.netKcal > 0 ? '+' : '') + hh.netKcal + ' kcal') : '净热量 —';
+        var stepTxt = hh.steps >= hh.stepGoal
+          ? ('步数达标 ' + hh.steps) : ('步数 ' + hh.steps + '/' + hh.stepGoal);
+        root.appendChild(el('div', {
+          class: 'card',
+          style: { padding: '12px 14px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+            V.svg(V.icons.moon, 16),
+            el('span', { style: { fontWeight: '700', color: eInfo[1] }, text: eInfo[0] }),
+            el('span', { style: { fontSize: '11px', color: 'var(--text-3)' }, text: '精力' })
+          ]),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+            V.svg(V.icons.drop, 16),
+            el('span', { style: { fontSize: '13px' }, text: netTxt })
+          ]),
+          el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+            V.svg(V.icons.heart, 16),
+            el('span', { style: { fontSize: '13px' }, text: stepTxt })
+          ])
+        ]));
+      })();
+
       /* ---------- 🎯 心愿干员到货备考动态 ---------- */
       (function () {
         if (!Store.pomodoro || Store.pomodoro.mode !== 'gacha' || !Store.wishlistForecast) return;
