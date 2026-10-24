@@ -45,7 +45,7 @@ const appGlobals = {
   compareRange: 'writable', __CourseDialog: 'writable', CourseException: 'writable',
   Daily: 'writable', DailyCards: 'writable', DateUtil: 'writable', diariesSorted: 'writable',
   diaryDatePrompt: 'writable', diaryOn: 'writable', DiaryPane: 'writable', eachDate: 'writable',
-  EventDetail: 'writable', EventDialog: 'writable', Gacha: 'writable', GoalsPane: 'writable',
+  EventDetail: 'writable', EventDialog: 'writable', Gacha: 'writable',   GoalsPane: 'writable', HealthConnect: 'writable',
   GradeDialog: 'writable', hasTag: 'writable', heatLevel: 'writable', ICS: 'writable',
   isChild: 'writable', ledgerCat: 'writable', LEDGER_CATS: 'writable', LEDGER_RANGES: 'writable',
   __LessonDialog: 'writable', Lunar: 'writable', MealDialog: 'writable', mealType: 'writable',

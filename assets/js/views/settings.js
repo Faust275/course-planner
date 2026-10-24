@@ -596,6 +596,7 @@
 
         recCard.appendChild(switchRow('饮食记录', '记录每餐内容、消费与热量，并在象限中统计', 'trackMeal'));
         recCard.appendChild(switchRow('睡眠记录', '记录入睡与醒来时间，并统计睡眠时长', 'trackSleep'));
+        recCard.appendChild(switchRow('健康联动自动同步', '开启后：启动 App、每 3 小时、打开记录弹窗时自动从 Health Connect 拉取睡眠；关闭则只保留手动「从健康联动导入」', 'healthAutoSync'));
         root.appendChild(recCard);
 
         /* ---- 健康提示（阈值用户自定，可关） ---- */

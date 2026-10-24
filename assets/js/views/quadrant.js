@@ -113,6 +113,11 @@
         rightCol.appendChild(self.sleepCard(dateStr));
       }
 
+      /* ================= 健康联动活动量 ================= */
+      if (Store.settings.healthAutoSync) {
+        rightCol.appendChild(self.activityHealthCard(dateStr));
+      }
+
       /* ================= 饮食 ================= */
       if (Store.settings.trackMeal) {
         rightCol.appendChild(self.mealCard(dateStr));
@@ -242,6 +247,48 @@
           el('span', { class: 'rec-val', text: TimeUtil.humanMin(dur) })
         ]));
       });
+      return card;
+    },
+
+    hcMetricItem: function (icon, label, value, unit) {
+      return el('div', { style: { flex: '1', minWidth: '0', textAlign: 'center' } }, [
+        el('div', { style: { fontSize: '20px', lineHeight: '1.2' }, text: icon }),
+        el('div', { style: { fontSize: '18px', fontWeight: '700', color: 'var(--text-1)', marginTop: '2px' }, text: value }),
+        el('div', { style: { fontSize: '11px', color: 'var(--text-3)' }, text: label + (unit ? '（' + unit + '）' : '') })
+      ]);
+    },
+
+    /* ---------- 健康联动活动量卡（步数 / 活动消耗 / 距离） ---------- */
+    activityHealthCard: function (dateStr) {
+      var self = this;
+      var card = el('div', { class: 'card', style: { padding: '14px 16px', marginTop: '14px' } });
+      card.appendChild(el('div', { class: 'section-title' }, [
+        '今日活动',
+        el('span', { class: 'q-count', text: '健康联动' }),
+        el('span', {
+          class: 'more', style: { cursor: 'pointer' },
+          onclick: function () { App.go('activity'); },
+          text: '详情 →'
+        })
+      ]));
+      var m = Store.getMetric(dateStr) || (global.HealthConnect ? HealthConnect.getMetricForDate(dateStr) : null);
+      if (!m || (!m.steps && !m.calories && !m.distance)) {
+        card.appendChild(el('div', { class: 'q-empty', text: '尚未获取到数据。在「记录睡眠」中授权健康联动，并确认小米运动健康已开启「同步到 Health Connect」后，步数、活动消耗与距离会在此自动显示。' }));
+        // 今日且无缓存时静默补拉一次（避免重复触发）
+        var todayStr = DateUtil.toStr(DateUtil.today());
+        if (dateStr === todayStr && Store.settings.healthAutoSync && global.HealthConnect &&
+            !HealthConnect.getCachedMetrics() && !self._hcFetching) {
+          self._hcFetching = true;
+          HealthConnect.autoSync().then(function () { self._hcFetching = false; self.render(); })
+            .catch(function () { self._hcFetching = false; });
+        }
+        return card;
+      }
+      card.appendChild(el('div', { style: { display: 'flex', gap: '8px', marginTop: '4px' } }, [
+        self.hcMetricItem('👟', '步数', (m.steps || 0).toLocaleString(), '步'),
+        self.hcMetricItem('🔥', '活动消耗', (m.calories || 0).toLocaleString(), '千卡'),
+        self.hcMetricItem('📏', '距离', (m.distance || 0).toLocaleString(), '米')
+      ]));
       return card;
     },
 
@@ -701,7 +748,8 @@
       var r = id ? Store.getSleep(id) : null;
       var quality = r ? r.quality : 'normal';
       var saveDate = dateStr;     // 截图带日期时可能改写
-      var imported = false;       // 是否来自截图导入
+      var imported = false;       // 是否来自截图/健康联动导入
+      var importSource = r ? r.source : 'manual';  // 导入来源：shot | hc
 
       function numOrNull(v) {
         v = String(v == null ? '' : v).trim();
@@ -758,7 +806,7 @@
       fEnd.addEventListener('input', refresh);
       refresh();
 
-      function prefill(rec) {
+      function prefill(rec, src) {
         if (rec.start) fStart.value = rec.start;
         if (rec.end) fEnd.value = rec.end;
         if (rec.quality) setQuality(rec.quality);
@@ -772,6 +820,7 @@
         stageBox.style.display = (rec.deep != null || rec.light != null || rec.rem != null ||
           rec.awake != null || rec.efficiency != null || rec.awakenings != null) ? '' : 'none';
         imported = true;
+        importSource = src || (r && r.source) || 'shot';
         refresh();
       }
 
@@ -806,7 +855,7 @@
               UI.toast('没从截图里读到睡眠数据' + (errs.length ? '（' + errs.length + ' 张识别失败）' : ''), 'err');
               return;
             }
-            prefill(rec);
+            prefill(rec, 'shot');
             UI.toast('已从 ' + results.length + ' 张截图填入，请核对后保存' + (rec.date ? '（日期 ' + rec.date + '）' : ''));
             return;
           }
@@ -841,6 +890,51 @@
         input.click();
       }
 
+      // 从健康联动（Health Connect）读取最近睡眠并回填本弹窗
+      function pickHealth() {
+        if (!global.HealthConnect) { UI.toast('当前版本未集成健康联动', 'err'); return; }
+        UI.toast('正在连接健康联动…');
+        HealthConnect.available().then(function (ok) {
+          if (!ok) {
+            UI.toast('未检测到 Health Connect，请先安装并在小米运动健康开启同步，或改用手环截图导入', 'err');
+            return;
+          }
+          return HealthConnect.request().then(function () {
+            return HealthConnect.read(14);
+          }).then(function (res) {
+            var sessions = (res && res.sessions) || [];
+            var latestRec = HealthConnect.latest(sessions);
+            if (!latestRec) { UI.toast('最近 14 天没有睡眠数据', 'err'); return; }
+            prefill(HealthConnect.toSleepRecord(latestRec), 'hc');
+            UI.toast('已从健康联动填入，请核对后保存（日期 ' + latestRec.date + '）');
+          });
+        }).catch(function (e) {
+          UI.toast('健康联动失败：' + (e && e.message ? e.message : e), 'err');
+        });
+      }
+
+      // 选项 A：打开弹窗即自动回填（仅新建、不覆盖已有记录）
+      // 优先用 App 启动时静默拉取的缓存；没有缓存时再静默补拉一次。
+      // 未授权会走到 catch（原生端已吞掉异常），不会弹框，保留手动按钮即可。
+      // 受设置「健康联动自动同步」控制：关闭则不自动回填，仅保留手动「从健康联动导入」。
+      function autoFillFromHealth() {
+        if (isEdit || !global.HealthConnect) return;
+        if (Store.settings && Store.settings.healthAutoSync === false) return;
+        var apply = function (rec) {
+          if (!rec) return;
+          prefill(rec, 'hc');
+          UI.toast('已自动从健康联动获取（' + rec.date + '），请核对后保存');
+        };
+        var cached = HealthConnect.getCached();
+        if (cached) { apply(cached); return; }
+        HealthConnect.available().then(function (ok) {
+          if (!ok) return;
+          return HealthConnect.read(14).then(function (res) {
+            apply(HealthConnect.toSleepRecord(HealthConnect.latest((res && res.sessions) || [])));
+          });
+        }).catch(function () {});
+      }
+
       var m = V.modal({
         title: isEdit ? '编辑睡眠' : '记录睡眠',
         body: [
@@ -868,6 +962,10 @@
           }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
           el('button', {
             class: 'btn', style: { marginLeft: 'auto' },
+            onclick: function () { pickHealth(); }
+          }, ['从健康联动导入']),
+          el('button', {
+            class: 'btn',
             onclick: function () { pickSleepShot(); }
           }, [V.svg(V.icons.camera, 16), '从截图导入']),
           el('button', {
@@ -877,7 +975,7 @@
                 date: saveDate, start: fStart.value, end: fEnd.value, quality: quality, note: fNote.value,
                 deep: numOrNull(fDeep.value), light: numOrNull(fLight.value), rem: numOrNull(fRem.value),
                 awake: numOrNull(fAwake.value), efficiency: numOrNull(fEff.value), awakenings: numOrNull(fAwakeCount.value),
-                source: imported ? 'shot' : (r && r.source) || 'manual'
+                source: imported ? importSource : (r && r.source) || 'manual'
               };
               if (!d.start || !d.end) { UI.toast('请填写时间', 'err'); return; }
               if (isEdit) Store.updateSleep(id, d); else Store.addSleep(d);
@@ -887,6 +985,8 @@
           })
         ])
       });
+      // 选项 A：弹窗打开即尝试自动回填（来自 App 启动的静默缓存或即时补拉）
+      autoFillFromHealth();
     }
   };
 

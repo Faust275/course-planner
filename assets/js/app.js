@@ -328,6 +328,54 @@
     window.Pet.init();
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
     if (global.Remind) Remind.start();
+    // 选项 A + B：健康联动自动同步
+    // - 打开 App 静默拉取最近一晚睡眠（已授权才干活，绝不弹权限框）；
+    // - 选项 B：每 3 小时（且页面可见时）再静默拉一次，并把「新出现的那一晚」自动写进睡眠记录，
+    //   从后台切回前台时也补一次。已有手动/截图记录的同日不会被覆盖。
+    // - 受设置「健康联动自动同步」(Store.settings.healthAutoSync) 控制：关闭则全部跳过，仅保留手动按钮。
+    if (global.HealthConnect) {
+      // 把一条 HC 睡眠记录并入本地睡眠日志；返回 'added' | 'updated' | false（无需处理）
+      function persistHealthSleep(rec) {
+        if (!rec || !rec.date) return false;
+        var list = (Store.sleeps || []).filter(function (s) { return s.date === rec.date; });
+        var hc = list.filter(function (s) { return s.source === 'hc'; })[0];
+        if (hc) {
+          // 仅在数据变化时更新，避免每次定时都触发 emit / 提示
+          if (hc.start === rec.start && hc.end === rec.end &&
+              hc.total === rec.total && hc.awake === rec.awake) return false;
+          Store.updateSleep(hc.id, rec);
+          return 'updated';
+        }
+        if (list.length) return false;   // 当日已有非 HC 记录（手动/截图），不覆盖
+        Store.addSleep(rec);
+        return 'added';
+      }
+      // 把每日活动量数组并回本地（Store.addMetrics 内部按「同日已有手动记录则不覆盖」处理，且只 emit 一次）
+      function persistHealthMetrics(recs) {
+        if (!recs || !recs.length) return;
+        Store.addMetrics(recs);
+      }
+      function syncHealthOnce() {
+        if (Store.settings && Store.settings.healthAutoSync === false) return;   // 开关关 -> 全部跳过
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        HealthConnect.autoSync().then(function (ok) {
+          if (!ok) return;
+          var rec = HealthConnect.getCached();
+          if (rec) {
+            var r = persistHealthSleep(rec);
+            if (r === 'added') UI.toast('已自动同步睡眠（' + rec.date + '）', 'ok');
+          }
+          var recs = HealthConnect.getCachedMetrics();
+          if (recs && recs.length) persistHealthMetrics(recs);
+        }).catch(function () {});
+      }
+      syncHealthOnce();                            // 启动即拉一次（仅当开关开启）
+      var HEALTH_SYNC_MS = 3 * 3600 * 1000;        // 3 小时
+      setInterval(syncHealthOnce, HEALTH_SYNC_MS);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') syncHealthOnce();
+      });
+    }
     if (global.Theme) { Theme.apply(); Theme.applyBackground(); }
     applySidebarMini();
     sortViews();

@@ -181,6 +181,8 @@
       // —— 日程 / 象限 ——
       settings: {
         trackMeal: true, trackSleep: true, statsOn: true,   // statsOn：是否开启「统计」功能（待办的统计分页 + 今日卡片）
+        healthAutoSync: true,   // 健康联动自动同步：启动时/定时/打开记录弹窗时自动从 Health Connect 拉取睡眠（关闭则仅保留手动「从健康联动导入」按钮）
+        stepGoal: 8000,         // 每日步数目标（「我的活动」界面进度用）
         showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
@@ -285,6 +287,7 @@
       activities: [],  // 活动记录
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
+      metrics: [],     // 健康联动每日活动量：{ id, date, steps, calories, distance, source }
       sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
@@ -2343,6 +2346,7 @@
     get activities() { return state.activities; },
     get meals() { return state.meals; },
     get sleeps() { return state.sleeps; },
+    get metrics() { return state.metrics; },
     get sleepSession() { return state.sleepSession || null; },
 
     init: async function () {
@@ -2497,6 +2501,8 @@
       if (!state.activities) state.activities = [];
       if (!state.meals) state.meals = [];
       if (!state.sleeps) state.sleeps = [];
+      // 每日活动量（健康联动 / 手动）：老档没有这个字段，补空数组，避免下游 filter 抛错
+      if (!Array.isArray(state.metrics)) state.metrics = [];
       // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
       state.sleeps.forEach(function (s) {
         ['deep', 'light', 'rem', 'awake', 'efficiency', 'awakenings'].forEach(function (k) {
@@ -4260,6 +4266,67 @@
     sleepsOf: function (dateStr) {
       return state.sleeps.filter(function (r) { return r.date === dateStr; })
         .sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
+    },
+
+    /* ---------- 健康联动每日活动量（步数 / 卡路里 / 距离） ---------- */
+    addMetric: function (data) {
+      var date = data.date || DateUtil.toStr(DateUtil.today());
+      var r = {
+        id: uid('m'),
+        date: date,
+        steps: data.steps != null ? Number(data.steps) : 0,
+        calories: data.calories != null ? Number(data.calories) : 0,
+        distance: data.distance != null ? Number(data.distance) : 0,
+        source: data.source || 'hc'   // hc | manual
+      };
+      // 同日已有记录：hc 源则更新数值；手动源则保留手动（不被自动同步覆盖）
+      var exist = state.metrics.filter(function (m) { return m.date === date; })[0];
+      if (exist) {
+        if (exist.source === 'hc' || r.source === 'manual') {
+          exist.steps = r.steps; exist.calories = r.calories; exist.distance = r.distance;
+          exist.source = r.source;
+        }
+        this.emit();
+        return exist;
+      }
+      state.metrics.push(r);
+      this.bumpUsage('healthMetric');
+      this.emit();
+      return r;
+    },
+
+    /** 批量并入多天活动量：只 emit 一次（自动同步一次会带 14 天，逐条 emit 会连翻 14 次） */
+    addMetrics: function (list) {
+      if (!list || !list.length) return 0;
+      var changed = 0;
+      list.forEach(function (data) {
+        if (!data || !data.date) return;
+        var steps = data.steps != null ? Number(data.steps) : 0;
+        var calories = data.calories != null ? Number(data.calories) : 0;
+        var distance = data.distance != null ? Number(data.distance) : 0;
+        var source = data.source || 'hc';
+        var exist = state.metrics.filter(function (m) { return m.date === data.date; })[0];
+        if (exist) {
+          // 手动记录优先：非手动来源不覆盖手动；值没变也不写，避免无谓 emit
+          if (exist.source !== 'hc' && source !== 'manual') return;
+          if (exist.steps === steps && exist.calories === calories && exist.distance === distance) return;
+          exist.steps = steps; exist.calories = calories; exist.distance = distance;
+          exist.source = source;
+          changed++;
+          return;
+        }
+        state.metrics.push({
+          id: uid('m'), date: data.date,
+          steps: steps, calories: calories, distance: distance, source: source
+        });
+        changed++;
+      });
+      if (changed) { this.bumpUsage('healthMetric'); this.emit(); }
+      return changed;
+    },
+
+    getMetric: function (dateStr) {
+      return state.metrics.filter(function (m) { return m.date === dateStr; })[0] || null;
     },
 
     /** 睡眠总分钟（按实际时刻归属：跨午夜的部分算到后一天） */

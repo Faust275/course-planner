@@ -152,8 +152,11 @@ check('断网时回退到缓存（应用能打开）', offlineOk);
 await ctx.setOffline(false);
 
 // 「发新 SW」：改 sw.js 触发字节对比 → 新 SW 安装接管 → controllerchange → Toast
+// 注意：不要写死版本号（sw.js 的 CACHE 会随迭代变化），直接改 CACHE 常量的值即可
 const swSrc = readFileSync(join(TMP, 'sw.js'), 'utf8');
-writeFileSync(join(TMP, 'sw.js'), swSrc.replace("cp-app-v1", "cp-app-v2"));
+const bumped = swSrc.replace(/const CACHE = '[^']*';/, "const CACHE = 'cp-app-e2e-" + Date.now() + "';");
+if (bumped === swSrc) throw new Error('sw.js 里没找到 `const CACHE = \'...\';`，无法模拟新版 SW');
+writeFileSync(join(TMP, 'sw.js'), bumped);
 await pg.reload({ waitUntil: 'networkidle' });
 
 let toastShown = true;

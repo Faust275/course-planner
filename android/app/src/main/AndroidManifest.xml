@@ -33,9 +33,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- 健康联动授权回跳：Health Connect 会在授权结束后回跳到此 Activity -->
+        <activity
+            android:name="androidx.health.platform.client.permission.RequestHealthPermissionsActivity"
+            android:exported="true"
+            android:permission="android.permission.health.READ_HEALTH_DATA">
+            <intent-filter>
+                <action android:name="androidx.health.platform.client.action.GET_PERMISSIONS" />
+            </intent-filter>
+        </activity>
     </application>
 
-    <!-- Permissions -->
+    <!-- 健康联动（Health Connect）：读取睡眠数据 -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

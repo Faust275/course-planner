@@ -1,8 +1,12 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 android {
     namespace = "com.faust275.courseplanner"
     compileSdk = rootProject.ext.compileSdkVersion
+    kotlinOptions {
+        jvmTarget = '21'
+    }
     defaultConfig {
         applicationId "com.faust275.courseplanner"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -40,6 +44,11 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // 健康联动（Health Connect）：读取小米手环等写入系统的睡眠数据
+    implementation "androidx.health.connect:connect-client:1.1.0"
+    // 协程：插件用 Kotlin 协程调用 Health Connect 的 suspend API
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
 }
 
 apply from: 'capacitor.build.gradle'
