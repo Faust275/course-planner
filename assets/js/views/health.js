@@ -167,6 +167,7 @@
       root.appendChild(this.socialJetLagCard());
       root.appendChild(this.lowSleepCard());
       root.appendChild(this.focusCorrCard());
+      root.appendChild(this.moodSleepCard());
     },
 
     /* ---------- 1) 精力预测 ---------- */
@@ -756,6 +757,57 @@
         stat(goodTxt, '睡眠好(≥70%)日均专注', 'var(--green)'),
         stat(badTxt, '睡眠差(<50%)日均专注', 'var(--red)')
       ]));
+      return c;
+    },
+
+    /* ---------- 睡眠 × 心情（日记心情与当夜质量） ---------- */
+    moodSleepCard: function () {
+      var r = Store.moodSleepCorr(60);
+      var c = card([sectionTitle(V.icons.sparkle, '睡眠 × 心情')]);
+
+      function hm(min) {
+        if (min == null) return '—';
+        var h = Math.floor(min / 60), m = Math.round(min % 60);
+        return h + ' 小时' + (m ? ' ' + m + ' 分' : '');
+      }
+
+      if (!r.has) {
+        c.appendChild(el('div', {
+          style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.75' },
+          text: '需要「当天既有睡眠记录、又标了心情的日记」≥ ' + (r.need || 7) +
+                ' 天才能看出关系（当前 ' + (r.n || 0) + ' 天）。写完日记顺手点个心情，攒几天就有了。'
+        }));
+        return c;
+      }
+
+      var rColor = r.r >= 0.3 ? '#22c55e' : (r.r >= 0 ? '#eab308' : '#ef4444');
+      var rText = r.r >= 0.5 ? '强正相关' : (r.r >= 0.3 ? '中等正相关' : (r.r >= 0 ? '弱正相关' : '负相关'));
+      c.appendChild(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800', color: rColor }, text: (r.r > 0 ? '+' : '') + r.r }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: 'Pearson 相关系数 · ' + rText + ' · 样本 ' + r.n + ' 天' })
+      ]));
+
+      // 睡眠 → 心情：睡好和睡差的那几天，平均心情差多少
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(r.moodGood == null ? '—' : r.moodGood + ' / 5',
+          '睡好(≥70%)当天心情', 'var(--green)'),
+        stat(r.moodBad == null ? '—' : r.moodBad + ' / 5',
+          '睡差(<50%)当天心情', 'var(--red)')
+      ]));
+
+      // 心情 ← 睡眠：心情好和心情差的那几天，前一晚各睡了多久
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(hm(r.sleepHappy), '心情好(≥4) 前一夜', 'var(--primary)'),
+        stat(hm(r.sleepLow), '心情差(≤2) 前一夜', 'var(--text-2)')
+      ]));
+
+      c.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: '配的是「今早醒来那一夜」——晚上写日记时，影响你的是当天早上的睡眠。' +
+              '样本 ' + r.n + ' 天，' + (r.n < 21 ? '还不算多，先当参考。' : '已够看出点眉目。') +
+              '相关不等于因果：也可能是「这周本来就难受」同时让你睡不好、心情差。'
+      }));
       return c;
     }
   };

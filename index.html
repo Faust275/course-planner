@@ -6045,7 +6045,7 @@ window.AK_OPS = [
         healthAutoSync: true,   // 健康联动自动同步：启动时/定时/打开记录弹窗时自动从 Health Connect 拉取睡眠（关闭则仅保留手动「从健康联动导入」按钮）
         stepGoal: 8000,         // 每日步数目标（「我的活动」界面进度用）
         showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
-        statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
+        statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true, health: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         // 健康看板总开关：默认关。装完只问一次（asked），没关联健康数据就不占导航位置。
         // 注意别和上面的 health（今日健康提示）混为一谈。
@@ -8316,7 +8316,7 @@ window.AK_OPS = [
       if (state.settings.showWeekend == null) state.settings.showWeekend = true;
       if (state.settings.statsOn == null) state.settings.statsOn = true;
       state.settings.statsWidgets = Object.assign(
-        { time: true, curve: true, sources: true, spend: true, course: true }, state.settings.statsWidgets || {});
+        { time: true, curve: true, sources: true, spend: true, course: true, health: true }, state.settings.statsWidgets || {});
       state.settings.health = Object.assign(
         { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, state.settings.health || {});
       if (!state.settings.nav) state.settings.nav = ds.settings.nav;
@@ -13571,6 +13571,70 @@ window.AK_OPS = [
       };
     },
 
+    /**
+     * 日记心情 × 睡眠质量。
+     *
+     * 配对口径：日记日期 D 记的心情，配「醒来日是 D」的那一夜。
+     * 也就是说——晚上写日记时，你写的是「今天（从今早这副身体开始）过得怎么样」，
+     * 影响的是今早醒来那一次睡眠。反过来配「当晚」会把还没发生的睡眠算进去。
+     *
+     * 两个方向都返回，因为它们回答的是不同问题：
+     *   · moodGood / moodBad —— 睡好和睡差时，心情差多少（睡眠 → 心情）
+     *   · sleepHappy / sleepLow —— 心情好和心情差的那几天，前一晚各睡多久（心情 ← 睡眠）
+     *
+     * @param {number} n 回看天数，默认 60（日记不是每天都写，窗口给宽一点）
+     */
+    moodSleepCorr: function (n) {
+      n = n || 60;
+      var today = DateUtil.today();
+      var score = {};
+      MOODS.forEach(function (m, i) { score[m.key] = 5 - i; });   // great=5 … low=1
+
+      var moodByDate = {};
+      (state.diaries || []).forEach(function (d) {
+        if (d && d.date && d.mood && score[d.mood] != null) moodByDate[d.date] = score[d.mood];
+      });
+
+      var pairs = [];
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        if (moodByDate[ds] == null) continue;
+        var st = this.nightStats(ds);            // 醒来日 = 日记当天
+        if (!st || st.q == null) continue;
+        pairs.push({ m: moodByDate[ds], q: st.q, min: st.total || 0 });
+      }
+
+      var NEED = 7;
+      if (pairs.length < NEED) return { has: false, n: pairs.length, need: NEED };
+
+      var k = pairs.length;
+      var mm = pairs.reduce(function (s, p) { return s + p.m; }, 0) / k;
+      var mq = pairs.reduce(function (s, p) { return s + p.q; }, 0) / k;
+      var cov = 0, vm = 0, vq = 0;
+      pairs.forEach(function (p) {
+        var dm = p.m - mm, dq = p.q - mq;
+        cov += dm * dq; vm += dm * dm; vq += dq * dq;
+      });
+      var r = (vm && vq) ? cov / Math.sqrt(vm * vq) : 0;
+
+      var avg = function (arr, key) {
+        return arr.length ? Math.round(arr.reduce(function (s, p) { return s + p[key]; }, 0) / arr.length * 100) / 100 : null;
+      };
+      var good = pairs.filter(function (p) { return p.q >= 0.7; });
+      var bad = pairs.filter(function (p) { return p.q < 0.5; });
+      var happy = pairs.filter(function (p) { return p.m >= 4; });
+      var low = pairs.filter(function (p) { return p.m <= 2; });
+
+      return {
+        has: true, n: k,
+        r: Math.round(r * 100) / 100,
+        moodAll: Math.round(mm * 100) / 100,
+        moodGood: avg(good, 'm'), moodBad: avg(bad, 'm'),
+        sleepHappy: avg(happy, 'min'), sleepLow: avg(low, 'min'),
+        nGood: good.length, nBad: bad.length, nHappy: happy.length, nLow: low.length
+      };
+    },
+
     /* ===== 设置 ===== */
     updateSemester: function (data) {
       var cur = this.currentSemester();
@@ -17542,7 +17606,11 @@ window.DragGesture = (function () {
       sound: true,
       exams: true,   // 导出的日历里含考试
       events: true,  // 含重要日程
-      taskDue: true  // 待办到期（已逾期 / 今日到期）页面内提醒
+      taskDue: true, // 待办到期（已逾期 / 今日到期）页面内提醒
+      bedtime: false,      // 就寝提醒：默认关，得自己开
+      bedtimeAt: '23:30',  // 默认目标就寝时刻
+      bedtimeNeed: 7.5,    // 目标睡眠时长（小时）
+      bedtimeAuto: true    // 明早有课就自动往前挪
     };
   }
 
@@ -17844,6 +17912,87 @@ window.DragGesture = (function () {
     }
   }
 
+  /* ==========================================================
+   * 就寝提醒：和课表联动——明早有课，就今晚早点躺
+   * ========================================================== */
+
+  /** 明早第一节。放假或没课返回 { rest:true }。 */
+  function tomorrowFirstLesson() {
+    var tomorrow = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), 1));
+    var hol = global.HolidayCN && global.HolidayCN.lookup ? global.HolidayCN.lookup(tomorrow) : null;
+    if (hol && hol.type === 'holiday') {
+      return { rest: true, date: tomorrow, why: hol.name ? (hol.name + '放假') : '明天放假' };
+    }
+    var list = [];
+    try { list = Store.coursesOnDate ? Store.coursesOnDate(tomorrow) : []; } catch (e) { list = []; }
+    var best = null;
+    list.forEach(function (c) {
+      var ct = Store.courseTime ? Store.courseTime(c) : null;
+      var m = ct && ct.start ? timeToMin(ct.start) : null;
+      if (m == null) return;
+      if (!best || m < best.min) best = { min: m, start: ct.start, name: c.name };
+    });
+    return { rest: !best, date: tomorrow, first: best };
+  }
+
+  /** 把凌晨的时刻算成「同一晚的延续」，方便和晚上时刻比大小（01:20 → 1520） */
+  function eveningMin(m) { return m < 12 * 60 ? m + 24 * 60 : m; }
+
+  function minToHHMM(m) {
+    m = ((Math.round(m) % 1440) + 1440) % 1440;
+    var h = Math.floor(m / 60), mm = m % 60;
+    return (h < 10 ? '0' + h : h) + ':' + (mm < 10 ? '0' + mm : mm);
+  }
+
+  /**
+   * 今晚建议几点躺下。
+   *   · 默认就是设置里的就寝时刻；
+   *   · 明早第一节有课 → 从「上课时刻 − 40 分钟（起床洗漱）」倒推，
+   *     再减「目标睡眠时长 + 30 分钟入睡缓冲」；
+   *   · 只往早里推，不往晚里推——晚推等于鼓励熬夜。
+   */
+  function bedtimePlan(o) {
+    o = o || opts();
+    var need = Number(o.bedtimeNeed) > 0 ? Number(o.bedtimeNeed) : 7.5;
+    var base = timeToMin(o.bedtimeAt);
+    if (base == null) base = 23 * 60 + 30;
+
+    var t = tomorrowFirstLesson();
+    var plan = {
+      min: base, hhmm: minToHHMM(base), need: need, auto: false,
+      tomorrow: t, reason: t.rest ? (t.why || '明天没课') : ''
+    };
+    if (o.bedtimeAuto === false || !t.first) return plan;
+
+    var target = (t.first.min - 40) - Math.round(need * 60 + 30);
+    plan.reason = '明早 ' + t.first.start + ' 有「' + t.first.name + '」';
+    if (eveningMin(target) < eveningMin(base) && eveningMin(target) >= 20 * 60) {
+      plan.min = target;
+      plan.hhmm = minToHHMM(target);
+      plan.auto = true;
+    }
+    return plan;
+  }
+
+  /**
+   * 到点提醒一次。一晚只提醒一次，不问第二遍——
+   * 这个模块的定位是「兜底」，不是闹钟，也不是催命。
+   */
+  function checkBedtime(o, dk, nowMin) {
+    if (!o.bedtime) return;
+    if (nowMin >= 4 * 60 && nowMin < 19 * 60) return;      // 白天不唠叨
+    var plan = bedtimePlan(o);
+    if (eveningMin(nowMin) < plan.min) return;
+    var key = dk + '|bedtime';
+    if (fired[key]) return;
+    fired[key] = 1;
+    var txt = '该睡了：建议 ' + plan.hhmm + ' 前躺下（目标 ' + plan.need + ' 小时）';
+    if (plan.auto && plan.reason) txt += ' · ' + plan.reason;
+    UI.toast(txt);
+    fireSysNotify('就寝提醒', txt, key);
+    if (o.sound) beep();
+  }
+
   function check() {
     var o = opts();
     if (!o.on) return;
@@ -17871,6 +18020,9 @@ window.DragGesture = (function () {
     // 待办到期（逾期 / 今日到期）
     checkTaskDue(o, dk, nowMin);
 
+    // 就寝（到点只提醒一次；明早有课会提前）
+    checkBedtime(o, dk, nowMin);
+
     // 番茄钟自然跑完（不是手动停的）时提示一下
     var t = Store.pomodoro && Store.pomodoro.timer;
     if (lastTimer && lastTimer.running && lastTimer.endAt && t && !t.running &&
@@ -17887,6 +18039,8 @@ window.DragGesture = (function () {
     exportICS: exportICS,
     exportDialog: exportDialog,
     todayLessons: todayLessons,
+    tomorrowFirstLesson: tomorrowFirstLesson,
+    bedtimePlan: bedtimePlan,
     canSysNotify: canSysNotify,
     requestSysPermission: requestSysPermission,
     fireSysNotify: fireSysNotify,
@@ -27511,6 +27665,7 @@ window.DragGesture = (function () {
       root.appendChild(this.socialJetLagCard());
       root.appendChild(this.lowSleepCard());
       root.appendChild(this.focusCorrCard());
+      root.appendChild(this.moodSleepCard());
     },
 
     /* ---------- 1) 精力预测 ---------- */
@@ -28101,6 +28256,57 @@ window.DragGesture = (function () {
         stat(badTxt, '睡眠差(<50%)日均专注', 'var(--red)')
       ]));
       return c;
+    },
+
+    /* ---------- 睡眠 × 心情（日记心情与当夜质量） ---------- */
+    moodSleepCard: function () {
+      var r = Store.moodSleepCorr(60);
+      var c = card([sectionTitle(V.icons.sparkle, '睡眠 × 心情')]);
+
+      function hm(min) {
+        if (min == null) return '—';
+        var h = Math.floor(min / 60), m = Math.round(min % 60);
+        return h + ' 小时' + (m ? ' ' + m + ' 分' : '');
+      }
+
+      if (!r.has) {
+        c.appendChild(el('div', {
+          style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.75' },
+          text: '需要「当天既有睡眠记录、又标了心情的日记」≥ ' + (r.need || 7) +
+                ' 天才能看出关系（当前 ' + (r.n || 0) + ' 天）。写完日记顺手点个心情，攒几天就有了。'
+        }));
+        return c;
+      }
+
+      var rColor = r.r >= 0.3 ? '#22c55e' : (r.r >= 0 ? '#eab308' : '#ef4444');
+      var rText = r.r >= 0.5 ? '强正相关' : (r.r >= 0.3 ? '中等正相关' : (r.r >= 0 ? '弱正相关' : '负相关'));
+      c.appendChild(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800', color: rColor }, text: (r.r > 0 ? '+' : '') + r.r }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' },
+          text: 'Pearson 相关系数 · ' + rText + ' · 样本 ' + r.n + ' 天' })
+      ]));
+
+      // 睡眠 → 心情：睡好和睡差的那几天，平均心情差多少
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(r.moodGood == null ? '—' : r.moodGood + ' / 5',
+          '睡好(≥70%)当天心情', 'var(--green)'),
+        stat(r.moodBad == null ? '—' : r.moodBad + ' / 5',
+          '睡差(<50%)当天心情', 'var(--red)')
+      ]));
+
+      // 心情 ← 睡眠：心情好和心情差的那几天，前一晚各睡了多久
+      c.appendChild(el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } }, [
+        stat(hm(r.sleepHappy), '心情好(≥4) 前一夜', 'var(--primary)'),
+        stat(hm(r.sleepLow), '心情差(≤2) 前一夜', 'var(--text-2)')
+      ]));
+
+      c.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: '配的是「今早醒来那一夜」——晚上写日记时，影响你的是当天早上的睡眠。' +
+              '样本 ' + r.n + ' 天，' + (r.n < 21 ? '还不算多，先当参考。' : '已够看出点眉目。') +
+              '相关不等于因果：也可能是「这周本来就难受」同时让你睡不好、心情差。'
+      }));
+      return c;
     }
   };
 
@@ -28310,6 +28516,93 @@ window.DragGesture = (function () {
       /* ---------- 课程投入 ---------- */
       if (W.course) root.appendChild(courseInvestCard(curRange));
 
+      /* ---------- 睡眠与活动（健康看板没开就不占地方） ---------- */
+      if (W.health !== false && (!Store.healthEnabled || Store.healthEnabled())) {
+        root.appendChild(healthCard(curRange));
+      }
+
+  }
+
+  /* ==========================================================
+   * 睡眠与活动（健康数据进统计）
+   * ----------------------------------------------------------
+   * 只读 dayHealth 用到的两样底层数据（nightStats / getMetric），不调
+   * dayHealth 本身 —— 它每条都要算 TDEE 和当日饮食，一学期上百天太浪费。
+   * ========================================================== */
+  function healthCard(rangeKey) {
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['睡眠与活动']));
+
+    var r = rangeDates(rangeKey);
+    var minH = (Store.settings.health && Store.settings.health.sleepMinH) || 6;
+    var goal = Number(Store.settings.stepGoal) || 8000;
+
+    var sleepN = 0, sleepSum = 0, qSum = 0, metN = 0;
+    var stepSum = 0, stepN = 0, activeN = 0;
+
+    for (var d = DateUtil.parse(r.from); d && DateUtil.toStr(d) <= r.to; d = DateUtil.addDays(d, 1)) {
+      var ds = DateUtil.toStr(d);
+      var st = Store.nightStats(ds);
+      if (st && st.total) {
+        sleepN++; sleepSum += st.total;
+        if (st.q != null) qSum += st.q;
+        if (st.total >= minH * 60) metN++;
+      }
+      var m = Store.getMetric(ds);
+      if (m) {
+        var s = Number(m.steps) || 0;
+        stepN++; stepSum += s;
+        if (s >= goal) activeN++;
+      }
+    }
+
+    var ws = (Store.weightSeries ? Store.weightSeries() : [])
+      .filter(function (w) { return w.date >= r.from && w.date <= r.to; });
+    var wDelta = ws.length >= 2 ? Math.round((ws[ws.length - 1].kg - ws[0].kg) * 10) / 10 : null;
+
+    if (!sleepN && !stepN && ws.length < 2) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.75' },
+        text: '这个区间还没有睡眠 / 步数 / 体重数据。在「健康」页记录几次，或者让健康联动同步一下就会出现在这里。'
+      }));
+      return card;
+    }
+
+    var cells = [
+      { label: '平均睡眠', value: sleepN ? hmShort(sleepSum / sleepN) : '—', color: '#6366f1' },
+      { label: '睡眠达标夜', value: sleepN ? (metN + '/' + sleepN) : '—', color: 'var(--green)' },
+      { label: '日均步数', value: stepN ? Math.round(stepSum / stepN).toLocaleString() : '—', color: 'var(--primary)' },
+      { label: '体重变化', value: wDelta == null ? '—' : ((wDelta > 0 ? '+' : '') + wDelta + 'kg'),
+        color: wDelta == null ? 'var(--text-2)' : (wDelta > 0 ? 'var(--red)' : 'var(--green)') }
+    ];
+    var grid = el('div', { class: 'cp-stat-grid' });
+    cells.forEach(function (c) {
+      grid.appendChild(el('div', { class: 'cp-stat-cell' }, [
+        el('div', { class: 'cp-stat-label', text: c.label }),
+        el('div', { class: 'cp-stat-value', style: { color: c.color }, text: c.value })
+      ]));
+    });
+    card.appendChild(grid);
+
+    var bits = [];
+    if (sleepN) {
+      var avgQ = qSum / sleepN;
+      bits.push('平均睡眠质量 ' + Math.round(avgQ * 100) + '%');
+      bits.push('达标线 ' + minH + ' 小时');
+    }
+    if (stepN) bits.push('步数达标 ' + activeN + ' 天（目标 ' + goal + ' 步）');
+    if (ws.length >= 2) bits.push('体重 ' + ws[0].kg + ' → ' + ws[ws.length - 1].kg + ' kg');
+    if (bits.length) {
+      card.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: bits.join(' · ')
+      }));
+    }
+    card.appendChild(el('div', {
+      style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '4px', lineHeight: '1.7' },
+      text: '睡眠按「醒来日」归到当天；只统计有记录的夜，没记的不算进分母，避免漏记被读成「睡得少」。'
+    }));
+    return card;
   }
 
   function segMinutes(segments, key) {
@@ -38248,14 +38541,14 @@ window.DragGesture = (function () {
           text: '只影响待办页「统计」分页里显示哪些卡片，不影响数据本身。'
         }));
         function widgetRow(title, desc, key) {
-          var cur = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+          var cur = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true, health: true }, Store.settings.statsWidgets || {});
           var on = cur[key] !== false;
           var sw = el('button', {
             class: 'switch' + (on ? ' on' : ''),
             onclick: function () {
               on = !on;
               sw.classList.toggle('cp-on', on);
-              var next = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+              var next = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true, health: true }, Store.settings.statsWidgets || {});
               next[key] = on;
               Store.updateSettings({ statsWidgets: next });
             }
@@ -38273,6 +38566,7 @@ window.DragGesture = (function () {
         wCard.appendChild(widgetRow('积分来源', '各渠道累计获得积分的构成', 'sources'));
         wCard.appendChild(widgetRow('消费构成', '每日支出与分类占比', 'spend'));
         wCard.appendChild(widgetRow('课程投入', '按课程汇总的实际投入时长', 'course'));
+        wCard.appendChild(widgetRow('睡眠与活动', '区间内的睡眠达标、日均步数与体重变化（需开启健康看板）', 'health'));
         root.appendChild(wCard);
             }
 
@@ -39336,6 +39630,51 @@ window.DragGesture = (function () {
       }));
     }
     root.appendChild(inPage);
+
+    /* --- 就寝提醒（和课表联动） --- */
+    var bed = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    bed.appendChild(el('div', { class: 'section-title' }, ['就寝提醒']));
+    bed.appendChild(el('p', {
+      class: 'ocr-hint',
+      text: '到点提醒你该睡了。明早有课的时候会按第一节课倒推 —— ' +
+            '「上课时刻 − 40 分钟起床洗漱 − 目标睡眠 − 30 分钟入睡缓冲」，只会往前挪，不会往后推。' +
+            '和上课提醒一样是页面内提示，锁屏状态下不会响。'
+    }));
+    bed.appendChild(row('开启就寝提醒', '默认关闭；关掉后不会有任何就寝提示', el('input', {
+      type: 'checkbox', checked: !!o.bedtime,
+      onchange: function (e) { o.bedtime = e.target.checked; save(); view.render(); }
+    })));
+    bed.appendChild(row('平时几点睡', '没有早课时的默认就寝时刻', el('input', {
+      class: 'input', type: 'time', value: o.bedtimeAt || '23:30',
+      style: { width: '120px' },
+      onchange: function (e) {
+        o.bedtimeAt = e.target.value || '23:30'; save(); view.render();
+      }
+    })));
+    bed.appendChild(row('目标睡眠时长', '按这个时长倒推，含周末', el('select', {
+      class: 'input', style: { width: '120px' },
+      onchange: function (e) { o.bedtimeNeed = +e.target.value; save(); view.render(); }
+    }, [6, 6.5, 7, 7.5, 8, 8.5, 9].map(function (v) {
+      return el('option', {
+        value: String(v), selected: Number(o.bedtimeNeed) === v, text: v + ' 小时'
+      });
+    }))));
+    bed.appendChild(row('明早有课就提前', '按第一节课时间自动往前挪', el('input', {
+      type: 'checkbox', checked: o.bedtimeAuto !== false,
+      onchange: function (e) { o.bedtimeAuto = e.target.checked; save(); view.render(); }
+    })));
+    if (global.Remind && global.Remind.bedtimePlan) {
+      var plan = Remind.bedtimePlan(o);
+      var line = '今晚建议 ' + plan.hhmm + ' 前躺下';
+      if (plan.auto) line += '（' + plan.reason + '，已比平时提前）';
+      else if (plan.tomorrow && plan.tomorrow.first) line += '（' + plan.reason + '）';
+      else if (plan.reason) line += '（' + plan.reason + '）';
+      bed.appendChild(el('div', {
+        class: 'ocr-hint', style: { marginTop: '6px', fontWeight: '600', color: 'var(--text-2)' },
+        text: line + (o.bedtime ? '' : ' —— 提醒目前是关闭的')
+      }));
+    }
+    root.appendChild(bed);
 
     /* --- 导出到系统日历 --- */
     var cal = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });

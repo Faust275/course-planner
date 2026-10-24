@@ -682,14 +682,14 @@
           text: '只影响待办页「统计」分页里显示哪些卡片，不影响数据本身。'
         }));
         function widgetRow(title, desc, key) {
-          var cur = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+          var cur = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true, health: true }, Store.settings.statsWidgets || {});
           var on = cur[key] !== false;
           var sw = el('button', {
             class: 'switch' + (on ? ' on' : ''),
             onclick: function () {
               on = !on;
               sw.classList.toggle('cp-on', on);
-              var next = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true }, Store.settings.statsWidgets || {});
+              var next = Object.assign({ time: true, curve: true, sources: true, spend: true, course: true, health: true }, Store.settings.statsWidgets || {});
               next[key] = on;
               Store.updateSettings({ statsWidgets: next });
             }
@@ -707,6 +707,7 @@
         wCard.appendChild(widgetRow('积分来源', '各渠道累计获得积分的构成', 'sources'));
         wCard.appendChild(widgetRow('消费构成', '每日支出与分类占比', 'spend'));
         wCard.appendChild(widgetRow('课程投入', '按课程汇总的实际投入时长', 'course'));
+        wCard.appendChild(widgetRow('睡眠与活动', '区间内的睡眠达标、日均步数与体重变化（需开启健康看板）', 'health'));
         root.appendChild(wCard);
             }
 
@@ -1770,6 +1771,51 @@
       }));
     }
     root.appendChild(inPage);
+
+    /* --- 就寝提醒（和课表联动） --- */
+    var bed = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+    bed.appendChild(el('div', { class: 'section-title' }, ['就寝提醒']));
+    bed.appendChild(el('p', {
+      class: 'ocr-hint',
+      text: '到点提醒你该睡了。明早有课的时候会按第一节课倒推 —— ' +
+            '「上课时刻 − 40 分钟起床洗漱 − 目标睡眠 − 30 分钟入睡缓冲」，只会往前挪，不会往后推。' +
+            '和上课提醒一样是页面内提示，锁屏状态下不会响。'
+    }));
+    bed.appendChild(row('开启就寝提醒', '默认关闭；关掉后不会有任何就寝提示', el('input', {
+      type: 'checkbox', checked: !!o.bedtime,
+      onchange: function (e) { o.bedtime = e.target.checked; save(); view.render(); }
+    })));
+    bed.appendChild(row('平时几点睡', '没有早课时的默认就寝时刻', el('input', {
+      class: 'input', type: 'time', value: o.bedtimeAt || '23:30',
+      style: { width: '120px' },
+      onchange: function (e) {
+        o.bedtimeAt = e.target.value || '23:30'; save(); view.render();
+      }
+    })));
+    bed.appendChild(row('目标睡眠时长', '按这个时长倒推，含周末', el('select', {
+      class: 'input', style: { width: '120px' },
+      onchange: function (e) { o.bedtimeNeed = +e.target.value; save(); view.render(); }
+    }, [6, 6.5, 7, 7.5, 8, 8.5, 9].map(function (v) {
+      return el('option', {
+        value: String(v), selected: Number(o.bedtimeNeed) === v, text: v + ' 小时'
+      });
+    }))));
+    bed.appendChild(row('明早有课就提前', '按第一节课时间自动往前挪', el('input', {
+      type: 'checkbox', checked: o.bedtimeAuto !== false,
+      onchange: function (e) { o.bedtimeAuto = e.target.checked; save(); view.render(); }
+    })));
+    if (global.Remind && global.Remind.bedtimePlan) {
+      var plan = Remind.bedtimePlan(o);
+      var line = '今晚建议 ' + plan.hhmm + ' 前躺下';
+      if (plan.auto) line += '（' + plan.reason + '，已比平时提前）';
+      else if (plan.tomorrow && plan.tomorrow.first) line += '（' + plan.reason + '）';
+      else if (plan.reason) line += '（' + plan.reason + '）';
+      bed.appendChild(el('div', {
+        class: 'ocr-hint', style: { marginTop: '6px', fontWeight: '600', color: 'var(--text-2)' },
+        text: line + (o.bedtime ? '' : ' —— 提醒目前是关闭的')
+      }));
+    }
+    root.appendChild(bed);
 
     /* --- 导出到系统日历 --- */
     var cal = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });

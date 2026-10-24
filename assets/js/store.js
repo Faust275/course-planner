@@ -184,7 +184,7 @@
         healthAutoSync: true,   // 健康联动自动同步：启动时/定时/打开记录弹窗时自动从 Health Connect 拉取睡眠（关闭则仅保留手动「从健康联动导入」按钮）
         stepGoal: 8000,         // 每日步数目标（「我的活动」界面进度用）
         showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
-        statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
+        statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true, health: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
         // 健康看板总开关：默认关。装完只问一次（asked），没关联健康数据就不占导航位置。
         // 注意别和上面的 health（今日健康提示）混为一谈。
@@ -2455,7 +2455,7 @@
       if (state.settings.showWeekend == null) state.settings.showWeekend = true;
       if (state.settings.statsOn == null) state.settings.statsOn = true;
       state.settings.statsWidgets = Object.assign(
-        { time: true, curve: true, sources: true, spend: true, course: true }, state.settings.statsWidgets || {});
+        { time: true, curve: true, sources: true, spend: true, course: true, health: true }, state.settings.statsWidgets || {});
       state.settings.health = Object.assign(
         { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 }, state.settings.health || {});
       if (!state.settings.nav) state.settings.nav = ds.settings.nav;
@@ -7707,6 +7707,70 @@
       return {
         has: true, n: n2, r: Math.round(r * 100) / 100,
         goodAvg: avg(good), badAvg: avg(bad), goodN: good.length, badN: bad.length
+      };
+    },
+
+    /**
+     * 日记心情 × 睡眠质量。
+     *
+     * 配对口径：日记日期 D 记的心情，配「醒来日是 D」的那一夜。
+     * 也就是说——晚上写日记时，你写的是「今天（从今早这副身体开始）过得怎么样」，
+     * 影响的是今早醒来那一次睡眠。反过来配「当晚」会把还没发生的睡眠算进去。
+     *
+     * 两个方向都返回，因为它们回答的是不同问题：
+     *   · moodGood / moodBad —— 睡好和睡差时，心情差多少（睡眠 → 心情）
+     *   · sleepHappy / sleepLow —— 心情好和心情差的那几天，前一晚各睡多久（心情 ← 睡眠）
+     *
+     * @param {number} n 回看天数，默认 60（日记不是每天都写，窗口给宽一点）
+     */
+    moodSleepCorr: function (n) {
+      n = n || 60;
+      var today = DateUtil.today();
+      var score = {};
+      MOODS.forEach(function (m, i) { score[m.key] = 5 - i; });   // great=5 … low=1
+
+      var moodByDate = {};
+      (state.diaries || []).forEach(function (d) {
+        if (d && d.date && d.mood && score[d.mood] != null) moodByDate[d.date] = score[d.mood];
+      });
+
+      var pairs = [];
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        if (moodByDate[ds] == null) continue;
+        var st = this.nightStats(ds);            // 醒来日 = 日记当天
+        if (!st || st.q == null) continue;
+        pairs.push({ m: moodByDate[ds], q: st.q, min: st.total || 0 });
+      }
+
+      var NEED = 7;
+      if (pairs.length < NEED) return { has: false, n: pairs.length, need: NEED };
+
+      var k = pairs.length;
+      var mm = pairs.reduce(function (s, p) { return s + p.m; }, 0) / k;
+      var mq = pairs.reduce(function (s, p) { return s + p.q; }, 0) / k;
+      var cov = 0, vm = 0, vq = 0;
+      pairs.forEach(function (p) {
+        var dm = p.m - mm, dq = p.q - mq;
+        cov += dm * dq; vm += dm * dm; vq += dq * dq;
+      });
+      var r = (vm && vq) ? cov / Math.sqrt(vm * vq) : 0;
+
+      var avg = function (arr, key) {
+        return arr.length ? Math.round(arr.reduce(function (s, p) { return s + p[key]; }, 0) / arr.length * 100) / 100 : null;
+      };
+      var good = pairs.filter(function (p) { return p.q >= 0.7; });
+      var bad = pairs.filter(function (p) { return p.q < 0.5; });
+      var happy = pairs.filter(function (p) { return p.m >= 4; });
+      var low = pairs.filter(function (p) { return p.m <= 2; });
+
+      return {
+        has: true, n: k,
+        r: Math.round(r * 100) / 100,
+        moodAll: Math.round(mm * 100) / 100,
+        moodGood: avg(good, 'm'), moodBad: avg(bad, 'm'),
+        sleepHappy: avg(happy, 'min'), sleepLow: avg(low, 'min'),
+        nGood: good.length, nBad: bad.length, nHappy: happy.length, nLow: low.length
       };
     },
 

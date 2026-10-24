@@ -199,6 +199,93 @@
       /* ---------- 课程投入 ---------- */
       if (W.course) root.appendChild(courseInvestCard(curRange));
 
+      /* ---------- 睡眠与活动（健康看板没开就不占地方） ---------- */
+      if (W.health !== false && (!Store.healthEnabled || Store.healthEnabled())) {
+        root.appendChild(healthCard(curRange));
+      }
+
+  }
+
+  /* ==========================================================
+   * 睡眠与活动（健康数据进统计）
+   * ----------------------------------------------------------
+   * 只读 dayHealth 用到的两样底层数据（nightStats / getMetric），不调
+   * dayHealth 本身 —— 它每条都要算 TDEE 和当日饮食，一学期上百天太浪费。
+   * ========================================================== */
+  function healthCard(rangeKey) {
+    var card = el('div', { class: 'card', style: { padding: '14px 16px', marginBottom: '14px' } });
+    card.appendChild(el('div', { class: 'section-title' }, ['睡眠与活动']));
+
+    var r = rangeDates(rangeKey);
+    var minH = (Store.settings.health && Store.settings.health.sleepMinH) || 6;
+    var goal = Number(Store.settings.stepGoal) || 8000;
+
+    var sleepN = 0, sleepSum = 0, qSum = 0, metN = 0;
+    var stepSum = 0, stepN = 0, activeN = 0;
+
+    for (var d = DateUtil.parse(r.from); d && DateUtil.toStr(d) <= r.to; d = DateUtil.addDays(d, 1)) {
+      var ds = DateUtil.toStr(d);
+      var st = Store.nightStats(ds);
+      if (st && st.total) {
+        sleepN++; sleepSum += st.total;
+        if (st.q != null) qSum += st.q;
+        if (st.total >= minH * 60) metN++;
+      }
+      var m = Store.getMetric(ds);
+      if (m) {
+        var s = Number(m.steps) || 0;
+        stepN++; stepSum += s;
+        if (s >= goal) activeN++;
+      }
+    }
+
+    var ws = (Store.weightSeries ? Store.weightSeries() : [])
+      .filter(function (w) { return w.date >= r.from && w.date <= r.to; });
+    var wDelta = ws.length >= 2 ? Math.round((ws[ws.length - 1].kg - ws[0].kg) * 10) / 10 : null;
+
+    if (!sleepN && !stepN && ws.length < 2) {
+      card.appendChild(el('div', {
+        style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.75' },
+        text: '这个区间还没有睡眠 / 步数 / 体重数据。在「健康」页记录几次，或者让健康联动同步一下就会出现在这里。'
+      }));
+      return card;
+    }
+
+    var cells = [
+      { label: '平均睡眠', value: sleepN ? hmShort(sleepSum / sleepN) : '—', color: '#6366f1' },
+      { label: '睡眠达标夜', value: sleepN ? (metN + '/' + sleepN) : '—', color: 'var(--green)' },
+      { label: '日均步数', value: stepN ? Math.round(stepSum / stepN).toLocaleString() : '—', color: 'var(--primary)' },
+      { label: '体重变化', value: wDelta == null ? '—' : ((wDelta > 0 ? '+' : '') + wDelta + 'kg'),
+        color: wDelta == null ? 'var(--text-2)' : (wDelta > 0 ? 'var(--red)' : 'var(--green)') }
+    ];
+    var grid = el('div', { class: 'cp-stat-grid' });
+    cells.forEach(function (c) {
+      grid.appendChild(el('div', { class: 'cp-stat-cell' }, [
+        el('div', { class: 'cp-stat-label', text: c.label }),
+        el('div', { class: 'cp-stat-value', style: { color: c.color }, text: c.value })
+      ]));
+    });
+    card.appendChild(grid);
+
+    var bits = [];
+    if (sleepN) {
+      var avgQ = qSum / sleepN;
+      bits.push('平均睡眠质量 ' + Math.round(avgQ * 100) + '%');
+      bits.push('达标线 ' + minH + ' 小时');
+    }
+    if (stepN) bits.push('步数达标 ' + activeN + ' 天（目标 ' + goal + ' 步）');
+    if (ws.length >= 2) bits.push('体重 ' + ws[0].kg + ' → ' + ws[ws.length - 1].kg + ' kg');
+    if (bits.length) {
+      card.appendChild(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '10px', lineHeight: '1.7' },
+        text: bits.join(' · ')
+      }));
+    }
+    card.appendChild(el('div', {
+      style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '4px', lineHeight: '1.7' },
+      text: '睡眠按「醒来日」归到当天；只统计有记录的夜，没记的不算进分母，避免漏记被读成「睡得少」。'
+    }));
+    return card;
   }
 
   function segMinutes(segments, key) {

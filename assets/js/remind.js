@@ -327,7 +327,11 @@
       sound: true,
       exams: true,   // 导出的日历里含考试
       events: true,  // 含重要日程
-      taskDue: true  // 待办到期（已逾期 / 今日到期）页面内提醒
+      taskDue: true, // 待办到期（已逾期 / 今日到期）页面内提醒
+      bedtime: false,      // 就寝提醒：默认关，得自己开
+      bedtimeAt: '23:30',  // 默认目标就寝时刻
+      bedtimeNeed: 7.5,    // 目标睡眠时长（小时）
+      bedtimeAuto: true    // 明早有课就自动往前挪
     };
   }
 
@@ -629,6 +633,87 @@
     }
   }
 
+  /* ==========================================================
+   * 就寝提醒：和课表联动——明早有课，就今晚早点躺
+   * ========================================================== */
+
+  /** 明早第一节。放假或没课返回 { rest:true }。 */
+  function tomorrowFirstLesson() {
+    var tomorrow = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), 1));
+    var hol = global.HolidayCN && global.HolidayCN.lookup ? global.HolidayCN.lookup(tomorrow) : null;
+    if (hol && hol.type === 'holiday') {
+      return { rest: true, date: tomorrow, why: hol.name ? (hol.name + '放假') : '明天放假' };
+    }
+    var list = [];
+    try { list = Store.coursesOnDate ? Store.coursesOnDate(tomorrow) : []; } catch (e) { list = []; }
+    var best = null;
+    list.forEach(function (c) {
+      var ct = Store.courseTime ? Store.courseTime(c) : null;
+      var m = ct && ct.start ? timeToMin(ct.start) : null;
+      if (m == null) return;
+      if (!best || m < best.min) best = { min: m, start: ct.start, name: c.name };
+    });
+    return { rest: !best, date: tomorrow, first: best };
+  }
+
+  /** 把凌晨的时刻算成「同一晚的延续」，方便和晚上时刻比大小（01:20 → 1520） */
+  function eveningMin(m) { return m < 12 * 60 ? m + 24 * 60 : m; }
+
+  function minToHHMM(m) {
+    m = ((Math.round(m) % 1440) + 1440) % 1440;
+    var h = Math.floor(m / 60), mm = m % 60;
+    return (h < 10 ? '0' + h : h) + ':' + (mm < 10 ? '0' + mm : mm);
+  }
+
+  /**
+   * 今晚建议几点躺下。
+   *   · 默认就是设置里的就寝时刻；
+   *   · 明早第一节有课 → 从「上课时刻 − 40 分钟（起床洗漱）」倒推，
+   *     再减「目标睡眠时长 + 30 分钟入睡缓冲」；
+   *   · 只往早里推，不往晚里推——晚推等于鼓励熬夜。
+   */
+  function bedtimePlan(o) {
+    o = o || opts();
+    var need = Number(o.bedtimeNeed) > 0 ? Number(o.bedtimeNeed) : 7.5;
+    var base = timeToMin(o.bedtimeAt);
+    if (base == null) base = 23 * 60 + 30;
+
+    var t = tomorrowFirstLesson();
+    var plan = {
+      min: base, hhmm: minToHHMM(base), need: need, auto: false,
+      tomorrow: t, reason: t.rest ? (t.why || '明天没课') : ''
+    };
+    if (o.bedtimeAuto === false || !t.first) return plan;
+
+    var target = (t.first.min - 40) - Math.round(need * 60 + 30);
+    plan.reason = '明早 ' + t.first.start + ' 有「' + t.first.name + '」';
+    if (eveningMin(target) < eveningMin(base) && eveningMin(target) >= 20 * 60) {
+      plan.min = target;
+      plan.hhmm = minToHHMM(target);
+      plan.auto = true;
+    }
+    return plan;
+  }
+
+  /**
+   * 到点提醒一次。一晚只提醒一次，不问第二遍——
+   * 这个模块的定位是「兜底」，不是闹钟，也不是催命。
+   */
+  function checkBedtime(o, dk, nowMin) {
+    if (!o.bedtime) return;
+    if (nowMin >= 4 * 60 && nowMin < 19 * 60) return;      // 白天不唠叨
+    var plan = bedtimePlan(o);
+    if (eveningMin(nowMin) < plan.min) return;
+    var key = dk + '|bedtime';
+    if (fired[key]) return;
+    fired[key] = 1;
+    var txt = '该睡了：建议 ' + plan.hhmm + ' 前躺下（目标 ' + plan.need + ' 小时）';
+    if (plan.auto && plan.reason) txt += ' · ' + plan.reason;
+    UI.toast(txt);
+    fireSysNotify('就寝提醒', txt, key);
+    if (o.sound) beep();
+  }
+
   function check() {
     var o = opts();
     if (!o.on) return;
@@ -656,6 +741,9 @@
     // 待办到期（逾期 / 今日到期）
     checkTaskDue(o, dk, nowMin);
 
+    // 就寝（到点只提醒一次；明早有课会提前）
+    checkBedtime(o, dk, nowMin);
+
     // 番茄钟自然跑完（不是手动停的）时提示一下
     var t = Store.pomodoro && Store.pomodoro.timer;
     if (lastTimer && lastTimer.running && lastTimer.endAt && t && !t.running &&
@@ -672,6 +760,8 @@
     exportICS: exportICS,
     exportDialog: exportDialog,
     todayLessons: todayLessons,
+    tomorrowFirstLesson: tomorrowFirstLesson,
+    bedtimePlan: bedtimePlan,
     canSysNotify: canSysNotify,
     requestSysPermission: requestSysPermission,
     fireSysNotify: fireSysNotify,
