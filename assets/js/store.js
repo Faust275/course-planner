@@ -260,6 +260,11 @@
           bottomMargin: 10,      // 距屏幕底部距离
           rowReact: -1,          // 点击反应帧行（-1=无）
           reactFrames: 0
+        },
+        // 记账预算：monthly = 当月总预算（0 表示不限）；categories = 分类预算 { food: 800, ... }
+        ledgerBudget: {
+          monthly: 0,
+          categories: {}
         }
       },
       pomodoro: {
@@ -6974,9 +6979,93 @@
       state.ledger.forEach(function (e) {
         if (e.date === ds && e.type !== 'income') sum += e.amount;
       });
-      out.push({ date: ds, d: d, amount: Math.round(sum * 100) / 100 });
+        out.push({ date: ds, d: d, amount: Math.round(sum * 100) / 100 });
     }
     return out;
+  },
+
+  /* ===== 记账预算 ===== */
+  /** 读取预算（含合法性兜底，老数据缺字段时回退默认值） */
+  getBudget: function () {
+    var ds = defaultState();
+    var b = (state.settings && state.settings.ledgerBudget) || ds.settings.ledgerBudget;
+    var cats = (b && typeof b.categories === 'object' && b.categories) ? b.categories : {};
+    var out = { monthly: Number(b && b.monthly) > 0 ? Number(b.monthly) : 0, categories: {} };
+    Object.keys(cats).forEach(function (k) {
+      var v = Number(cats[k]);
+      if (v > 0) out.categories[k] = v;
+    });
+    return out;
+  },
+
+  /** 保存预算：data = { monthly, categories:{...} }（只保留正数，0 视为不限） */
+  setBudget: function (data) {
+    if (!state.settings.ledgerBudget) state.settings.ledgerBudget = { monthly: 0, categories: {} };
+    var next = { monthly: 0, categories: {} };
+    if (data && Number(data.monthly) > 0) next.monthly = Math.round(Number(data.monthly) * 100) / 100;
+    if (data && data.categories) {
+      Object.keys(data.categories).forEach(function (k) {
+        var v = Number(data.categories[k]);
+        if (v > 0) next.categories[k] = Math.round(v * 100) / 100;
+      });
+    }
+    state.settings.ledgerBudget = next;
+    this.emit();
+    return next;
+  },
+
+  /**
+   * 预算执行状态（默认当月）
+   * @returns {
+   *   ym, spent, budget, remaining, pct, over,
+   *   daysLeft, dailyAvg, dailyLeft, estMonth,
+   *   cats:[{key,name,color,budget,spent,pct,over}]
+   * }
+   */
+  ledgerBudgetStatus: function (ym) {
+    ym = ym || DateUtil.toStr(DateUtil.today()).slice(0, 7);
+    var budget = this.getBudget();
+    var spent = this.ledgerStats(ym).expense;
+    var B = budget.monthly;
+    var today = DateUtil.today();
+    var ymNow = DateUtil.toStr(today).slice(0, 7);
+    // 当月天数 & 剩余天数（只看"今天之后到月底"）
+    var ymParts = ym.split('-');
+    var daysInMonth = new Date(Number(ymParts[0]), Number(ymParts[1]), 0).getDate();
+    var daysLeft = (ym === ymNow) ? Math.max(0, daysInMonth - today.getDate()) : 0;
+    var dailyAvg = Math.round((spent / Math.max(1, (ym === ymNow ? today.getDate() : daysInMonth))) * 100) / 100;
+    var dailyLeft = (B > 0 && daysLeft > 0) ? Math.round((B - spent) / daysLeft * 100) / 100 : null;
+    var estMonth = (ym === ymNow && dailyAvg > 0) ? Math.round(dailyAvg * daysInMonth * 100) / 100 : null;
+
+    var catMap = {};
+    this.ledgerByCategory(ym).forEach(function (c) { catMap[c.key] = c.total; });
+    var cats = Object.keys(budget.categories).map(function (k) {
+      var cb = budget.categories[k];
+      var cs = catMap[k] || 0;
+      return {
+        key: k,
+        name: ledgerCat('expense', k).name,
+        color: ledgerCat('expense', k).color,
+        budget: cb,
+        spent: cs,
+        pct: Math.min(1.5, cb > 0 ? cs / cb : 0),
+        over: cb > 0 && cs > cb
+      };
+    }).sort(function (a, b) { return b.spent - a.spent; });
+
+    return {
+      ym: ym,
+      spent: Math.round(spent * 100) / 100,
+      budget: B,
+      remaining: B > 0 ? Math.round((B - spent) * 100) / 100 : null,
+      pct: B > 0 ? Math.min(1.5, spent / B) : null,
+      over: B > 0 && spent > B,
+      daysLeft: daysLeft,
+      dailyAvg: dailyAvg,
+      dailyLeft: dailyLeft,
+      estMonth: estMonth,
+      cats: cats
+    };
   },
 
   /* ===== 记录开关 ===== */

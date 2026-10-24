@@ -4327,3 +4327,36 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cal-hol-badge.cal-hol { background: var(--red-tint, #fde8e8); color: var(--red); }
 .cal-hol-badge.cal-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
 .cal-cell.holiday { background: var(--surface-2); }
+
+/* ===== 记账：预算卡片 / 分类额度 / 报表 / 宽屏两列 ===== */
+.cp-lg-budget { padding: 14px 16px; margin-bottom: 14px; }
+.cp-lg-budget .cp-section-title { margin-bottom: 10px; }
+.cp-lg-budget-empty { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--text-2); }
+.cp-lg-budget-empty .cp-btn { align-self: flex-start; }
+
+.cp-lg-prog { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.cp-lg-prog.sm { height: 6px; }
+.cp-lg-prog > i { display: block; height: 100%; background: var(--primary); border-radius: 6px; transition: width .4s ease; }
+.cp-lg-prog.over > i { background: var(--red); }
+.cp-lg-budget-info { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; font-size: 13px; font-weight: 600; }
+.cp-lg-budget-rem.over { color: var(--red); }
+.cp-lg-budget-sub { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 11.5px; color: var(--text-2); }
+
+.cp-lg-cb-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 14px 0 8px; }
+.cp-lg-cat-budgets { display: flex; flex-direction: column; gap: 10px; }
+.cp-lg-cb-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 4px; }
+.cp-lg-cb-name { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.cp-lg-cb-val { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.cp-lg-cb-val.over { color: var(--red); font-weight: 600; }
+
+/* 预算设置：分类额度网格 */
+.cp-cat-budget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.cp-cat-budget-row { display: flex; align-items: center; gap: 8px; }
+.cp-cb-cat-name { display: flex; align-items: center; gap: 6px; font-size: 12.5px; flex: 1 1 auto; min-width: 0; }
+.cp-cat-budget-row .cp-input { width: 88px; flex: 0 0 88px; }
+
+/* 宽屏（≥1024px）：支出构成 + 每日趋势 两卡并排，平板/横屏更透气 */
+@media (min-width: 1024px) {
+  .cp-lg-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .cp-lg-two-col > .cp-card { margin-bottom: 0; }
+}

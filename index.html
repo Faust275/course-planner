@@ -4438,6 +4438,39 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cal-hol-badge.cal-work { background: var(--amber-tint, #fef3e0); color: var(--amber); }
 .cal-cell.holiday { background: var(--surface-2); }
 
+/* ===== 记账：预算卡片 / 分类额度 / 报表 / 宽屏两列 ===== */
+.cp-lg-budget { padding: 14px 16px; margin-bottom: 14px; }
+.cp-lg-budget .cp-section-title { margin-bottom: 10px; }
+.cp-lg-budget-empty { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--text-2); }
+.cp-lg-budget-empty .cp-btn { align-self: flex-start; }
+
+.cp-lg-prog { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.cp-lg-prog.sm { height: 6px; }
+.cp-lg-prog > i { display: block; height: 100%; background: var(--primary); border-radius: 6px; transition: width .4s ease; }
+.cp-lg-prog.over > i { background: var(--red); }
+.cp-lg-budget-info { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; font-size: 13px; font-weight: 600; }
+.cp-lg-budget-rem.over { color: var(--red); }
+.cp-lg-budget-sub { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 11.5px; color: var(--text-2); }
+
+.cp-lg-cb-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 14px 0 8px; }
+.cp-lg-cat-budgets { display: flex; flex-direction: column; gap: 10px; }
+.cp-lg-cb-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 4px; }
+.cp-lg-cb-name { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.cp-lg-cb-val { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.cp-lg-cb-val.over { color: var(--red); font-weight: 600; }
+
+/* 预算设置：分类额度网格 */
+.cp-cat-budget-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.cp-cat-budget-row { display: flex; align-items: center; gap: 8px; }
+.cp-cb-cat-name { display: flex; align-items: center; gap: 6px; font-size: 12.5px; flex: 1 1 auto; min-width: 0; }
+.cp-cat-budget-row .cp-input { width: 88px; flex: 0 0 88px; }
+
+/* 宽屏（≥1024px）：支出构成 + 每日趋势 两卡并排，平板/横屏更透气 */
+@media (min-width: 1024px) {
+  .cp-lg-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .cp-lg-two-col > .cp-card { margin-bottom: 0; }
+}
+
 </style>
 <script>
 
@@ -6040,6 +6073,11 @@ window.AK_OPS = [
           bottomMargin: 10,      // 距屏幕底部距离
           rowReact: -1,          // 点击反应帧行（-1=无）
           reactFrames: 0
+        },
+        // 记账预算：monthly = 当月总预算（0 表示不限）；categories = 分类预算 { food: 800, ... }
+        ledgerBudget: {
+          monthly: 0,
+          categories: {}
         }
       },
       pomodoro: {
@@ -12754,9 +12792,93 @@ window.AK_OPS = [
       state.ledger.forEach(function (e) {
         if (e.date === ds && e.type !== 'income') sum += e.amount;
       });
-      out.push({ date: ds, d: d, amount: Math.round(sum * 100) / 100 });
+        out.push({ date: ds, d: d, amount: Math.round(sum * 100) / 100 });
     }
     return out;
+  },
+
+  /* ===== 记账预算 ===== */
+  /** 读取预算（含合法性兜底，老数据缺字段时回退默认值） */
+  getBudget: function () {
+    var ds = defaultState();
+    var b = (state.settings && state.settings.ledgerBudget) || ds.settings.ledgerBudget;
+    var cats = (b && typeof b.categories === 'object' && b.categories) ? b.categories : {};
+    var out = { monthly: Number(b && b.monthly) > 0 ? Number(b.monthly) : 0, categories: {} };
+    Object.keys(cats).forEach(function (k) {
+      var v = Number(cats[k]);
+      if (v > 0) out.categories[k] = v;
+    });
+    return out;
+  },
+
+  /** 保存预算：data = { monthly, categories:{...} }（只保留正数，0 视为不限） */
+  setBudget: function (data) {
+    if (!state.settings.ledgerBudget) state.settings.ledgerBudget = { monthly: 0, categories: {} };
+    var next = { monthly: 0, categories: {} };
+    if (data && Number(data.monthly) > 0) next.monthly = Math.round(Number(data.monthly) * 100) / 100;
+    if (data && data.categories) {
+      Object.keys(data.categories).forEach(function (k) {
+        var v = Number(data.categories[k]);
+        if (v > 0) next.categories[k] = Math.round(v * 100) / 100;
+      });
+    }
+    state.settings.ledgerBudget = next;
+    this.emit();
+    return next;
+  },
+
+  /**
+   * 预算执行状态（默认当月）
+   * @returns {
+   *   ym, spent, budget, remaining, pct, over,
+   *   daysLeft, dailyAvg, dailyLeft, estMonth,
+   *   cats:[{key,name,color,budget,spent,pct,over}]
+   * }
+   */
+  ledgerBudgetStatus: function (ym) {
+    ym = ym || DateUtil.toStr(DateUtil.today()).slice(0, 7);
+    var budget = this.getBudget();
+    var spent = this.ledgerStats(ym).expense;
+    var B = budget.monthly;
+    var today = DateUtil.today();
+    var ymNow = DateUtil.toStr(today).slice(0, 7);
+    // 当月天数 & 剩余天数（只看"今天之后到月底"）
+    var ymParts = ym.split('-');
+    var daysInMonth = new Date(Number(ymParts[0]), Number(ymParts[1]), 0).getDate();
+    var daysLeft = (ym === ymNow) ? Math.max(0, daysInMonth - today.getDate()) : 0;
+    var dailyAvg = Math.round((spent / Math.max(1, (ym === ymNow ? today.getDate() : daysInMonth))) * 100) / 100;
+    var dailyLeft = (B > 0 && daysLeft > 0) ? Math.round((B - spent) / daysLeft * 100) / 100 : null;
+    var estMonth = (ym === ymNow && dailyAvg > 0) ? Math.round(dailyAvg * daysInMonth * 100) / 100 : null;
+
+    var catMap = {};
+    this.ledgerByCategory(ym).forEach(function (c) { catMap[c.key] = c.total; });
+    var cats = Object.keys(budget.categories).map(function (k) {
+      var cb = budget.categories[k];
+      var cs = catMap[k] || 0;
+      return {
+        key: k,
+        name: ledgerCat('expense', k).name,
+        color: ledgerCat('expense', k).color,
+        budget: cb,
+        spent: cs,
+        pct: Math.min(1.5, cb > 0 ? cs / cb : 0),
+        over: cb > 0 && cs > cb
+      };
+    }).sort(function (a, b) { return b.spent - a.spent; });
+
+    return {
+      ym: ym,
+      spent: Math.round(spent * 100) / 100,
+      budget: B,
+      remaining: B > 0 ? Math.round((B - spent) * 100) / 100 : null,
+      pct: B > 0 ? Math.min(1.5, spent / B) : null,
+      over: B > 0 && spent > B,
+      daysLeft: daysLeft,
+      dailyAvg: dailyAvg,
+      dailyLeft: dailyLeft,
+      estMonth: estMonth,
+      cats: cats
+    };
   },
 
   /* ===== 记录开关 ===== */
@@ -33152,6 +33274,14 @@ window.DragGesture = (function () {
 
     actions: function (host) {
       host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { budgetDialog(); }
+      }, [V.svg(V.icons.wallet, 16), '预算']));
+      host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { reportDialog(); }
+      }, [V.svg(V.icons.chart, 16), '报表']));
+      host.appendChild(el('button', {
         class: 'btn btn-primary',
         onclick: function () { openEntryDialog(); }
       }, [V.svg(V.icons.plus, 16), '记一笔']));
@@ -33181,6 +33311,9 @@ window.DragGesture = (function () {
         V.statCard(money(st.income), '收入', 'var(--green)'),
         V.statCard(money(st.balance), '结余', st.balance < 0 ? 'var(--red)' : 'var(--primary)', 'is-big')
       ]));
+
+      /* ---------- 当月预算 ---------- */
+      root.appendChild(budgetCard());
 
       /* ---------- 范围切换 ---------- */
       var bar = el('div', { class: 'week-bar', style: { marginBottom: '12px' } }, [
@@ -33294,8 +33427,6 @@ window.DragGesture = (function () {
           cc.appendChild(subBox);
         }
       }
-      root.appendChild(cc);
-
       /* ---------- 每日趋势 ---------- */
       var days = Store.ledgerDaily(r.from, r.to);
       var dayItems = days.map(function (d) {
@@ -33309,7 +33440,10 @@ window.DragGesture = (function () {
           fmt: function (v) { return v ? money(v) : ''; }
         })
       ]);
-      root.appendChild(dayCard);
+
+      /* 宽屏（≥1024px）下两卡并排，平板/横屏更透气 */
+      var twoCol = el('div', { class: 'lg-two-col' }, [cc, dayCard]);
+      root.appendChild(twoCol);
 
       /* ---------- 明细（可按标签筛选） ---------- */
       var list = tagSel ? all.filter(function (e) { return hasTag(e.tags, tagSel); }) : all;
@@ -33501,6 +33635,295 @@ window.DragGesture = (function () {
   }
 
   view.openDialog = openEntryDialog;
+
+  /* ==========================================================
+   * 当月预算卡片
+   * ========================================================== */
+  function hasCatBudget(b) {
+    return b && b.categories && Object.keys(b.categories).length > 0;
+  }
+
+  function budgetCard() {
+    var ym = DateUtil.toStr(DateUtil.today()).slice(0, 7);
+    var b = Store.getBudget();
+    var st = Store.ledgerBudgetStatus(ym);
+
+    var card = el('div', { class: 'card lg-budget' });
+    var head = el('div', { class: 'section-title' }, [ym + ' 预算']);
+    head.appendChild(el('button', {
+      class: 'btn btn-sm', onclick: function () { budgetDialog(); }
+    }, ['设置']));
+    card.appendChild(head);
+
+    if (b.monthly <= 0 && !hasCatBudget(b)) {
+      card.appendChild(el('div', { class: 'lg-budget-empty' }, [
+        el('span', { text: '还没设预算。设一个每月总预算，或给重点分类设额度，这里会显示花得怎么样。' }),
+        el('button', {
+          class: 'btn btn-primary btn-sm', onclick: function () { budgetDialog(); }
+        }, ['去设置'])
+      ]));
+      return card;
+    }
+
+    if (b.monthly > 0) {
+      var pct = Math.min(100, Math.round(st.pct * 100));
+      card.appendChild(el('div', { class: 'lg-prog' + (st.over ? ' over' : '') }, [
+        el('i', { style: { width: pct + '%' } })
+      ]));
+      card.appendChild(el('div', { class: 'lg-budget-info' }, [
+        el('span', { text: '已花 ' + money(st.spent) + ' / ' + money(b.monthly) }),
+        el('span', {
+          class: 'lg-budget-rem' + (st.over ? ' over' : ''),
+          text: st.over ? ('超支 ' + money(st.spent - b.monthly)) : ('剩余 ' + money(st.remaining))
+        })
+      ]));
+      var sub = el('div', { class: 'lg-budget-sub' });
+      if (st.daysLeft > 0) {
+        sub.appendChild(el('span', { text: '距月底 ' + st.daysLeft + ' 天' }));
+        sub.appendChild(el('span', { text: '日均已花 ' + money(st.dailyAvg) }));
+        if (st.dailyLeft != null) sub.appendChild(el('span', { text: '日均可用 ' + money(st.dailyLeft) }));
+        if (st.estMonth != null) sub.appendChild(el('span', { text: '预计月底 ' + money(st.estMonth) }));
+      } else {
+        sub.appendChild(el('span', { text: '本月已结束' }));
+      }
+      card.appendChild(sub);
+    }
+
+    if (st.cats.length) {
+      card.appendChild(el('div', { class: 'lg-cb-title', text: '分类预算' }));
+      var catBox = el('div', { class: 'lg-cat-budgets' });
+      st.cats.forEach(function (c) {
+        var cp = Math.min(100, Math.round(c.pct * 100));
+        catBox.appendChild(el('div', { class: 'lg-cat-budget' }, [
+          el('div', { class: 'lg-cb-head' }, [
+            el('span', { class: 'lg-cb-name' }, [
+              el('i', { class: 'lg-dot', style: { background: c.color } }),
+              ' ' + c.name
+            ]),
+            el('span', {
+              class: 'lg-cb-val' + (c.over ? ' over' : ''),
+              text: money(c.spent) + ' / ' + money(c.budget)
+            })
+          ]),
+          el('div', { class: 'lg-prog sm' + (c.over ? ' over' : '') }, [
+            el('i', { style: { width: cp + '%', background: c.color } })
+          ])
+        ]));
+      });
+      card.appendChild(catBox);
+    }
+    return card;
+  }
+
+  /* ==========================================================
+   * 预算设置弹窗
+   * ========================================================== */
+  function budgetDialog() {
+    var b = Store.getBudget();
+    var fMonthly = V.input({
+      type: 'number', min: '0', step: '10', value: b.monthly || '', placeholder: '不限'
+    });
+    var catInputs = {};
+    var catBox = el('div', { class: 'cat-budget-grid' });
+    LEDGER_CATS.expense.forEach(function (c) {
+      var inp = V.input({
+        type: 'number', min: '0', step: '10', value: b.categories[c.key] || '', placeholder: '0'
+      });
+      catInputs[c.key] = inp;
+      catBox.appendChild(el('div', { class: 'cat-budget-row' }, [
+        el('span', { class: 'cb-cat-name' }, [
+          el('i', { class: 'lg-dot', style: { background: c.color } }), ' ' + c.name
+        ]),
+        inp
+      ]));
+    });
+
+    var m = V.modal({
+      title: '预算设置',
+      width: '460px',
+      body: [
+        V.field('当月总预算（元，0 或留空 = 不限）', fMonthly),
+        el('div', { class: 'section-title', text: '分类预算（可选，按当月额度）' }),
+        catBox,
+        el('div', {
+          class: 'ocr-hint',
+          text: '预算只用于本页的进度展示与提醒，不影响任何已记的账目。'
+        })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn btn-primary', text: '保存',
+          onclick: function () {
+            var data = { monthly: parseFloat(fMonthly.value) || 0, categories: {} };
+            LEDGER_CATS.expense.forEach(function (c) {
+              var v = parseFloat(catInputs[c.key].value);
+              if (v > 0) data.categories[c.key] = v;
+            });
+            Store.setBudget(data);
+            m.close();
+            UI.toast('预算已保存');
+            view.render();
+          }
+        })
+      ])
+    });
+  }
+
+  /* ==========================================================
+   * 月度报表（可打印 / CSV，含分类占比 + 环比）
+   * ========================================================== */
+  function buildReport(ym) {
+    var stats = Store.ledgerStats(ym);
+    var total = stats.expense || 0;
+    var cats = Store.ledgerByCategory(ym).map(function (c) {
+      return {
+        key: c.key, name: c.cat.name, color: c.cat.color, amount: c.total,
+        pct: total > 0 ? Math.round(c.total / total * 1000) / 10 : 0
+      };
+    });
+    // 环比：上月
+    var prevDate = DateUtil.addMonths(DateUtil.parse(ym + '-01'), -1);
+    var prevYm = DateUtil.toStr(prevDate).slice(0, 7);
+    var prevStats = Store.ledgerStats(prevYm);
+    var prevMap = {};
+    Store.ledgerByCategory(prevYm).forEach(function (c) { prevMap[c.key] = c.total; });
+    cats.forEach(function (r) {
+      var pv = prevMap[r.key] || 0;
+      r.prev = pv;
+      r.delta = Math.round((r.amount - pv) * 100) / 100;
+      r.deltaPct = pv > 0 ? Math.round((r.amount - pv) / pv * 1000) / 10 : null;
+    });
+    return { ym: ym, summary: stats, cats: cats, prevYm: prevYm, prevSummary: prevStats };
+  }
+
+  function reportCsv(t) {
+    var lines = ['月份,' + t.ym, '', '分类,金额,占比,上月,环比'];
+    t.cats.forEach(function (r) {
+      lines.push([
+        r.name, r.amount, r.pct + '%', r.prev,
+        (r.deltaPct == null ? '—' : (r.delta > 0 ? '+' : '') + r.deltaPct + '%')
+      ].join(','));
+    });
+    lines.push('');
+    lines.push([
+      '合计', t.summary.expense, '100%', t.prevSummary.expense,
+      (t.prevSummary.expense > 0 ? Math.round((t.summary.expense - t.prevSummary.expense) / t.prevSummary.expense * 1000) / 10 + '%' : '—')
+    ].join(','));
+    lines.push(['收入', t.summary.income, '', t.prevSummary.income, ''].join(','));
+    lines.push(['结余', t.summary.balance, '', t.prevSummary.balance, ''].join(','));
+    return lines.join('\r\n');
+  }
+
+  function downloadReportCsv(t) {
+    SaveFile.save('记账报表-' + t.ym + '.csv', '\ufeff' + reportCsv(t), {
+      mime: 'text/csv', ext: 'csv'
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker' || r.method === 'share') UI.toast('已保存 记账报表-' + t.ym + '.csv', 'ok');
+    }).catch(function (e) { UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err'); });
+  }
+
+  function printReport(t) {
+    var rows = t.cats.map(function (r) {
+      var cls = r.delta > 0 ? 'neg' : (r.delta < 0 ? 'pos' : '');
+      var deltaTxt = r.deltaPct == null ? '—' : (r.delta > 0 ? '+' : '') + r.deltaPct + '%';
+      return '<tr>' +
+        '<td class="nm">' + UI.escapeHTML(r.name) + '</td>' +
+        '<td class="num">' + money(r.amount) + '</td>' +
+        '<td class="num">' + r.pct + '%</td>' +
+        '<td class="num">' + money(r.prev) + '</td>' +
+        '<td class="num ' + cls + '">' + deltaTxt + '</td></tr>';
+    }).join('');
+
+    var html = [
+      '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width,initial-scale=1">',
+      '<title>记账报表</title><style>',
+      '* { box-sizing: border-box; }',
+      'body { margin: 0; padding: 30px 24px; background: #fff; color: #111827;',
+      ' font: 14px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }',
+      '.wrap { max-width: 780px; margin: 0 auto; }',
+      'h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: .5px; }',
+      '.meta { font-size: 12px; color: #6b7280; margin-bottom: 16px; }',
+      '.sum { display: flex; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }',
+      '.sum div { font-size: 13px; color: #374151; }',
+      '.sum b { display: block; font-size: 18px; color: #111827; }',
+      'h2 { font-size: 15px; margin: 18px 0 8px; }',
+      'table { width: 100%; border-collapse: collapse; }',
+      'th, td { border: 1px solid #d1d5db; padding: 7px 10px; text-align: left; }',
+      'th { background: #f3f4f6; font-weight: 600; font-size: 12.5px; }',
+      '.num { text-align: right; font-variant-numeric: tabular-nums; }',
+      '.neg { color: #ef4444; }',
+      '.pos { color: #10b981; }',
+      'tfoot td { background: #f9fafb; font-weight: 700; }',
+      '@media print { body { padding: 0; } th { background: #eee !important; } }',
+      '</style></head><body><div class="wrap">',
+      '<h1>记账报表</h1>',
+      '<div class="meta">月份：' + UI.escapeHTML(t.ym) + '　环比对照：' + UI.escapeHTML(t.prevYm) + '</div>',
+      '<div class="sum">',
+      '<div>支出<b>' + money(t.summary.expense) + '</b></div>',
+      '<div>收入<b>' + money(t.summary.income) + '</b></div>',
+      '<div>结余<b>' + money(t.summary.balance) + '</b></div>',
+      '</div>',
+      '<h2>分类支出</h2>',
+      '<table><thead><tr><th>分类</th><th class="num">金额</th><th class="num">占比</th>',
+      '<th class="num">上月</th><th class="num">环比</th></tr></thead><tbody>',
+      rows,
+      '</tbody><tfoot><tr><td>合计</td><td class="num">' + money(t.summary.expense) +
+      '</td><td class="num">100%</td><td class="num">' + money(t.prevSummary.expense) +
+      '</td><td class="num">' + (t.prevSummary.expense > 0 ? Math.round((t.summary.expense - t.prevSummary.expense) / t.prevSummary.expense * 1000) / 10 + '%' : '—') +
+      '</td></tr></tfoot></table>',
+      '</div><script>window.addEventListener("load",function(){window.print();});<\/script></body></html>'
+    ].join('');
+    var w = global.open('', '_blank');
+    if (!w) { UI.toast('请允许弹出窗口后重试', 'err'); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function reportDialog() {
+    var ym = DateUtil.toStr(DateUtil.today()).slice(0, 7);
+    var months = [];
+    for (var i = 0; i < 12; i++) {
+      var d = DateUtil.addMonths(DateUtil.today(), -i);
+      months.push(DateUtil.toStr(d).slice(0, 7));
+    }
+    var sel = V.select(months.map(function (m) { return { value: m, label: m }; }), ym);
+    var preview = el('div', { class: 'preview-box' });
+    function drawPreview() {
+      var t = buildReport(sel.value);
+      var line = t.summary.expense + ' 支出 · ' + t.summary.income + ' 收入 · 结余 ' +
+        t.summary.balance + ' · ' + t.cats.length + ' 个分类';
+      preview.innerHTML = '<div class="cp-pv-line">' + line + '</div>';
+    }
+    var m = V.modal({
+      title: '月度报表',
+      width: '460px',
+      body: [
+        V.field('选择月份', sel),
+        preview,
+        el('div', {
+          class: 'ocr-hint',
+          text: '报表含收入 / 支出 / 结余、各分类金额与占比，以及与上月对比（环比）。'
+        })
+      ],
+      footer: el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+        el('button', {
+          class: 'btn', onclick: function () {
+            var t = buildReport(sel.value); downloadReportCsv(t); m.close();
+          }
+        }, ['CSV']),
+        el('button', {
+          class: 'btn btn-primary', onclick: function () {
+            var t = buildReport(sel.value); printReport(t); m.close();
+          }
+        }, ['打印 / PDF'])
+      ])
+    });
+    drawPreview();
+  }
 
   (window.VIEWS = window.VIEWS || []).push(view);
 })(window);
