@@ -82,7 +82,8 @@ export default [
   // 里面还拷贝了一份 sw.js（含 caches/fetch/Response 等 SW 全局），不能按源码规则检查。
   {
     ignores: [
-      'index.html', 'node_modules/**', 'preview/**', 'course-planner-deploy/**',
+      // quotes-data.js 是 build.py 从 assets/js/ 复制到根目录的分发副本，不按源码检查
+      'index.html', 'quotes-data.js', 'node_modules/**', 'preview/**', 'course-planner-deploy/**',
       'dist/**', 'android/**'
     ]
   },

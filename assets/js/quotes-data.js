@@ -8,11 +8,10 @@
  * 界定为「专四且非高考」范围后取全集
  * ========================================================== */
 /**
- * 惰性加载：整份语料（约 800KB 字面量）包在函数体里，V8 只做预解析、不立即构造，
- * 首屏不必为「今日 / 设置」之外的功能付解析成本。首次需要时调用 window.__cpLoadDaily()。
+ * 完整语料（约 800KB）。默认构建下它是 index.html 旁边的独立文件，不在首屏里：
+ * quotes-mini.js 先带一份 15KB 的迷你集顶上，空闲时再把这个文件加载进来原地升级。
+ * 这里只负责「把 POEMS / WORDS 交出去」，索引、切换、收藏等逻辑都在 quotes-mini.js。
  */
-window.__cpLoadDaily = function () {
-  if (window.Daily) return window.Daily;
 
 (function (global) {
   'use strict';
@@ -5417,88 +5416,8 @@ window.__cpLoadDaily = function () {
   {w:"zombie",ph:"/ˈzɒmbi/",pos:"n.",def:"（某些非洲和加勒比地区的宗教及恐怖故事中）靠巫术起死回生的僵尸,无生气的人，麻木迟钝的人",star:4}
   ];
 
-/* ---------------- 索引与切换 ---------------- */
-  function hash(str) {
-    var h = 0, i;
-    for (i = 0; i < str.length; i++) {
-      h = (h * 31 + str.charCodeAt(i)) % 2147483647;
-    }
-    return Math.abs(h);
-  }
-
-  /** 随机取一个与 cur 不同的下标 */
-  function randExcept(n, cur) {
-    if (n <= 1) return 0;
-    var v = Math.floor(Math.random() * n);
-    if (v === cur) v = (v + 1 + Math.floor(Math.random() * (n - 1))) % n;
-    return v;
-  }
-
-  var Daily = {
-    poems: POEMS,
-    words: WORDS,
-
-    /**
-     * 初始化并推进索引：首次按当天日期取一个稳定起点；
-     * 之后每天第一次打开自动前进一条，手动切换后当天不再跳。
-     */
-    ensure: function () {
-      var s = Store.state.settings;
-      var today = DateUtil.toStr(DateUtil.today());
-      if (!s.daily || s.daily.poem == null) {
-        s.daily = {
-          date: today,
-          pushed: today,
-          poem: hash(today + 'p') % POEMS.length,
-          word: hash(today + 'w') % WORDS.length
-        };
-        Store.save();
-        return s.daily;
-      }
-      if (s.daily.pushed !== today) {
-        s.daily.poem = (s.daily.poem + 1) % POEMS.length;
-        s.daily.word = (s.daily.word + 1) % WORDS.length;
-        s.daily.pushed = today;
-        Store.save();
-      }
-      return s.daily;
-    },
-
-    poem: function () {
-      var d = this.ensure();
-      return POEMS[d.poem % POEMS.length];
-    },
-
-    word: function () {
-      var d = this.ensure();
-      return WORDS[d.word % WORDS.length];
-    },
-
-    /** 随机换一条（不重复当前这条） */
-    nextPoem: function () {
-      var d = this.ensure();
-      d.poem = randExcept(POEMS.length, d.poem);
-      Store.updateSettings({ daily: d });
-      return this.poem();
-    },
-
-    nextWord: function () {
-      var d = this.ensure();
-      d.word = randExcept(WORDS.length, d.word);
-      Store.updateSettings({ daily: d });
-      return this.word();
-    },
-
-    count: function () {
-      return { poems: POEMS.length, words: WORDS.length };
-    }
-  };
-
-  global.Daily = Daily;
+  /* 语料本身交给 quotes-mini.js 里的 Daily；这里只把完整数组递过去。
+     迷你集那边收到后会原地升级并触发一次重绘，卡片上的条数立刻变对。 */
+  global.__cpDailyFull = { poems: POEMS, words: WORDS };
+  if (global.__cpDailyUpgrade) global.__cpDailyUpgrade(global.__cpDailyFull);
 })(window);
-
-  return window.Daily;
-};
-
-
-

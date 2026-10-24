@@ -29,8 +29,15 @@ await page.evaluate(async () => { Store.updateSettings({ guided: true }); await 
 await page.goto(base + '/index.html?fresh=1#/schedule', { waitUntil: 'load' });
 await page.waitForTimeout(1400);
 await page.waitForFunction(() => window.Store && window.App, null, { timeout: 8000 });
-const lazyBefore = await page.evaluate(() => typeof window.Daily);
-check('从课表进入时不展开语料', lazyBefore === 'undefined', 'typeof Daily=' + lazyBefore);
+// 语料现在是两层：quotes-mini.js 的迷你集（24 篇 / 60 词）永远在，
+// 完整 800KB 语料才是「按需」。所以这里断言的是后者没被拉起来。
+const lazyBefore = await page.evaluate(() => ({
+  type: typeof window.Daily,
+  full: !!(window.Daily && Daily.full),
+  poems: (window.Daily && Daily.poems.length) || 0
+}));
+check('从课表进入时不加载完整语料', lazyBefore.type === 'object' && lazyBefore.full === false,
+  JSON.stringify(lazyBefore));
 await page.evaluate(() => App.go('today'));
 await page.waitForTimeout(600);
 const lazyAfter = await page.evaluate(() => ({

@@ -3,9 +3,11 @@
  * 主交付始终是单一 index.html；本文件可忽略，不影响单文件使用。 */
 // v2：补齐 manifest 与各尺寸图标。之前只缓存 index.html/sw.js，离线冷启动时
 // manifest 与图标取不到，安装出来的桌面图标会掉成默认样式。
-const CACHE = 'cp-app-v2';
+// v3：诗词语料外置为 quotes-data.js（800KB，首屏不再内联），要一起缓存，
+// 否则离线冷启动时「每日一句」只能拿到 15KB 的迷你集。
+const CACHE = 'cp-app-v3';
 const SHELL = [
-  './', './index.html', './sw.js', './manifest.webmanifest',
+  './', './index.html', './sw.js', './manifest.webmanifest', './quotes-data.js',
   './icon-192.png', './icon-512.png', './icon-512-maskable.png', './apple-touch-icon.png'
 ];
 

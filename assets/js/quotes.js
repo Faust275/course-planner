@@ -386,9 +386,26 @@
     setTimeout(function () { input.focus(); }, 120);
   }
 
-  /** 首次用到语料时再展开（quotes-data.js 已改为惰性函数） */
+  /* ==========================================================
+   * 语料：首屏只有 quotes-mini.js 的 15KB 迷你集，完整语料（800KB）
+   * 在空闲时按需加载，加载完 Daily 会原地升级并触发一次重绘。
+   * 加载失败不弹错——迷你集照样能换能看，只是条数少。
+   * ========================================================== */
+  var fullKicked = false;
+
+  function kickFullData() {
+    if (fullKicked) return;
+    if (!window.Daily || window.Daily.full) return;
+    if (typeof window.__cpDailyLoad !== 'function') return;
+    fullKicked = true;
+    var idle = window.requestIdleCallback || function (f) { return setTimeout(f, 1200); };
+    idle(function () { window.__cpDailyLoad(); });
+  }
+
+  /** 首次用到语料时确保 Daily 存在，并顺手把完整语料排进空闲队列 */
   function ensureDaily() {
     if (!window.Daily && typeof window.__cpLoadDaily === 'function') window.__cpLoadDaily();
+    kickFullData();
     return window.Daily;
   }
 

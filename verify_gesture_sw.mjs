@@ -188,7 +188,10 @@ await pg.close();
  * ========================================================== */
 // favicon / manifest 探测的 404、断网用例主动制造的断连，都是预期噪音
 const realErrors = errors.filter(e =>
-  !/favicon/.test(e) && !/manifest\.webmanifest/.test(e) && !/ERR_INTERNET_DISCONNECTED/.test(e));
+  !/favicon/.test(e) && !/manifest\.webmanifest/.test(e) && !/ERR_INTERNET_DISCONNECTED/.test(e) &&
+  // quotes-data.js 是可选的外置语料：这个用例只搭了 index.html + sw.js 两个文件，
+  // 取不到语料会退回 24 篇迷你集（设计上的降级），不该算作回归
+  !/quotes-data\.js/.test(e));
 await b.close();
 server.close();
 
