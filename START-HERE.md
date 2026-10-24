@@ -8,7 +8,7 @@
 
 一个面向学生的单文件网页应用（PWA），已有安卓壳。功能：课表、日程、四象限待办、日历、番茄钟、记账、成绩、目标、日记、统计复盘、抽卡收集、离线二维码同步、健康联动（睡眠/步数）。
 
-- **真正的源码**在 `course-planner-deploy/assets/js/` + `src/index.template.html`
+- **真正的源码**在 `course-planner/assets/js/` + `src/index.template.html`
 - **`index.html` 是构建产物**（约 2.0 MB，CSS/JS 全内联），**不要手改**
 - **`quotes-data.js` 也是产物**（约 800KB 诗词语料），由 `build.py` 从 `assets/js/quotes-data.js` 复制而来。它和 `index.html` 必须放在**同一目录**——少了它诗词只在 24 篇迷你集里转（不报错，但明显变少）。想要「一个 html 走天下」就 `python3 build.py --inline`
 - 安卓壳是 Capacitor 8，原生代码在 `android/`
@@ -17,8 +17,8 @@
 这个包/
 ├── START-HERE.md              ← 你正在看的
 ├── HANDOFF.md                 ← 完整手册（架构、坑、安卓打包、待办）
-├── 课表-CoursePlanner.apk     ← 已打好，可直接装手机
-├── course-planner-deploy/     ← 工程本体
+├── 交接说明-20261024.md       ← 本轮交接：改了什么、现在什么状态、下一步做什么
+├── course-planner/     ← 工程本体
 └── README.md                  ← 产品说明（功能清单、用法）
 ```
 
@@ -27,7 +27,7 @@
 ## 2. 三条命令验证环境
 
 ```bash
-cd course-planner-deploy
+cd course-planner
 npm install          # 首次需要（eslint + playwright）
 npm run ci           # build + 891 条单测 + ESLint
 npm run e2e          # 75 个 Playwright 端到端（首次需 npx playwright install chromium）
@@ -80,9 +80,9 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 ## 5. 换新对话时，把这段整段粘过去
 
-> 我在一个叫 `course-planner-deploy` 的项目上继续开发，它是个单文件 PWA（约 2100KB 的 index.html + 20 个视图），已有 Capacitor 8 的安卓壳。
+> 我在一个叫 `course-planner` 的项目上继续开发，它是个单文件 PWA（约 2100KB 的 index.html + 20 个视图），已有 Capacitor 8 的安卓壳。
 >
-> **工作目录**：`/workspace/course-planner-deploy`
+> **工作目录**：`/workspace/course-planner`
 > **先读**：`START-HERE.md`、`HANDOFF.md`（架构约定、已知坑、安卓打包都在里面）
 >
 > **三条铁律**：

@@ -27,7 +27,7 @@
 ## 1. 目录与构建
 
 ```
-course-planner-deploy/
+course-planner/
 ├── START-HERE.md               # 一页纸入口（先看这个）
 ├── src/index.template.html     # 模板：<script src=...> 会被 build.py 内联
 ├── assets/
