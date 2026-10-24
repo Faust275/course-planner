@@ -7098,6 +7098,181 @@
       return out;
     },
 
+    /* ----- 跨夜聚合：债务 / 课表联动 ----- */
+
+    /**
+     * 严格按「醒来日」取昨夜睡眠，不含 sleepForDay 的近似退路。
+     * 跨夜聚合必须用它：sleepForDay 在缺记录时会回退到「最近一条」，
+     * 连续多天聚合会把同一夜重复计入，债务 / 对比结果全错。
+     */
+    nightOn: function (dateStr) {
+      var self = this;
+      var list = (state.sleeps || []).filter(function (s) {
+        return self.wakeDateOf(s) === dateStr;
+      });
+      if (!list.length) return null;
+      return list.sort(function (a, b) {
+        return a.start < b.start ? 1 : a.start > b.start ? -1 : 0;
+      })[0];
+    },
+
+    /** 某夜的总睡眠分钟 + 质量系数；无记录返回 null */
+    nightStats: function (dateStr) {
+      var SM = (typeof window !== 'undefined' && window.SleepModel) ||
+               (typeof global !== 'undefined' && global.SleepModel) || null;
+      var rec = this.nightOn(dateStr);
+      if (!rec) return null;
+      var night = SM ? SM.normalizeNight(rec) : null;
+      if (!night) {
+        // 只有「总时长」没有起止的手动记录，仍应计入时长
+        if (Number(rec.total) > 0) {
+          return { total: Number(rec.total), q: 0.7, deep: null, rem: null,
+                   efficiency: rec.efficiency != null ? Number(rec.efficiency) : null,
+                   bed: null, wake: null };
+        }
+        return null;
+      }
+      return {
+        total: night.total || 0,
+        q: SM ? SM.qualityFactor(night) : 0.7,
+        deep: night.deep, rem: night.rem,
+        efficiency: night.efficiency,
+        bed: night.bed, wake: night.wake
+      };
+    },
+
+    /**
+     * 睡眠债务（滚动累积）
+     *   缺口 deficit = max(0, 需求 − 实睡)；盈余 surplus = max(0, 实睡 − 需求)
+     *   debt[i] = clamp(debt[i−1] + deficit − surplus, 0, CAP)
+     * 没记录的夜不算「欠债」，只算「没数据」（has:false，不推进债务）。
+     */
+    sleepDebt: function (n) {
+      n = n || 7;
+      var SM = (typeof window !== 'undefined' && window.SleepModel) ||
+               (typeof global !== 'undefined' && global.SleepModel) || null;
+      var need = (SM && SM.CONST && SM.CONST.NEED_MIN) || 480;
+      var CAP = 900;                       // 15h 封顶，防长期缺记录时数字失控
+      var days = [], debt = 0, today = DateUtil.today();
+
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var st = this.nightStats(ds);
+        var total = st ? st.total : null;
+        var deficit = 0, surplus = 0;
+        if (total != null) {
+          deficit = Math.max(0, need - total);
+          surplus = Math.max(0, total - need);
+          debt = Math.max(0, Math.min(CAP, debt + deficit - surplus));
+        }
+        days.push({ date: ds, total: total, has: !!st,
+                    deficit: deficit, surplus: surplus, debt: debt });
+      }
+
+      var known = days.filter(function (d) { return d.has; });
+      var avg = 0;
+      if (known.length) {
+        var sum = 0;
+        known.forEach(function (d) { sum += d.total; });
+        avg = Math.round(sum / known.length);
+      }
+      return {
+        need: need, cap: CAP, days: days, debt: debt,
+        debtH: Math.round(debt / 6) / 10,                 // 分钟 -> 小时（1 位小数）
+        knownNights: known.length,
+        avgMin: avg,
+        recoverDays: debt > 0 ? Math.ceil(debt / 60) : 0  // 每晚多睡 1 小时需几天补回
+      };
+    },
+
+    /**
+     * 某天的课业负荷：第一节几点、是否「早八」、共几节。
+     * 早八阈值：开始时间 ≤ earlyBy（默认 09:00）。
+     */
+    courseLoadOn: function (dateStr, earlyBy) {
+      earlyBy = earlyBy || '09:00';
+      var list = this.coursesOnDate(dateStr) || [];
+      var times = [];
+      list.forEach(function (c) {
+        var t = Store.courseTime(c);
+        if (t) times.push(t);
+      });
+      times.sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; });
+      if (!times.length) {
+        return { has: false, count: 0, firstStart: '', isEarly: false, earlyBy: earlyBy };
+      }
+      return {
+        has: true,
+        count: times.length,
+        firstStart: times[0].start,
+        isEarly: times[0].start <= earlyBy,
+        earlyBy: earlyBy
+      };
+    },
+
+    /**
+     * 课表联动：把「有早八的上课日」与「没有早八的上课日」分开对比睡眠。
+     * 只看「有课 + 有睡眠记录」的日子；无课日（周末/假期）不进对比，
+     * 否则周末补觉会把「非早八」一侧拉高，制造假差异。
+     */
+    courseLink: function (n, earlyBy) {
+      n = n || 28;
+      earlyBy = earlyBy || '09:00';
+      var early = [], late = [], unknown = 0, today = DateUtil.today();
+
+      for (var i = n - 1; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var load = this.courseLoadOn(ds, earlyBy);
+        if (!load.has) continue;
+        var st = this.nightStats(ds);
+        if (!st) { unknown++; continue; }
+        (load.isEarly ? early : late).push({
+          date: ds, q: st.q, total: st.total, firstStart: load.firstStart
+        });
+      }
+
+      function avg(arr, key) {
+        if (!arr.length) return 0;
+        var s = 0;
+        arr.forEach(function (x) { s += x[key]; });
+        return s / arr.length;
+      }
+
+      var eq = avg(early, 'q'), lq = avg(late, 'q');
+      var em = avg(early, 'total'), lm = avg(late, 'total');
+      var both = early.length > 0 && late.length > 0;
+      return {
+        earlyBy: earlyBy,
+        earlyDays: early, lateDays: late, unknown: unknown,
+        earlyAvgQ: eq, lateAvgQ: lq, deltaQ: both ? eq - lq : 0,
+        earlyAvgMin: em, lateAvgMin: lm, deltaMin: both ? em - lm : 0,
+        hasData: early.length + late.length > 0
+      };
+    },
+
+    /** 今天起 n 天内最近的一节「早八」课（看板把警觉度曲线和早八叠在一起用） */
+    nextEarlyClass: function (n, earlyBy) {
+      n = n || 7;
+      earlyBy = earlyBy || '09:00';
+      var today = DateUtil.today();
+      for (var i = 0; i < n; i++) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, i));
+        var load = this.courseLoadOn(ds, earlyBy);
+        if (!load.has || !load.isEarly) continue;
+        var list = this.coursesOnDate(ds), first = null, ft = null;
+        list.forEach(function (c) {
+          var t = Store.courseTime(c);
+          if (t && (!ft || t.start < ft.start)) { ft = t; first = c; }
+        });
+        if (!ft) continue;
+        return {
+          date: ds, start: ft.start, end: ft.end,
+          name: (first && (first.name || first.courseName)) || '早课'
+        };
+      }
+      return null;
+    },
+
     /* ===== 设置 ===== */
     updateSemester: function (data) {
       var cur = this.currentSemester();

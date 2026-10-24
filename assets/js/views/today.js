@@ -359,7 +359,7 @@
               el('span', { style: { fontSize: '11.5px', color: left < 0 ? '#ef4444' : 'var(--text-3)' }, text: leftText })
             ]),
             el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' } }, [
-              el('div', { style: { flex: '1', height: '7px', background: 'var(--bg-2)', borderRadius: '4px', overflow: 'hidden' } }, [
+              el('div', { style: { flex: '1', height: '7px', background: 'var(--line)', borderRadius: '4px', overflow: 'hidden' } }, [
                 el('div', { style: { width: Math.max(0, Math.min(100, gpct)) + '%', height: '100%', background: 'var(--primary)' } })
               ]),
               el('span', { style: { fontSize: '11.5px', color: 'var(--text-2)', width: '34px', textAlign: 'right' }, text: gpct + '%' })
