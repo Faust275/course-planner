@@ -45,8 +45,15 @@
         </activity>
     </application>
 
-    <!-- 健康联动（Health Connect）：读取睡眠数据 -->
+    <!-- 健康联动（Health Connect）
+         要点：每个要读的数据类型都必须在这里先声明，否则运行时请求会拿不到授权。
+         插件 HealthConnectPlugin.kt 里读的是睡眠 / 步数 / 活动消耗 / 距离，四者缺一不可：
+         之前只声明了 READ_SLEEP，步数、卡路里、距离多半会被系统忽略（活动页长期为空）。
+         改动只在重新打包后才生效。 -->
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
