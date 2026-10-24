@@ -69,13 +69,19 @@ print(f"[build] 已生成 {OUT}  ({len(html)/1024:.1f} KB)")
 import shutil
 
 DIST = ROOT / "dist"
-DIST.mkdir(exist_ok=True)
-(DIST / "index.html").write_text(html, encoding="utf-8")
-for name in ["manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png",
-             "icon-512-maskable.png", "apple-touch-icon.png"]:
-    src = ROOT / name
-    if src.exists():
-        shutil.copy2(src, DIST / name)
-    else:
-        print(f"[build] 警告: 缺少 {name}，dist/ 里将不含它（不影响单文件使用）")
-print(f"[build] 已同步 dist/ -> {DIST}")
+# dist/ 仅用于打安卓包；某些环境下会被安全策略/占用锁住。
+# 根 index.html 才是单文件交付物，dist 同步失败只告警，不让整次构建失败。
+try:
+    DIST.mkdir(exist_ok=True)
+    (DIST / "index.html").write_text(html, encoding="utf-8")
+    for name in ["manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png",
+                 "icon-512-maskable.png", "apple-touch-icon.png"]:
+        src = ROOT / name
+        if src.exists():
+            shutil.copy2(src, DIST / name)
+        else:
+            print(f"[build] 警告: 缺少 {name}，dist/ 里将不含它（不影响单文件使用）")
+    print(f"[build] 已同步 dist/ -> {DIST}")
+except OSError as e:
+    print(f"[build] 警告: dist/ 同步失败（{e}）。根 index.html 已生成，"
+          f"打安卓包前请在可写环境重新运行 build.py 更新 dist/。")

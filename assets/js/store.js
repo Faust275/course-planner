@@ -2912,6 +2912,28 @@
       return s;
     },
 
+    /**
+     * 以某学期课表为模板，把课程整套复制到另一个学期（新建学期时用）。
+     * 只复制课程本身（含时段、周次、学分、考试时间），不复制成绩与调课记录。
+     * @returns {number} 复制的课程数
+     */
+    cloneCourses: function (fromSid, toSid) {
+      if (!fromSid || !toSid || fromSid === toSid) return 0;
+      var firstSem = state.semesters.length ? state.semesters[0].id : null;
+      var src = state.courses.filter(function (c) {
+        // 旧版无 semesterId 的课程归最早那个学期（当时只有一个学期）
+        return c.semesterId === fromSid || (!c.semesterId && fromSid === firstSem);
+      });
+      src.forEach(function (c) {
+        var copy = JSON.parse(JSON.stringify(c));
+        copy.id = uid('c');
+        copy.semesterId = toSid;
+        state.courses.push(copy);
+      });
+      if (src.length) this.emit();
+      return src.length;
+    },
+
     /** 删除学期：里面的课程和成绩一起删掉 */
     removeSemester: function (id) {
       if (state.semesters.length <= 1) return false;

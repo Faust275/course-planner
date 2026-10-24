@@ -2458,6 +2458,14 @@
     });
     var preview = el('div', { class: 'preview-box' });
 
+    /* 课程模板：可把某学期的课表整套复制到新学期 */
+    var tplOpts = [{ value: '', label: '不复制（空课表）' }].concat(
+      Store.semesters.map(function (s) {
+        return { value: s.id, label: '复制「' + s.name + '」的课表' };
+      })
+    );
+    var fTpl = V.select(tplOpts, cur.id);
+
     function align() {
       var a = DateUtil.parse(fStart.value), b = DateUtil.parse(fEnd.value);
       if (!a || !b) return null;
@@ -2488,6 +2496,7 @@
           V.field('结束日期', fEnd)
         ]),
         preview,
+        V.field('课程模板', fTpl, '把某学期的课表整套复制过来，省去重排；成绩不会跟着复制'),
         el('div', { class: 'ocr-hint',
           text: '不用挑周一：选任意一天都会自动对齐到整周。新建后自动切换过去，原来的学期和成绩都还在。' })
       ],
@@ -2501,13 +2510,15 @@
             if (!d2) { UI.toast('请选择结束日期', 'err'); return; }
             if (DateUtil.diffDays(d2, d1) < 0) { UI.toast('结束日期不能早于开始日期', 'err'); return; }
             var a = align();
-            Store.addSemester({
+            var newSem = Store.addSemester({
               name: fName.value.trim() || '新学期',
               startDate: DateUtil.toStr(a.monday),
               weeks: a.weeks
             });
+            var tplSid = fTpl.value;
+            var copied = tplSid ? Store.cloneCourses(tplSid, newSem.id) : 0;
             mm.close();
-            UI.toast('已创建并切换');
+            UI.toast(copied > 0 ? ('已创建并复制 ' + copied + ' 门课') : '已创建并切换');
             view.render();
           }
         })
