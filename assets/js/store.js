@@ -2663,7 +2663,8 @@
       if (!probe) return Promise.resolve(null);
       var n = (probe.courses || []).length + (probe.tasks || []).length +
               (probe.ledger || []).length + (probe.notes || []).length +
-              (probe.plans || []).length + (probe.events || []).length;
+              (probe.plans || []).length + (probe.events || []).length +
+              (probe.diaries || []).length;
       if (n === 0) return Promise.resolve(null);
 
       var meta = {
@@ -2672,7 +2673,8 @@
         courses: (probe.courses || []).length,
         tasks: (probe.tasks || []).length,
         ledger: (probe.ledger || []).length,
-        notes: (probe.notes || []).length
+        notes: (probe.notes || []).length,
+        diaries: (probe.diaries || []).length
       };
       return Persist.save(key, str).then(function () {
         return self._bkAddIndex(meta);
