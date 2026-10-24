@@ -8,7 +8,9 @@
     "test": "node tests/run.mjs",
     "lint": "eslint .",
     "e2e": "node tests/run-e2e.mjs",
-    "ci": "npm run build && npm run test && npm run lint"
+    "ci": "npm run build && npm run test && npm run bench:ocr && npm run lint",
+    "bench:ocr": "node tests/ocr-bench/run.mjs",
+    "bench:ocr:real": "node tests/ocr-bench/run.mjs --real"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

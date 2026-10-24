@@ -1,0 +1,52 @@
+{
+  "id": "c02-color-blocks",
+  "title": "彩色课程块（文字压在色块上）",
+  "note": "很多教务系统用色块区分课程类型，色块背景会给二值化带来麻烦。",
+  "style": {
+    "fontSize": 19,
+    "grid": "#b0b6c4",
+    "cellFill": "course",
+    "textColor": "#fff"
+  },
+  "days": 7,
+  "periods": 5,
+  "reliability": 92,
+  "cells": [
+    {
+      "day": 1,
+      "period": 2,
+      "lines": [
+        "数据结构",
+        "赵敏",
+        "教四108"
+      ]
+    },
+    {
+      "day": 2,
+      "period": 3,
+      "lines": [
+        "操作系统",
+        "孙磊",
+        "教四203"
+      ]
+    },
+    {
+      "day": 4,
+      "period": 1,
+      "lines": [
+        "计算机网络",
+        "周涛",
+        "教五101"
+      ]
+    },
+    {
+      "day": 5,
+      "period": 4,
+      "lines": [
+        "概率论",
+        "吴倩",
+        "教二306"
+      ]
+    }
+  ]
+}

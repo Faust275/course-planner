@@ -29,6 +29,9 @@
       },
       grid: null,
       items: null,
+      words: null,         // 本轮识别的词（含坐标与置信度）
+      confOnly: false,     // 只看存疑：把高置信格子压暗，突出要核对的
+      touched: {},         // 'r,c' → 1，用户手动改过的格子（改过就不再算存疑）
       progress: '',
       pct: 0,
       error: '',
@@ -549,6 +552,8 @@
       }
       S.grid = global.Ocr.buildGrid(res.words, { lines: res.lines, customLines: customLines });
       S.words = res.words;
+      S.touched = {};          // 新一轮识别，之前的「已改过」记录作废
+      S.confOnly = false;
       S.step = 'grid';
       draw();
     }).catch(function (e) {
@@ -590,6 +595,39 @@
   }
 
   /* ---------- 第三步：网格校正 ---------- */
+  /* ==========================================================
+   * 置信度：分级与统计都走 Ocr 模块（同一份判定，单测能覆盖）
+   * ========================================================== */
+  function confLevel(c) { return global.Ocr.confLevel(c); }
+  function confAt(g, ri, ci) { return global.Ocr.confAt(g, ri, ci); }
+  function confStats(g) { return global.Ocr.confStats(g, S.touched); }
+
+  var confHintEl = null, confBtnEl = null;
+
+  /** 改完一格就刷新顶部提示与「只看存疑」按钮上的计数 */
+  function refreshConfHint() {
+    var st = confStats(S.grid);
+    if (confHintEl) {
+      if (!st.filled) {
+        confHintEl.textContent = '还没有识别出内容，可以直接在格子里手写。';
+        confHintEl.className = 'cp-ocr-hint';
+      } else if (!st.suspect) {
+        confHintEl.textContent = '这 ' + st.filled + ' 格都认得挺清楚，扫一眼就能往下走。';
+        confHintEl.className = 'cp-ocr-hint cp-ocr-calm';
+      } else {
+        confHintEl.textContent = '这 ' + st.filled + ' 格里有 ' + st.suspect + ' 格拿不准' +
+          (st.low ? '（' + st.low + ' 格标红的最该改）' : '') + '，改完标记会自动消失。';
+        confHintEl.className = 'cp-ocr-hint cp-ocr-suspect';
+      }
+    }
+    if (confBtnEl) {
+      confBtnEl.textContent = S.confOnly ? '只看存疑 · 开' : '只看存疑' + (st.suspect ? ' ' + st.suspect : '');
+      confBtnEl.classList.toggle('cp-btn-primary', !!S.confOnly);
+      confBtnEl.disabled = !st.suspect && !S.confOnly;
+      confBtnEl.classList.toggle('cp-is-off', !st.suspect && !S.confOnly);
+    }
+  }
+
   function drawGrid() {
     var g = S.grid;
     var periods = Store.periods;
@@ -615,6 +653,7 @@
           if (g.rows.length >= periods.length) { UI.toast('行数已达到节次数，请先在设置里增加节次'); return; }
           g.rows.push({ y: 0, label: '第 ' + (g.rows.length + 1) + ' 节' });
           g.cells.push(g.cols.map(function () { return ''; }));
+          if (g.conf) g.conf.push(g.cols.map(function () { return null; }));
           draw();
         }
       }),
@@ -623,6 +662,7 @@
         onclick: function () {
           if (g.rows.length <= 1) return;
           g.rows.pop(); g.cells.pop();
+          if (g.conf) g.conf.pop();
           draw();
         }
       }),
@@ -632,7 +672,9 @@
           syncCells();
           var removed = 0;
           while (g.rows.length > 1 && g.cells[g.rows.length - 1].every(function (t) { return !(t || '').trim(); })) {
-            g.rows.pop(); g.cells.pop(); removed++;
+            g.rows.pop(); g.cells.pop();
+            if (g.conf) g.conf.pop();
+            removed++;
           }
           if (removed) { UI.toast('已清理 ' + removed + ' 个空行'); draw(); }
           else { UI.toast('末尾没有多余空行'); }
@@ -650,6 +692,7 @@
               var cur = (g.cells[ri] && g.cells[ri][ci] || '').trim();
               if (prev && cur && prev === cur) {
                 g.cells[ri][ci] = '';
+                if (g.conf && g.conf[ri]) g.conf[ri][ci] = null;
                 merged++;
               }
             }
@@ -658,6 +701,11 @@
           else { UI.toast('未发现连续同名课程'); }
         }
       }),
+      (confBtnEl = el('button', {
+        class: 'btn btn-sm', text: '只看存疑',
+        title: '把认得清楚的格子压暗，只留下要核对的',
+        onclick: function () { S.confOnly = !S.confOnly; draw(); }
+      })),
       el('button', {
         class: 'btn btn-sm', text: '📏 返回调整对齐网格',
         onclick: function () { S.step = 'pick'; S.toolMode = 'grid'; S.useCustomGrid = true; draw(); }
@@ -668,6 +716,11 @@
       })
     ]);
     bodyEl.appendChild(toolbar);
+
+    /* 存疑统计：一句话说清「有几格该看」 */
+    confHintEl = el('div', { class: 'ocr-hint' });
+    bodyEl.appendChild(confHintEl);
+    refreshConfHint();
 
     var wrap = el('div', { class: 'ocr-grid-wrap' });
     var table = el('table', { class: 'ocr-table' });
@@ -692,12 +745,23 @@
       g.cols.forEach(function (col, ci) {
         var val = (g.cells[ri] && g.cells[ri][ci]) || '';
         var isFilled = !!val.trim();
+        var key = ri + ',' + ci;
+        // 改过的格子不再标存疑：用户已经用眼睛确认过了
+        var lv = (isFilled && !S.touched[key]) ? confLevel(confAt(g, ri, ci)) : '';
+        var cls = 'ocr-cell' + (isFilled ? ' has-content' : '') + (lv ? ' ocr-' + lv : '');
+        if (!lv && S.confOnly && isFilled) cls += ' ocr-dim';
         var ta = el('textarea', {
-          class: 'ocr-cell' + (isFilled ? ' has-content' : ''),
+          class: cls,
           rows: val.split('\n').length > 1 ? 3 : 2,
           dataset: { r: ri, c: ci },
+          title: lv === 'low' ? '这格识别得很不确定（' + confAt(g, ri, ci) + '%），建议改一下'
+               : lv === 'mid' ? '这格有点拿不准（' + confAt(g, ri, ci) + '%），值得看一眼' : null,
           oninput: function () {
             ta.classList.toggle('cp-has-content', !!ta.value.trim());
+            var marked = ta.classList.contains('cp-ocr-low') || ta.classList.contains('cp-ocr-mid');
+            ta.classList.remove('cp-ocr-low', 'cp-ocr-mid', 'cp-ocr-dim');
+            S.touched[key] = 1;
+            if (marked) refreshConfHint();
           }
         });
         ta.value = val;
@@ -742,44 +806,14 @@
     });
   }
 
-  function weekOf(info) {
-    var w = global.Ocr.parseWeeks(info.weeks, Store.semester.weeks);
-    return w || { weekType: 'all', startWeek: 1, endWeek: Store.semester.weeks };
-  }
-
-  /** 把网格内容拆成课程列表（课程名 / 地点 / 教师 / 周次 分开，并附带词库纠偏标记） */
+  /**
+   * 把网格内容拆成课程列表。
+   * 真正的解析在 Ocr.gridToItems（与离线基准共用），这里只负责把界面上的
+   * 最新输入同步回网格，再补上本页面依赖的节次表与学期周数。
+   */
   function toItems() {
     syncCells();
-    var periods = Store.periods;
-    var items = [];
-
-    S.grid.rows.forEach(function (row, ri) {
-      var pIdx = (row.periodIndex || (ri + 1)) - 1;
-      var period = periods[pIdx];
-      S.grid.cols.forEach(function (col, ci) {
-        var text = (S.grid.cells[ri] && S.grid.cells[ri][ci]) || '';
-        if (!text.trim()) return;
-        var info = global.Ocr.parseCell(text);
-        if (!info.name) return;
-        if (global.Ocr.isHeaderWord(info.name)) return;   // 漏网的表头
-        var wk = weekOf(info);
-        items.push({
-          day: col.day,
-          periodId: period ? period.id : '',
-          periodName: period ? period.name : ('第 ' + (pIdx + 1) + ' 节'),
-          name: info.name,
-          correctedFrom: info.correctedFrom || '',
-          location: info.location || '',
-          teacher: info.teacher || '',
-          weeks: info.weeks || '',
-          weekType: wk.weekType,
-          startWeek: wk.startWeek,
-          endWeek: wk.endWeek,
-          raw: text
-        });
-      });
-    });
-    return items;
+    return global.Ocr.gridToItems(S.grid, Store.periods, Store.semester.weeks);
   }
 
   /** 云端结果 → 同样的明细结构 */
@@ -883,6 +917,15 @@
               draw();
             }
           }) : null,
+          (function () {
+            var lv = confLevel(it.conf);
+            if (!lv) return null;
+            return el('span', {
+              class: 'ocr-conf-badge ocr-conf-' + lv,
+              text: (lv === 'low' ? '识别存疑 ' : '不太确定 ') + it.conf + '%',
+              title: '这一格的平均识别置信度，建议核对课程名有没有错字'
+            });
+          })(),
           isDup ? el('span', { class: 'ocr-dup-badge', text: '已存在' }) : null,
           el('button', {
             class: 'icon-btn', title: '删除这门课',

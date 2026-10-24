@@ -4178,6 +4178,23 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
   font-size: 10.5px; background: var(--amber-weak, #fef3c7);
   color: var(--amber, #b45309); margin-left: 6px;
 }
+/* ---- 识别置信度：拿不准的格子标黄/标红，改完自动消失 ---- */
+.cp-ocr-cell.cp-ocr-mid { background: var(--amber-weak); border-radius: 4px; }
+.cp-ocr-cell.cp-ocr-low { background: var(--red-weak); border-radius: 4px; }
+.cp-ocr-cell.cp-ocr-mid:focus, .cp-ocr-cell.cp-ocr-low:focus { background: var(--primary-weak); }
+/* 「只看存疑」：认得清楚的不隐藏（隐藏会打乱表格对齐），只压暗 */
+.cp-ocr-cell.cp-ocr-dim { opacity: .3; }
+.cp-ocr-cell.cp-ocr-dim:focus { opacity: 1; }
+.cp-ocr-hint.cp-ocr-suspect { color: #b54708; font-weight: 600; }
+.cp-ocr-hint.cp-ocr-calm { color: #067647; }
+.cp-ocr-conf-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; font-weight: 600; margin-left: 6px;
+}
+.cp-ocr-conf-low { background: var(--red-weak); color: #b42318; }
+.cp-ocr-conf-mid { background: var(--amber-weak); color: #b54708; }
+.cp-btn.cp-is-off { opacity: .45; }
+
 .cp-ocr-search-bar {
   display: flex; align-items: center; gap: 8px;
   padding: 0 10px; margin-bottom: 10px;

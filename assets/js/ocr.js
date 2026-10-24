@@ -519,12 +519,17 @@
     return initPromise.then(function (n) {
       norm = n;
       if (onProgress) onProgress({ status: '正在分析表格结构与去噪…', progress: 0.05 });
-      stripColorCardBg(n.canvas);
-      if (opts.binary) binarize(n.canvas);
-      else enhance(n.canvas);
-      lines = detectLines(n.canvas);
-      if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
-        isolateGridLines(n.canvas, lines, 4);
+      // raw：原图直接送识别，不走「去底纹 + 对比度拉伸 + 抹网格线」。
+      // 干净的截图走这条路明显更准——预处理那些步骤是给「拍照/彩色底」准备的，
+      // 用在本来就很清楚的截图上反而会把抗锯齿的笔画拉粗、被抹线切碎。
+      if (!opts.raw) {
+        stripColorCardBg(n.canvas);
+        if (opts.binary) binarize(n.canvas);
+        else enhance(n.canvas);
+        lines = detectLines(n.canvas);
+        if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
+          isolateGridLines(n.canvas, lines, 4);
+        }
       }
       return new Promise(function (resolve) {
         n.canvas.toBlob(function (b) { norm.blob = b; resolve(); }, 'image/png');
@@ -606,15 +611,67 @@
   }
 
   /** 本地识别：返回 words（含坐标），失败时自动换一种切分方式重试 */
+  /** 一次识别结果里认出了多少个汉字——用来在几种切分策略之间比大小 */
+  function cjkCount(r) {
+    if (!r || !r.words || !r.words.length) return 0;
+    var n = 0;
+    r.words.forEach(function (w) {
+      var m = String(w.text).match(/[\u4e00-\u9fa5]/g);
+      if (m) n += m.length;
+    });
+    return n;
+  }
+
+  /** 平均置信度，用来避免「认出一堆乱码但字数很多」的假胜出 */
+  function avgConf(r) {
+    if (!r || !r.words || !r.words.length) return 0;
+    var s = 0;
+    r.words.forEach(function (w) { s += (typeof w.conf === 'number' ? w.conf : 0); });
+    return s / r.words.length;
+  }
+
+  /**
+   * 本地识别：按几种切分方式各试一遍，取认出汉字最多的那次。
+   *
+   * 之前是「PSM 4 → 词太少再试 PSM 11」，而且第一遍出 0 个词就直接返回——等于对表格截图
+   * 恰好在最该重试的时候放弃了。实测同一张教务系统风格课表（1400×900）：
+   *   原图 + PSM 11 → 表头、课程名、教师地点几乎全中
+   *   原图 + PSM 4  → 一个字都认不出
+   *   增强后 + PSM 11 → 只剩「周三 周焉 禺图」这类乱码
+   * 所以拿「原图 + PSM 11」打头，预处理版留作拍照/脏底的兜底；
+   * 一旦某遍已经认得足够好就提前收工，正常截图仍然只跑一遍。
+   */
   function recognizeLocal(file, onProgress, extraOpts) {
     extraOpts = extraOpts || {};
-    return recognizeOnce(file, { psm: '4', canvas: extraOpts.canvas }, onProgress).then(function (first) {
-      if (first.words.length >= 12 || first.words.length === 0) return first;
-      // 词太少：改用二值化 + 稀疏文本模式再试一次
-      if (onProgress) onProgress({ status: '换个方式再识别一次…', progress: 0.5 });
-      return recognizeOnce(file, { psm: '11', binary: true, canvas: extraOpts.canvas }, onProgress).then(function (second) {
-        return second.words.length > first.words.length ? second : first;
-      }).catch(function () { return first; });
+    var canvas = extraOpts.canvas;
+    var tries = [
+      { psm: '11', raw: true, status: '正在识别…' },
+      { psm: '11', raw: false, status: '换个方式再识别一次…' },
+      { psm: '6', raw: false, status: '再换一种切分试试…' },
+      { psm: '11', raw: false, binary: true, status: '换二值化再试一次…' }
+    ];
+    var best = null;
+
+    function step(i) {
+      if (i >= tries.length) return Promise.resolve(best);
+      if (onProgress) onProgress({ status: tries[i].status, progress: 0.2 + i * 0.15 });
+      return recognizeOnce(file, {
+        psm: tries[i].psm, raw: tries[i].raw, binary: tries[i].binary, canvas: canvas
+      }, onProgress)
+        .catch(function () { return null; })
+        .then(function (r) {
+          if (r && (!best || cjkCount(r) > cjkCount(best) ||
+              (cjkCount(r) === cjkCount(best) && avgConf(r) > avgConf(best)))) {
+            best = r;
+          }
+          // 已经认够多了就别再耗时间
+          if (best && cjkCount(best) >= 24 && avgConf(best) >= 68) return best;
+          return step(i + 1);
+        });
+    }
+
+    return step(0).then(function (r) {
+      return r || { words: [], text: '', width: 0, height: 0, lines: null };
     });
   }
 
@@ -751,7 +808,7 @@
   function buildGrid(words, opts) {
     opts = opts || {};
     if (!words || !words.length) {
-      return { cols: defaultCols(), rows: [], cells: [] };
+      return { cols: defaultCols(), rows: [], cells: [], conf: [] };
     }
     if (opts.customLines && opts.customLines.vlines && opts.customLines.vlines.length >= 5 &&
         opts.customLines.hlines && opts.customLines.hlines.length >= 3) {
@@ -969,15 +1026,16 @@
       });
     });
 
-    var out = cells.map(function (row) { return row.map(joinCell); });
+    var flat = flattenCells(cells);
+    var out = flat.texts, outConf = flat.confs;
 
     // 尾部整行都空就丢掉
     while (rows.length && out[out.length - 1].every(function (t) { return !t; })) {
-      rows.pop(); out.pop();
+      rows.pop(); out.pop(); outConf.pop();
     }
 
     return {
-      cols: cols, rows: rows, cells: out,
+      cols: cols, rows: rows, cells: out, conf: outConf,
       meta: { headBottom: headBottom, tableLeft: tableLeft, tableRight: tableRight,
               dayHeaders: headDays.length, rowsByLines: !!(hlines.length >= 3),
               anchors: anchors.length, periodWords: periodWords.length,
@@ -994,7 +1052,8 @@
     var list = words.map(function (w) {
       var t = norm(w.text);
       return {
-        text: w.text, cx: w.cx, cy: w.cy, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1,
+        text: w.text, conf: w.conf, cx: w.cx, cy: w.cy,
+        x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1,
         day: dayOf(t), period: periodOf(t), time: isTime(w.text), meta: isMeta(t)
       };
     });
@@ -1040,14 +1099,126 @@
       if (ci >= 0 && ri >= 0) buckets[ri][ci].push(w);
     });
 
-    var cells = buckets.map(function (row) { return row.map(joinCell); });
+    var flat = flattenCells(buckets);
+    var cells = flat.texts, confs = flat.confs;
     var rows = rowRanges.map(function (r, i) {
       return { y: (r.y0 + r.y1) / 2, label: '第 ' + (i + 1) + ' 节', periodIndex: i + 1, index: i };
     });
     while (rows.length && cells[cells.length - 1].every(function (t) { return !t; })) {
-      rows.pop(); cells.pop();
+      rows.pop(); cells.pop(); confs.pop();
     }
-    return { cols: colRanges, rows: rows, cells: cells };
+    return { cols: colRanges, rows: rows, cells: cells, conf: confs };
+  }
+
+  /**
+   * 网格 → 课程明细。
+   * 界面与离线基准都调这一份，避免「测试跑的逻辑」和「线上跑的逻辑」是两套。
+   * @param grid buildGrid 的返回
+   * @param periods 节次表（Store.periods），可为空
+   * @param totalWeeks 学期总周数，用于解析「1-16周」
+   */
+  function gridToItems(grid, periods, totalWeeks) {
+    periods = periods || [];
+    totalWeeks = totalWeeks || 20;
+    var items = [];
+    if (!grid || !grid.rows || !grid.cols) return items;
+
+    grid.rows.forEach(function (row, ri) {
+      var pIdx = (row.periodIndex || (ri + 1)) - 1;
+      var period = periods[pIdx];
+      grid.cols.forEach(function (col, ci) {
+        var text = (grid.cells[ri] && grid.cells[ri][ci]) || '';
+        if (!text.trim()) return;
+        var info = parseCell(text);
+        if (!info.name) return;
+        // 漏网的表头（星期几 / 第几节 / 时间）不算课程
+        if (dayOf(info.name) || periodOf(info.name) || isTime(info.name) || isMeta(info.name)) return;
+        var wk = parseWeeks(info.weeks, totalWeeks) ||
+                 { weekType: 'all', startWeek: 1, endWeek: totalWeeks };
+        items.push({
+          day: col.day,
+          periodIndex: pIdx + 1,
+          periodId: period ? period.id : '',
+          periodName: period ? period.name : ('第 ' + (pIdx + 1) + ' 节'),
+          name: info.name,
+          correctedFrom: info.correctedFrom || '',
+          conf: confAt(grid, ri, ci),
+          location: info.location || '',
+          teacher: info.teacher || '',
+          weeks: info.weeks || '',
+          weekType: wk.weekType,
+          startWeek: wk.startWeek,
+          endWeek: wk.endWeek,
+          raw: text
+        });
+      });
+    });
+    return items;
+  }
+
+  /**
+   * 一格的平均置信度（0–100），空格返回 null。
+   * 用途：核对界面按它标黄/标红，让人一眼看到该重点改哪几格。
+   * 取平均而不是最低值——一个格子里「高等数学」认对了、后面周次认糊了，
+   * 平均分才会落在中间档；取最低值会把整格打成红色，反而失去区分度。
+   */
+  function cellConf(arr) {
+    if (!arr || !arr.length) return null;
+    var s = 0, n = 0;
+    arr.forEach(function (w) {
+      if (typeof w.conf === 'number' && isFinite(w.conf)) { s += w.conf; n++; }
+    });
+    return n ? Math.round(s / n) : null;
+  }
+
+  /** 置信度分级阈值：低于 LOW 标红（基本得改），低于 MID 标黄（值得看一眼） */
+  var CONF_LOW = 62, CONF_MID = 82;
+
+  /** null/高 → ''，中 → 'mid'，低 → 'low' */
+  function confLevel(c) {
+    if (c == null || typeof c !== 'number' || !isFinite(c)) return '';
+    if (c < CONF_LOW) return 'low';
+    if (c < CONF_MID) return 'mid';
+    return '';
+  }
+
+  /** 安全取一格的置信度：网格增删行后可能对不齐，取不到就当没有 */
+  function confAt(grid, ri, ci) {
+    if (!grid || !grid.conf || !grid.conf[ri]) return null;
+    var v = grid.conf[ri][ci];
+    return (typeof v === 'number' && isFinite(v)) ? v : null;
+  }
+
+  /**
+   * 统计网格里的「存疑格」。
+   * @param grid buildGrid 的返回
+   * @param touched {'r,c':1} 用户已经手动改过的格子——改过就不算存疑
+   */
+  function confStats(grid, touched) {
+    var st = { low: 0, mid: 0, filled: 0, suspect: 0 };
+    if (!grid || !grid.cells) return st;
+    grid.cells.forEach(function (row, ri) {
+      (row || []).forEach(function (t, ci) {
+        if (!String(t == null ? '' : t).trim()) return;
+        st.filled++;
+        if (touched && touched[ri + ',' + ci]) return;
+        var lv = confLevel(confAt(grid, ri, ci));
+        if (lv === 'low') st.low++;
+        else if (lv === 'mid') st.mid++;
+      });
+    });
+    st.suspect = st.low + st.mid;
+    return st;
+  }
+
+  /** cells(词数组) → 文本矩阵 + 置信度矩阵 */
+  function flattenCells(cells) {
+    var texts = [], confs = [];
+    cells.forEach(function (row) {
+      texts.push(row.map(joinCell));
+      confs.push(row.map(cellConf));
+    });
+    return { texts: texts, confs: confs };
   }
 
   /** 把同一格里的词按行拼成文本 */
@@ -1520,6 +1691,12 @@
     isolateGridLines: isolateGridLines,
     buildGrid: buildGrid,
     buildFromLines: buildFromLines,
+    gridToItems: gridToItems,
+    confLevel: confLevel,
+    confAt: confAt,
+    confStats: confStats,
+    CONF_LOW: CONF_LOW,
+    CONF_MID: CONF_MID,
     parseCell: parseCell,
     parseWeeks: parseWeeks,
     splitCell: splitCell,

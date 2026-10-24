@@ -32,7 +32,7 @@ npm run ci           # build + 891 条单测 + ESLint
 npm run e2e          # 75 个 Playwright 端到端（首次需 npx playwright install chromium）
 ```
 
-期望结果：`891 通过 / 0 失败`、`e2e 58 通过 / 0 失败`、lint 无输出。
+期望结果：`891 通过 / 0 失败`、`e2e 77 通过 / 0 失败`、lint 无输出。
 
 > 当前状态：**全部绿**。如果红了，先看 `HANDOFF.md` 第 5 节「已知坑」。
 

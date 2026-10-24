@@ -10,11 +10,12 @@
 
 | 项 | 当前状态 |
 |---|---|
-| 交付形态 | **单文件 `index.html`**（约 2266 KB，CSS/JS/语料全内联，禁止手改） |
+| 交付形态 | **单文件 `index.html`**（约 2274 KB，CSS/JS/语料全内联，禁止手改） |
 | 源码 | `src/index.template.html` + `assets/css` + `assets/js`（30+ 模块 / 20 个视图） |
 | 构建 | `npm run build`（`python3 build.py`，顺带产出 `dist/`） |
 | 单测 | `npm test` → **891 条全过**（纯函数，node 直接跑） |
-| 样式/e2e | `npm run e2e` → **75 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
+| OCR 基准 | `npm run bench:ocr` → **4 个分例 F1 1.00**（结构还原，见 `tests/ocr-bench/README.md`） |
+| 样式/e2e | `npm run e2e` → **77 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
 | Lint | `npm run lint` → **0 错误**（ESLint flat config） |
 | CI | `.github/workflows/ci.yml`：lint + 单测 + build + e2e 双 job |
 | 安卓 | Capacitor 8，minSdk **26**，debug APK 约 **8.45 MB** |
@@ -43,9 +44,10 @@ course-planner-deploy/
 │       └── views/              # 20 个视图（today/schedule/quadrant/activity/...）
 ├── build.py                    # 打包器：内联模板引用的 CSS/JS → index.html + dist/
 ├── tests/run.mjs               # 单测（891 条）
+├── tests/ocr-bench/            # OCR 识别基准（理想词表门禁 + 真机录音体检）
 ├── tests/run-e2e.mjs           # e2e 聚合运行器（自动扫描 verify_*.mjs）
 ├── test-utils.mjs              # e2e 共用静态服务器（绑 127.0.0.1）
-├── verify_*.mjs                # 75 个功能点 e2e
+├── verify_*.mjs                # 77 个功能点 e2e
 ├── eslint.config.mjs           # flat config（已 0 错误）
 └── android/                    # Capacitor 8 工程（含自写 Kotlin 插件）
 ```
@@ -55,9 +57,11 @@ npm install                 # 首次：eslint / playwright
 npm run build               # 生成 index.html + dist/
 npm test                    # 891 条单测
 npm run lint                # ESLint 全项目
-npm run e2e                 # 75 个 e2e（自动起共享服务器）
+npm run e2e                 # 77 个 e2e（自动起共享服务器）
 npm run e2e activity        # 按文件名过滤
-npm run ci                  # build + test + lint 三连
+npm run bench:ocr           # OCR 基准（理想词表，毫秒级，进 ci）
+npm run bench:ocr:real      # OCR 真实分（需联网下模型，只看趋势）
+npm run ci                  # build + test + bench:ocr + lint
 ```
 
 > ⚠️ **绝对不要手改 `index.html`**。它是构建产物；e2e 加载的也是它——**改完源码必须先 `npm run build`**，否则测试跑的仍是旧产物（这是最容易浪费时间的一个坑）。

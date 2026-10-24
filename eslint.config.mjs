@@ -31,6 +31,7 @@ const browserGlobals = {
   AbortSignal: 'readonly', MutationObserver: 'readonly', ResizeObserver: 'readonly',
   IntersectionObserver: 'readonly', WebSocket: 'readonly', BroadcastChannel: 'readonly',
   Worker: 'readonly', self: 'readonly', globalThis: 'readonly', BarcodeDetector: 'readonly',
+  DataTransfer: 'readonly',
 };
 
 // 应用级跨文件全局（window.X / global.X 声明处）
@@ -46,7 +47,7 @@ const appGlobals = {
   Daily: 'writable', DailyCards: 'writable', DateUtil: 'writable', diariesSorted: 'writable',
   diaryDatePrompt: 'writable', diaryOn: 'writable', DiaryPane: 'writable', eachDate: 'writable',
   EventDetail: 'writable', EventDialog: 'writable', Gacha: 'writable',   GoalsPane: 'writable', HealthConnect: 'writable',
-  GradeDialog: 'writable', hasTag: 'writable', heatLevel: 'writable', ICS: 'writable',
+  GradeDialog: 'writable', hasTag: 'writable', heatLevel: 'writable', HolidayCN: 'writable', ICS: 'writable',
   isChild: 'writable', ledgerCat: 'writable', LEDGER_CATS: 'writable', LEDGER_RANGES: 'writable',
   __LessonDialog: 'writable', Lunar: 'writable', MealDialog: 'writable', mealType: 'writable',
   MEAL_TYPES: 'writable', monthBounds: 'writable', MOOD_CROSS_MIN_DAYS: 'writable',
