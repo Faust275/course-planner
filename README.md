@@ -2,7 +2,7 @@
 
 一个面向学生的单文件网页应用（PWA）：课表、日程、四象限待办、日历、专注计时、记账、成绩、抽卡收集、每日一句等。
 
-**交付形态是一个 `index.html`**：CSS、JS、诗词/词库语料全部内联，双击即可使用，也可直接转发。开发期源码拆成多文件，构建时打包回单文件。
+**交付形态是 `index.html` + `quotes-data.js` 两个文件**：CSS 和 JS 全部内联进 `index.html`；800KB 的诗词/词库语料单独放一个文件、按需加载，首屏只带 15KB 迷你集。两个文件放同一目录，双击 `index.html` 即可使用，也可直接转发。若只想要一个文件，构建时加 `--inline`（`python3 build.py --inline`），代价是首屏多 800KB。
 
 ## 快速使用
 
@@ -29,14 +29,15 @@ course-planner-web/
 │   ├── router.js             hash 深链接（#/today、#/tasks/diary）+ 别名
 │   ├── pet.js                桌宠（独立模块，可整块删除）
 │   ├── ak_ops.js             干员数据
-│   ├── quotes-data.js        诗词 / 词库语料
+│   ├── quotes-mini.js        首屏迷你语料 + Daily 逻辑 + 完整语料按需加载
+│   ├── quotes-data.js        完整诗词 / 词库语料（默认外置，不进 index.html）
 │   ├── quotes.js             每日一句 / 每日一词 UI
 │   ├── remind.js              上课提醒：.ics 生成（纯函数）+ 页面内轮询提醒
 │   ├── foods.js / speech.js / ocr.js / theme.js / onboard.js
 │   └── views/*.js            各页面（课表、今日、日历、日程、象限、待办、计划、
 │                             目标、日记、记账、抽卡、专注、收集、成绩、设置、
 │                             统计、ocr-dialog、task-shot）
-├── build.py                  构建：内联 CSS/JS → 单文件 index.html
+├── build.py                  构建：内联 CSS/JS → index.html（语料默认外置为 quotes-data.js）
 ├── make_icons.py             生成默认 PWA 图标（靛蓝日历）
 ├── make_logos_icon.py        用一张角色头像生成 PWA 图标（本机自用，图标不进 Git）
 ├── manifest.webmanifest      PWA manifest（含 今日/待办/写日记 三个 shortcuts）

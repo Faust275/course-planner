@@ -10,12 +10,12 @@
 
 | 项 | 当前状态 |
 |---|---|
-| 交付形态 | **单文件 `index.html`**（约 2274 KB，CSS/JS/语料全内联，禁止手改） |
+| 交付形态 | **`index.html`（约 2.0 MB）+ `quotes-data.js`（约 800 KB），两份必须放同一目录**；需要「一个 html 走天下」时用 `python3 build.py --inline` |
 | 源码 | `src/index.template.html` + `assets/css` + `assets/js`（30+ 模块 / 20 个视图） |
-| 构建 | `npm run build`（`python3 build.py`，顺带产出 `dist/`） |
+| 构建 | `npm run build`（`python3 build.py`，顺带产出 `dist/`）；`--inline` 把语料也内联 |
 | 单测 | `npm test` → **891 条全过**（纯函数，node 直接跑） |
 | OCR 基准 | `npm run bench:ocr` → **4 个分例 F1 1.00**（结构还原，见 `tests/ocr-bench/README.md`） |
-| 样式/e2e | `npm run e2e` → **77 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
+| 样式/e2e | `npm run e2e` → **81 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
 | Lint | `npm run lint` → **0 错误**（ESLint flat config） |
 | CI | `.github/workflows/ci.yml`：lint + 单测 + build + e2e 双 job |
 | 安卓 | Capacitor 8，minSdk **26**，debug APK 约 **8.45 MB** |
@@ -40,14 +40,15 @@ course-planner-deploy/
 │       ├── remind.js           # 页面内提醒（上课 / 番茄钟 / 待办到期）+ ICS 导出
 │       ├── health-connect.js   # 健康联动 Web 桥（睡眠 + 活动量）
 │       ├── qr-sync.js          # 离线二维码同步 + WebDAV（1577 行）
-│       ├── quotes-data.js      # 语料包（惰性加载）
+│       ├── quotes-mini.js      # 首屏迷你语料（24 诗 / 60 词）+ Daily 全部逻辑 + 完整语料加载器
+│       ├── quotes-data.js      # 完整语料（约 800KB，默认外置到根目录，不进 index.html）
 │       └── views/              # 20 个视图（today/schedule/quadrant/activity/...）
-├── build.py                    # 打包器：内联模板引用的 CSS/JS → index.html + dist/
+├── build.py                    # 打包器：内联模板引用的 CSS/JS → index.html；语料默认只复制不内联
 ├── tests/run.mjs               # 单测（891 条）
 ├── tests/ocr-bench/            # OCR 识别基准（理想词表门禁 + 真机录音体检）
 ├── tests/run-e2e.mjs           # e2e 聚合运行器（自动扫描 verify_*.mjs）
 ├── test-utils.mjs              # e2e 共用静态服务器（绑 127.0.0.1）
-├── verify_*.mjs                # 77 个功能点 e2e
+├── verify_*.mjs                # 81 个功能点 e2e
 ├── eslint.config.mjs           # flat config（已 0 错误）
 └── android/                    # Capacitor 8 工程（含自写 Kotlin 插件）
 ```
@@ -57,7 +58,7 @@ npm install                 # 首次：eslint / playwright
 npm run build               # 生成 index.html + dist/
 npm test                    # 891 条单测
 npm run lint                # ESLint 全项目
-npm run e2e                 # 77 个 e2e（自动起共享服务器）
+npm run e2e                 # 81 个 e2e（自动起共享服务器）
 npm run e2e activity        # 按文件名过滤
 npm run bench:ocr           # OCR 基准（理想词表，毫秒级，进 ci）
 npm run bench:ocr:real      # OCR 真实分（需联网下模型，只看趋势）
@@ -111,7 +112,13 @@ App.bus.clearRelay(at)   // 渲染收尾清理（带 at 防止误清新接力）
 专注队列（托盘 chips + 队列区，结算后自动开始下一个）；待办多选整组拖动 + 批量删除（整份快照撤销）。
 
 ### 3.3 数据 / 性能
-`save()` 250ms 去抖 + `pagehide`/`visibilitychange` flush；大图外置；语料惰性加载；每日自动快照。
+`save()` 250ms 去抖 + `pagehide`/`visibilitychange` flush；大图外置；**诗词语料外置懒加载**（首屏只带 15KB 迷你集，800KB 完整语料空闲时再取，取不到就停在迷你集、不报错）；每日自动快照。
+
+**导入前先看差异**：`Store.diffImport()` 把备份和本机按模块比一遍（条数 + 课程/待办的新增/消失/改动），文件导入、同步码、扫码、WebDAV 四条路都用 `UI.diffPanel()` 摆出来再确认。**「备份里没有的模块会被整个清空」**是这里最该提醒的一句——精简档同步最容易踩。
+
+**OCR 预处理一次读写**：`Ocr.preprocessCanvas()` 把「去底纹 → 增强/二值化 → 找线 → 抹线」合并到同一份 `ImageData` 上，比原来四次 `getImageData/putImageData` 快约 23%（2400×4000 实测 313ms → 240ms），中间让出主线程，界面不再整段冻住。输出与旧路径逐像素一致（`verify_ocr_preprocess.mjs` 守着）。
+
+> 为什么**不**搬进 Web Worker：这套像素函数有 300 多行，搬进去要么复制一份（改算法要改两处），要么外挂 `ocr-pixel.js`（又多一个分发文件，且 `file://` 下 Worker 直接不可用）。先合并 IO + 分片让出已经能让主线程不再冻死，剩下的 240ms 本来就有 Tesseract 在跑，用户看不出差别。真要再快，下一步是降采样而不是 Worker。
 
 ### 3.4 提醒与复盘
 - 待办到期提醒（`remind.js#checkTaskDue`）：只提醒逾期+今日到期，每天每条一次、最多 3 条、可开关；**刻意不碰 Notification**（`file://` 非安全上下文）。
@@ -151,6 +158,8 @@ App.bus.clearRelay(at)   // 渲染收尾清理（带 at 防止误清新接力）
 8. **Health Connect 1.1.0 的 API 变过**：`AggregationType` 已移除，新聚合工厂 `AggregateMetric` 是 `internal`（`javap` 验证）。只能 `readRecords` 逐条读 + 自己按天累加 + `pageToken` 翻页。别照 1.0.x 的文档写。
 9. **`Plugin` 基类方法名冲突**：写 Capacitor 插件时 `checkPermissions` / `requestPermissions` 与基类重名，要换名（本项目用 `requestHealthPermissions`）。
 10. **sw.js 的 `CACHE` 版本号**：`verify_gesture_sw.mjs` 曾写死 `cp-app-v1` 做字符串替换，版本号一升测试就空转。已改为正则替换 `const CACHE = '...'`，别再写死。
+11. **语料是外置文件**：根目录 `quotes-data.js` 由 `build.py` 从 `assets/js/quotes-data.js` 复制而来（别手改根目录那份）。分发时少拷一个，诗词就永远停在迷你集——功能不崩，但「换一篇」只在 24 篇里转。
+12. **迷你集的诗必须取完整集的前 24 篇**：`settings.daily.poem` 存的是下标、收藏也按下标记。哪天想让首屏换几首更有名的，不要直接调顺序，否则老用户的收藏会指到别的诗上。
 
 ---
 

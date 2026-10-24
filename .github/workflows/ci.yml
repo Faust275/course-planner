@@ -20,7 +20,7 @@ jobs:
         run: npm run lint
       - name: Unit tests
         run: npm test
-      - name: Build single-file index.html
+      - name: Build (index.html + quotes-data.js)
         run: npm run build
 
   e2e:

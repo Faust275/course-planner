@@ -9,7 +9,8 @@
 一个面向学生的单文件网页应用（PWA），已有安卓壳。功能：课表、日程、四象限待办、日历、番茄钟、记账、成绩、目标、日记、统计复盘、抽卡收集、离线二维码同步、健康联动（睡眠/步数）。
 
 - **真正的源码**在 `course-planner-deploy/assets/js/` + `src/index.template.html`
-- **`index.html` 是构建产物**（约 2.1 MB，全部内联），**不要手改**
+- **`index.html` 是构建产物**（约 2.0 MB，CSS/JS 全内联），**不要手改**
+- **`quotes-data.js` 也是产物**（约 800KB 诗词语料），由 `build.py` 从 `assets/js/quotes-data.js` 复制而来。它和 `index.html` 必须放在**同一目录**——少了它诗词只在 24 篇迷你集里转（不报错，但明显变少）。想要「一个 html 走天下」就 `python3 build.py --inline`
 - 安卓壳是 Capacitor 8，原生代码在 `android/`
 
 ```
@@ -32,7 +33,7 @@ npm run ci           # build + 891 条单测 + ESLint
 npm run e2e          # 75 个 Playwright 端到端（首次需 npx playwright install chromium）
 ```
 
-期望结果：`891 通过 / 0 失败`、`e2e 77 通过 / 0 失败`、lint 无输出。
+期望结果：`891 通过 / 0 失败`、`e2e 81 通过 / 0 失败`、lint 无输出。
 
 > 当前状态：**全部绿**。如果红了，先看 `HANDOFF.md` 第 5 节「已知坑」。
 
@@ -89,7 +90,7 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 > 2. 改完源码**必须 `npm run build`**，否则 e2e 验证的是旧产物；
 > 3. `el()` 会自动给 class 加 `cp-` 前缀，写 CSS / 选择器时都要带（`.card` → `.cp-card`）。
 >
-> **验证命令**：`npm test`（891 条）→ `npm run lint`（0 错误）→ `npm run e2e`（75 个）。
+> **验证命令**：`npm test`（891 条）→ `npm run lint`（0 错误）→ `npm run e2e`（81 个）。
 > **安卓构建**：`export ANDROID_HOME=/opt/android-sdk && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`，在 `android/` 下用 `/opt/gradle-8.14.3/bin/gradle assembleDebug --no-daemon`。
 >
 > 请先跑一遍 `npm run ci` 确认基线是绿的，再开始改。
@@ -113,7 +114,8 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 src/index.template.html   ← <script src> 列表 = 依赖顺序，改这里加模块
       ↓ python3 build.py 内联
-index.html (2.1MB)        ← 唯一产物，双击可用；e2e 加载的就是它
+index.html (2.0MB)        ← 主产物，双击可用；e2e 加载的就是它
+quotes-data.js (800KB)    ← 诗词语料，默认外置，首屏不加载（迷你集 15KB 顶上）
       ↓ npx cap sync android
 android/app/src/main/assets/public/index.html  ← 打进 APK 的网页
 ```

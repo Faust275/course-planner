@@ -229,47 +229,79 @@
    * 解决 WakeUp / 超级课程表 / 教务系统彩色课表截图中：
    * 1) 饱和色块（粉/蓝/绿/紫/橙底纹）转灰度后与文字对比度低；
    * 2) 深色卡片内白字与浅色背景黑字混排，导致固定 64x64 分块反相把汉字切碎。
+   *
+   * 拆成两层：*Data 版直接改像素数组，canvas 版只是「读出来 → 调 Data 版 → 写回去」。
+   * 预处理的四步共用同一份 ImageData，一次读写顶原来四次——4K 截图光来回拷贝就上亿字节。
    */
+  function stripColorCardBgData(d, w, h) {
+    // 先拷贝一份原始 RGB 供邻域采样，避免原地修改互相污染
+    var orig = new Uint8ClampedArray(d);
+    var step = Math.max(2, Math.min(6, (w / 200) | 0));
+    // 邻域偏移预先算好：这一层循环跑 960 万次，每个像素都算 (ny*w+nx)*4 太亏
+    var step4 = step * 4;
+    var vStep = step * w * 4;
+
+    var o = 0;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++, o += 4) {
+        var r = orig[o], g = orig[o + 1], b = orig[o + 2];
+        var maxC = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        var minC = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        var sat = maxC - minC;
+        var lum = (0.299 * r + 0.587 * g + 0.114 * b) | 0;
+
+        if (sat >= 38 && lum >= 75 && lum <= 245) {
+          d[o] = d[o + 1] = d[o + 2] = 248;
+        } else if (lum >= 235 && sat <= 30) {
+          var nbColor = 0, p, nr, ng, nb2, nSat, nLum;
+          if (x >= step) {
+            p = o - step4;
+            nr = orig[p]; ng = orig[p + 1]; nb2 = orig[p + 2];
+            nSat = (nr > ng ? (nr > nb2 ? nr : nb2) : (ng > nb2 ? ng : nb2)) -
+                   (nr < ng ? (nr < nb2 ? nr : nb2) : (ng < nb2 ? ng : nb2));
+            nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb2) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+          if (x + step < w) {
+            p = o + step4;
+            nr = orig[p]; ng = orig[p + 1]; nb2 = orig[p + 2];
+            nSat = (nr > ng ? (nr > nb2 ? nr : nb2) : (ng > nb2 ? ng : nb2)) -
+                   (nr < ng ? (nr < nb2 ? nr : nb2) : (ng < nb2 ? ng : nb2));
+            nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb2) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+          if (y >= step) {
+            p = o - vStep;
+            nr = orig[p]; ng = orig[p + 1]; nb2 = orig[p + 2];
+            nSat = (nr > ng ? (nr > nb2 ? nr : nb2) : (ng > nb2 ? ng : nb2)) -
+                   (nr < ng ? (nr < nb2 ? nr : nb2) : (ng < nb2 ? ng : nb2));
+            nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb2) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+          if (y + step < h) {
+            p = o + vStep;
+            nr = orig[p]; ng = orig[p + 1]; nb2 = orig[p + 2];
+            nSat = (nr > ng ? (nr > nb2 ? nr : nb2) : (ng > nb2 ? ng : nb2)) -
+                   (nr < ng ? (nr < nb2 ? nr : nb2) : (ng < nb2 ? ng : nb2));
+            nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb2) | 0;
+            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
+          }
+          if (nbColor >= 2) {
+            d[o] = d[o + 1] = d[o + 2] = 28;
+          }
+        }
+      }
+    }
+    return d;
+  }
+
   function stripColorCardBg(canvas) {
     if (!canvas || !canvas.getContext) return canvas;
     var w = canvas.width, h = canvas.height;
     var ctx = canvas.getContext('2d', { willReadFrequently: true });
     var img;
     try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
-    var d = img.data, n = w * h;
-
-    // 先拷贝一份原始 RGB 供邻域采样，避免原地修改互相污染
-    var orig = new Uint8ClampedArray(d);
-    var step = Math.max(2, Math.min(6, (w / 200) | 0));
-
-    for (var i = 0; i < n; i++) {
-      var o = i * 4;
-      var r = orig[o], g = orig[o + 1], b = orig[o + 2];
-      var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
-      var sat = maxC - minC;
-      var lum = (0.299 * r + 0.587 * g + 0.114 * b) | 0;
-
-      if (sat >= 38 && lum >= 75 && lum <= 245) {
-        d[o] = d[o + 1] = d[o + 2] = 248;
-      } else if (lum >= 235 && sat <= 30) {
-        var x = i % w, y = (i / w) | 0;
-        var nbColor = 0;
-        var dirs = [[-step, 0], [step, 0], [0, -step], [0, step]];
-        for (var k = 0; k < 4; k++) {
-          var nx = x + dirs[k][0], ny = y + dirs[k][1];
-          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-            var no = (ny * w + nx) * 4;
-            var nr = orig[no], ng = orig[no + 1], nb = orig[no + 2];
-            var nSat = Math.max(nr, ng, nb) - Math.min(nr, ng, nb);
-            var nLum = (0.299 * nr + 0.587 * ng + 0.114 * nb) | 0;
-            if ((nSat >= 38 && nLum < 225) || nLum < 105) nbColor++;
-          }
-        }
-        if (nbColor >= 2) {
-          d[o] = d[o + 1] = d[o + 2] = 28;
-        }
-      }
-    }
+    stripColorCardBgData(img.data, w, h);
     ctx.putImageData(img, 0, 0);
     return canvas;
   }
@@ -320,12 +352,8 @@
    * 轻度增强：灰度 + 2%~98% 分位对比度拉伸
    * 比硬二值化温和：彩色底、发灰的字会变清楚，但笔画不会断
    */
-  function enhance(canvas) {
-    var w = canvas.width, h = canvas.height;
-    var ctx = canvas.getContext('2d', { willReadFrequently: true });
-    var img;
-    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
-    var d = img.data, n = w * h;
+  function enhanceData(d, w, h) {
+    var n = w * h;
 
     var gray = new Uint8Array(n);
     var hist = new Uint32Array(256);
@@ -381,6 +409,15 @@
       d[o] = d[o + 1] = d[o + 2] = val;
       d[o + 3] = 255;
     }
+    return d;
+  }
+
+  function enhance(canvas) {
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
+    enhanceData(img.data, w, h);
     ctx.putImageData(img, 0, 0);
     return canvas;
   }
@@ -388,12 +425,7 @@
   /**
    * 兜底用：分块自适应二值化（对比度极低的图才有优势，硬二值会断笔画）
    */
-  function binarize(canvas) {
-    var w = canvas.width, h = canvas.height;
-    var ctx = canvas.getContext('2d', { willReadFrequently: true });
-    var img;
-    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
-    var d = img.data;
+  function binarizeData(d, w, h) {
     var n = w * h;
 
     var gray = new Uint8Array(n);
@@ -431,26 +463,26 @@
         }
       }
     }
+    return d;
+  }
+
+  function binarize(canvas) {
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return canvas; }
+    binarizeData(img.data, w, h);
     ctx.putImageData(img, 0, 0);
     canvas._binary = true;
     return canvas;
   }
 
   /** 检测表格的横竖线（像素统计），返回 {vlines, hlines} */
-  function detectLines(canvas) {
-    var w = canvas.width, h = canvas.height;
-    var ctx = canvas.getContext('2d', { willReadFrequently: true });
-    var data;
-    try {
-      data = ctx.getImageData(0, 0, w, h).data;
-    } catch (e) {
-      return { vlines: [], hlines: [] };
-    }
-
+  function detectLinesData(data, w, h, isBinary) {
     var dark = new Uint8Array(w * h);
     for (var i = 0; i < w * h; i++) {
       var r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-      dark[i] = (0.299 * r + 0.587 * g + 0.114 * b) < (canvas._binary ? 128 : 150) ? 1 : 0;
+      dark[i] = (0.299 * r + 0.587 * g + 0.114 * b) < (isBinary ? 128 : 150) ? 1 : 0;
     }
 
     var vScore = new Float32Array(w);
@@ -502,6 +534,52 @@
     return { vlines: vlines, hlines: hlines };
   }
 
+  function detectLines(canvas) {
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var data;
+    try {
+      data = ctx.getImageData(0, 0, w, h).data;
+    } catch (e) {
+      return { vlines: [], hlines: [] };
+    }
+    return detectLinesData(data, w, h, !!canvas._binary);
+  }
+
+  /**
+   * 一次跑完预处理四步：去底纹 → 增强/二值化 → 找线 → 抹线。
+   *
+   * 关键在「一次读写」：四步都要同一份像素，以前是各自 getImageData/putImageData，
+   * 一张 2400×4000 的截图就是四次近 40MB 的来回拷贝，主线程直接卡住；
+   * 现在只读一次、写一次，算法本身一行没改，输出逐像素一致。
+   * 中间还让出两次主线程，进度条和「取消」按钮才有机会响应。
+   */
+  function preprocessCanvas(canvas, opts) {
+    opts = opts || {};
+    var w = canvas.width, h = canvas.height;
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    var img;
+    try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return Promise.resolve(null); }
+    var d = img.data;
+
+    stripColorCardBgData(d, w, h);
+    var step = function () { return new Promise(function (r) { setTimeout(r, 0); }); };
+
+    return step().then(function () {
+      if (opts.binary) binarizeData(d, w, h);
+      else enhanceData(d, w, h);
+      return step();
+    }).then(function () {
+      // 找线要在抹线之前算：抹完线就找不到线了，但归格还要用这些坐标
+      var lines = detectLinesData(d, w, h, !!opts.binary);
+      ctx.putImageData(img, 0, 0);
+      if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
+        isolateGridLines(canvas, lines, 4);
+      }
+      return lines;
+    });
+  }
+
   /** 单次识别：增强图 → Tesseract（返回原始结果，支持直接传入已透视矫正的 opts.canvas） */
   function recognizeOnce(file, opts, onProgress) {
     opts = opts || {};
@@ -522,17 +600,11 @@
       // raw：原图直接送识别，不走「去底纹 + 对比度拉伸 + 抹网格线」。
       // 干净的截图走这条路明显更准——预处理那些步骤是给「拍照/彩色底」准备的，
       // 用在本来就很清楚的截图上反而会把抗锯齿的笔画拉粗、被抹线切碎。
-      if (!opts.raw) {
-        stripColorCardBg(n.canvas);
-        if (opts.binary) binarize(n.canvas);
-        else enhance(n.canvas);
-        lines = detectLines(n.canvas);
-        if (lines && ((lines.vlines && lines.vlines.length >= 4) || (lines.hlines && lines.hlines.length >= 4))) {
-          isolateGridLines(n.canvas, lines, 4);
-        }
-      }
+      if (opts.raw) return null;
+      return preprocessCanvas(n.canvas, opts).then(function (l) { lines = l; });
+    }).then(function () {
       return new Promise(function (resolve) {
-        n.canvas.toBlob(function (b) { norm.blob = b; resolve(); }, 'image/png');
+        norm.canvas.toBlob(function (b) { norm.blob = b; resolve(); }, 'image/png');
       });
     }).then(function () {
       return loadLib().then(function (T) {
@@ -1681,6 +1753,7 @@
     recognizeCloudSleep: recognizeCloudSleep,
     binarize: binarize,
     enhance: enhance,
+    preprocessCanvas: preprocessCanvas,
     normalizeImage: normalizeImage,
     rotateCanvas: rotateCanvas,
     solveHomography: solveHomography,
