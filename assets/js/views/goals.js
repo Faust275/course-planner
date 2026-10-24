@@ -53,7 +53,10 @@
     } else if (kr.kind === 'grade' && (row.empty || row.pct == null)) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '待出分' }));
     } else if (row.empty) {
-      right.appendChild(el('span', { class: 'goal-kr-warn', text: '周期内还没有待办' }));
+      right.appendChild(el('span', {
+        class: 'goal-kr-warn',
+        text: (kr.kind === 'sleep' || kr.kind === 'active') ? '周期内还没有健康数据' : '周期内还没有待办'
+      }));
     } else if (row.pct == null) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '未填' }));
     } else {
@@ -472,6 +475,7 @@
           kr.kind = fKind.value;
           if (kr.kind === 'manual' && !kr.target) kr.target = 100;
           if (kr.kind === 'grade') { kr.metric = 'semesterGpa'; if (!kr.target || kr.target > 5) kr.target = 3; }
+          if (kr.kind === 'sleep' || kr.kind === 'active') { if (!kr.target || kr.target > 366) kr.target = 12; kr.unit = '天'; }
           drawKrs();
         });
         row.appendChild(V.field('怎么衡量', fKind, kindOf(kr.kind).desc));
@@ -513,6 +517,12 @@
             oninput: function () { kr.target = Math.max(0, parseFloat(this.value) || 0); }
           });
           row.appendChild(V.field('目标 GPA', fGpa, '例如 3.6；未出分时显示「待出分」'));
+        } else if (kr.kind === 'sleep' || kr.kind === 'active') {
+          var fDays = V.input({
+            type: 'number', step: '1', min: '1', max: '366', value: String(kr.target || 12),
+            oninput: function () { kr.target = Math.max(1, parseInt(this.value, 10) || 1); }
+          });
+          row.appendChild(V.field('目标天数', fDays, '周期内累计达标的总天数（睡眠看夜数、运动看步数达标日）'));
         } else {
           var fTarget = V.input({
             type: 'number', step: '0.5', min: '1', value: String(kr.target || 1),

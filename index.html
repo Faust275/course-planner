@@ -7863,6 +7863,8 @@ window.AK_OPS = [
     { key: 'plan', name: '挂计划', desc: '按这条计划在周期内的打卡进度算' },
     { key: 'task', name: '挂待办', desc: '按周期内相关待办的完成率算' },
     { key: 'grade', name: '学期 GPA', desc: '按本学期已出分课程的加权 GPA 算（未出分显示待出分）' },
+    { key: 'sleep', name: '健康·睡眠达标', desc: '周期内睡眠达标的夜数（阈值见「健康」里的睡眠时长）' },
+    { key: 'active', name: '健康·运动达标', desc: '周期内步数达标的日数（按「健康」里的步数目标）' },
     { key: 'manual', name: '自己填', desc: '出分、有结果后自己填一个数' }
   ];
 
@@ -7929,6 +7931,28 @@ window.AK_OPS = [
       out.target = Math.max(1, Number(plan.target) || 1);
       out.unit = plan.unit || '';
       out.pct = Math.max(0, Math.min(1, sum / out.target));
+      return out;
+    }
+
+    /* 健康·睡眠 / 运动达标：数「周期内满足条件的天数」，数据源是 dayHealth（睡眠 / 步数）。
+       目标填「累计达标天数」即可，例如「每周运动≥3天」的 4 周目标就把目标设 12。 */
+    if (kr.kind === 'sleep' || kr.kind === 'active') {
+      var hlim = ctx.today < ctx.to ? ctx.today : ctx.to;
+      var hd = DateUtil.parse(ctx.from), hend = DateUtil.parse(hlim);
+      var met = 0, htotal = 0;
+      while (hd && hend && hd <= hend) {
+        var hds = DateUtil.toStr(hd);
+        var hh = Store.dayHealth(hds);
+        if (kr.kind === 'sleep') { if (hh.sleepMet) met++; }
+        else if (hh.stepPct >= 100) { met++; }
+        htotal++;
+        hd = DateUtil.addDays(hd, 1);
+      }
+      out.target = Math.max(1, Number(kr.target) || 1);
+      out.value = met;
+      out.unit = '天';
+      if (htotal === 0) { out.empty = true; out.pct = null; return out; }
+      out.pct = Math.max(0, Math.min(1, met / out.target));
       return out;
     }
 
@@ -30008,7 +30032,10 @@ window.DragGesture = (function () {
     } else if (kr.kind === 'grade' && (row.empty || row.pct == null)) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '待出分' }));
     } else if (row.empty) {
-      right.appendChild(el('span', { class: 'goal-kr-warn', text: '周期内还没有待办' }));
+      right.appendChild(el('span', {
+        class: 'goal-kr-warn',
+        text: (kr.kind === 'sleep' || kr.kind === 'active') ? '周期内还没有健康数据' : '周期内还没有待办'
+      }));
     } else if (row.pct == null) {
       right.appendChild(el('span', { class: 'goal-kr-warn', text: '未填' }));
     } else {
@@ -30427,6 +30454,7 @@ window.DragGesture = (function () {
           kr.kind = fKind.value;
           if (kr.kind === 'manual' && !kr.target) kr.target = 100;
           if (kr.kind === 'grade') { kr.metric = 'semesterGpa'; if (!kr.target || kr.target > 5) kr.target = 3; }
+          if (kr.kind === 'sleep' || kr.kind === 'active') { if (!kr.target || kr.target > 366) kr.target = 12; kr.unit = '天'; }
           drawKrs();
         });
         row.appendChild(V.field('怎么衡量', fKind, kindOf(kr.kind).desc));
@@ -30468,6 +30496,12 @@ window.DragGesture = (function () {
             oninput: function () { kr.target = Math.max(0, parseFloat(this.value) || 0); }
           });
           row.appendChild(V.field('目标 GPA', fGpa, '例如 3.6；未出分时显示「待出分」'));
+        } else if (kr.kind === 'sleep' || kr.kind === 'active') {
+          var fDays = V.input({
+            type: 'number', step: '1', min: '1', max: '366', value: String(kr.target || 12),
+            oninput: function () { kr.target = Math.max(1, parseInt(this.value, 10) || 1); }
+          });
+          row.appendChild(V.field('目标天数', fDays, '周期内累计达标的总天数（睡眠看夜数、运动看步数达标日）'));
         } else {
           var fTarget = V.input({
             type: 'number', step: '0.5', min: '1', value: String(kr.target || 1),

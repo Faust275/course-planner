@@ -2039,6 +2039,8 @@
     { key: 'plan', name: '挂计划', desc: '按这条计划在周期内的打卡进度算' },
     { key: 'task', name: '挂待办', desc: '按周期内相关待办的完成率算' },
     { key: 'grade', name: '学期 GPA', desc: '按本学期已出分课程的加权 GPA 算（未出分显示待出分）' },
+    { key: 'sleep', name: '健康·睡眠达标', desc: '周期内睡眠达标的夜数（阈值见「健康」里的睡眠时长）' },
+    { key: 'active', name: '健康·运动达标', desc: '周期内步数达标的日数（按「健康」里的步数目标）' },
     { key: 'manual', name: '自己填', desc: '出分、有结果后自己填一个数' }
   ];
 
@@ -2105,6 +2107,28 @@
       out.target = Math.max(1, Number(plan.target) || 1);
       out.unit = plan.unit || '';
       out.pct = Math.max(0, Math.min(1, sum / out.target));
+      return out;
+    }
+
+    /* 健康·睡眠 / 运动达标：数「周期内满足条件的天数」，数据源是 dayHealth（睡眠 / 步数）。
+       目标填「累计达标天数」即可，例如「每周运动≥3天」的 4 周目标就把目标设 12。 */
+    if (kr.kind === 'sleep' || kr.kind === 'active') {
+      var hlim = ctx.today < ctx.to ? ctx.today : ctx.to;
+      var hd = DateUtil.parse(ctx.from), hend = DateUtil.parse(hlim);
+      var met = 0, htotal = 0;
+      while (hd && hend && hd <= hend) {
+        var hds = DateUtil.toStr(hd);
+        var hh = Store.dayHealth(hds);
+        if (kr.kind === 'sleep') { if (hh.sleepMet) met++; }
+        else if (hh.stepPct >= 100) { met++; }
+        htotal++;
+        hd = DateUtil.addDays(hd, 1);
+      }
+      out.target = Math.max(1, Number(kr.target) || 1);
+      out.value = met;
+      out.unit = '天';
+      if (htotal === 0) { out.empty = true; out.pct = null; return out; }
+      out.pct = Math.max(0, Math.min(1, met / out.target));
       return out;
     }
 
