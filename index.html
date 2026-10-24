@@ -1651,6 +1651,14 @@ input[type="range"]::-moz-range-thumb {
 .cp-plan-cell.cp-on { background: var(--pl-c, var(--primary)); }
 .cp-plan-cell.cp-today { box-shadow: 0 0 0 2px var(--pl-c, var(--primary)); }
 .cp-plan-cell.cp-future { opacity: .45; }
+/* 「今天先缓一缓」：斜纹 + 虚线边，跟打卡的实心块区分开 */
+.cp-plan-cell.cp-exempt {
+  background: repeating-linear-gradient(135deg,
+    var(--amber) 0, var(--amber) 2px, transparent 2px, transparent 5px);
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--amber);
+  opacity: .8;
+}
 .cp-plan-grid.cp-len-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cp-plan-grid.cp-len-21 { grid-template-columns: repeat(21, minmax(0, 1fr)); }
 .cp-plan-grid.cp-len-30 { grid-template-columns: repeat(30, minmax(0, 1fr)); }
@@ -6812,6 +6820,18 @@ window.AK_OPS = [
     once: { name: '单次' }
   };
 
+  /**
+   * 计划的「耗能档位」。只有用户显式标过才参与健康联动，
+   * 不按标题猜（猜错的代价比不猜大得多）。
+   */
+  var PLAN_LOADS = {
+    low:  { name: '轻松', hint: '久坐也能做，缺觉时优先推它' },
+    mid:  { name: '一般', hint: '照常推进' },
+    high: { name: '吃力', hint: '缺觉时会被建议缓一缓' }
+  };
+  /** 连续豁免上限：连缓超过这么多天就真的算断了，避免用豁免刷连续 */
+  var PLAN_EXEMPT_MAX = 2;
+
   /* ===== 统计范围 ===== */
   /**
    * 两种口径：
@@ -8404,6 +8424,12 @@ window.AK_OPS = [
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
       if (!state.pomodoro.sessions) state.pomodoro.sessions = [];
       if (!state.plans) state.plans = [];
+      // 计划的耗能档位 / 豁免日：老档没这两列，补上默认值（只补不覆盖）
+      state.plans.forEach(function (p) {
+        if (!p) return;
+        if (p.load == null) p.load = '';
+        if (!Array.isArray(p.exemptDays)) p.exemptDays = [];
+      });
       if (!Array.isArray(state.goals)) state.goals = [];
       // 目标设置逐项补默认值，别让旧 settings 整块覆盖
       var gopt = state.settings.goals || {};
@@ -12094,6 +12120,8 @@ window.AK_OPS = [
         records: [],
         done: false,
         important: !!data.important,
+        load: PLAN_LOADS[data.load] ? data.load : '',
+        exemptDays: [],   // 「今天缓一缓」的日子：不打勾也不算断签
         doneAt: '',
         createdAt: new Date().toISOString()
       };
@@ -12116,6 +12144,7 @@ window.AK_OPS = [
         if (k === 'tags') plan.tags = normalizeTags(data.tags);
         else if (k === 'days') plan.days = Math.max(1, parseInt(data[k], 10) || plan.days);
         else if (k === 'target') plan.target = Math.max(1, parseFloat(data[k]) || plan.target);
+        else if (k === 'load') plan.load = PLAN_LOADS[data.load] ? data.load : '';
         else plan[k] = typeof data[k] === 'string' ? data[k].trim() : data[k];
       });
       // 打卡型：目标始终跟随天数
@@ -12442,15 +12471,53 @@ window.AK_OPS = [
       if (plan.type !== 'checkin' || plan.period !== 'daily') return 0;
       var doneDay = {};
       plan.records.forEach(function (r) { if (r.date) doneDay[r.date] = 1; });
-      var n = 0;
+      var exempt = {};
+      (plan.exemptDays || []).forEach(function (d) { exempt[d] = 1; });
+      var n = 0, skipped = 0;
       var cur = DateUtil.today();
       // 今天还没打卡时从昨天算起，不打断连续性
       if (!doneDay[DateUtil.toStr(cur)]) cur = DateUtil.addDays(cur, -1);
-      while (doneDay[DateUtil.toStr(cur)]) {
-        n++;
-        cur = DateUtil.addDays(cur, -1);
+      // 往前最多翻 700 天，脏数据也拖不死
+      for (var guard = 0; guard < 700; guard++) {
+        var ds = DateUtil.toStr(cur);
+        if (doneDay[ds]) { n++; skipped = 0; cur = DateUtil.addDays(cur, -1); continue; }
+        // 豁免日：跨过去但不算断签；连缓超过上限就当真的断了
+        if (exempt[ds] && skipped < PLAN_EXEMPT_MAX) {
+          skipped++;
+          cur = DateUtil.addDays(cur, -1);
+          continue;
+        }
+        break;
       }
       return n;
+    },
+
+    /** 计划在某天是否被「缓一缓」过 */
+    planExemptedOn: function (plan, dateStr) {
+      if (!plan || !plan.exemptDays) return false;
+      return plan.exemptDays.indexOf(dateStr || DateUtil.toStr(DateUtil.today())) >= 0;
+    },
+
+    /**
+     * 标记 / 取消「今天先缓一缓」。
+     * 不打勾、不给积分，但连续天数不断（最多连缓两天）。
+     */
+    togglePlanExempt: function (id, dateStr) {
+      var plan = this.getPlan(id);
+      if (!plan) return null;
+      var ds = dateStr || DateUtil.toStr(DateUtil.today());
+      if (!plan.exemptDays) plan.exemptDays = [];
+      var i = plan.exemptDays.indexOf(ds);
+      var on = i < 0;
+      if (on) plan.exemptDays.push(ds);
+      else plan.exemptDays.splice(i, 1);
+      // 只留最近 120 天，别让豁免记录无限长
+      if (plan.exemptDays.length > 120) {
+        plan.exemptDays = plan.exemptDays.slice(-120);
+      }
+      this.save();
+      this.emit();
+      return { on: on, streak: this.planStreak(plan) };
     },
 
     /** 今日是否已打卡 */
@@ -12475,6 +12542,10 @@ window.AK_OPS = [
         if (this.pomodoro.points >= back) this.spendPoints(back);
       } else {
         plan.records.push({ date: dateStr, value: 1, note: '', at: new Date().toISOString() });
+        // 打了卡就没必要再挂「缓一缓」，否则同一格里既是打卡又是豁免，说不清
+        if (plan.exemptDays && plan.exemptDays.length) {
+          plan.exemptDays = plan.exemptDays.filter(function (d) { return d !== dateStr; });
+        }
         this.bumpUsage('plan');
         if (this.markAction) this.markAction('plancheck', 1);
       }
@@ -12540,10 +12611,50 @@ window.AK_OPS = [
       state.plans.forEach(function (p) {
         if (p.done) { finished++; return; }
         running++;
-        // 只有打卡型才有「今日待打卡」概念
-        if (p.type === 'checkin' && !self.planDoneToday(p)) todayPending++;
+        // 只有打卡型才有「今日待打卡」概念；今天已缓一缓的也不再催
+        if (p.type === 'checkin' && !self.planDoneToday(p) && !self.planExemptedOn(p)) todayPending++;
       });
       return { running: running, finished: finished, todayPending: todayPending, total: state.plans.length };
+    },
+
+    /**
+     * 计划 × 身体状态：今天该推哪些、该缓哪些。
+     * 判定完全来自 bodyAdvice（不重算睡眠），这里只负责挑出候选。
+     * 只看今天：计划没标耗能档位就不给建议，不按标题猜。
+     */
+    planLoadAdvice: function () {
+      var adv = this.bodyAdvice();
+      var today = DateUtil.toStr(DateUtil.today());
+      var self = this;
+      var out = {
+        has: false, level: adv.level, mode: '', total: adv.total, q: adv.q,
+        todo: 0, tagged: 0, heavy: [], light: [], rest: []
+      };
+      if (!adv.has) return out;
+
+      var todo = [];
+      state.plans.forEach(function (p) {
+        if (!p || p.done) return;
+        if (self.planDoneToday(p) || self.planExemptedOn(p, today)) return;
+        if (p.startDate && p.startDate > today) return;   // 还没开始的不算今天的活
+        todo.push(p);
+      });
+
+      var byImp = function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); };
+      var heavy = todo.filter(function (p) { return p.load === 'high'; });
+      var light = todo.filter(function (p) { return p.load === 'low'; });
+      var rest  = todo.filter(function (p) { return p.load !== 'high' && p.load !== 'low'; });
+      heavy.sort(byImp); light.sort(byImp); rest.sort(byImp);
+
+      out.todo = todo.length;
+      out.tagged = todo.filter(function (p) { return !!p.load; }).length;
+      out.heavy = heavy;
+      out.light = light;
+      out.rest = rest;
+      if (adv.level === 'low' || adv.level === 'mild') out.mode = heavy.length ? 'ease' : '';
+      else if (adv.level === 'good') out.mode = heavy.length ? 'push' : '';
+      out.has = !!out.mode;
+      return out;
     },
 
     /** 区间内的时间去向汇总（按 from|to 缓存，整学期的重复渲染不再逐天重算） */
@@ -14265,6 +14376,7 @@ window.AK_OPS = [
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;
+  global.PLAN_LOADS = PLAN_LOADS;
   global.normalizeTags = normalizeTags;
   global.tagParts = tagParts;
   global.tagFull = tagFull;
@@ -24706,6 +24818,7 @@ window.DragGesture = (function () {
     list.slice(0, 4).forEach(function (p) {
       var pg = Store.planProgress(p);
       var done = Store.planDoneToday(p);
+      var exempt = !done && Store.planExemptedOn(p);
       var isCheckin = p.type === 'checkin';
 
       var mark = el('button', {
@@ -24732,7 +24845,7 @@ window.DragGesture = (function () {
           el('div', { class: 'task-title', text: p.title }),
           el('div', { class: 'task-meta' }, [
             el('span', { text: isCheckin
-              ? (done ? '今日已打卡' : '今日待打卡')
+              ? (done ? '今日已打卡' : exempt ? '今天缓一缓 · 不算断签' : '今日待打卡')
               : ('进度 ' + pg.value + ' / ' + pg.target + (p.unit ? ' ' + p.unit : '')) }),
             el('span', { class: 'plan-mini-bar' }, [
               el('i', { style: { width: pg.pct + '%', background: p.color } })
@@ -31697,6 +31810,8 @@ window.DragGesture = (function () {
     view.actions(host);
   }
   var justDoneId = '';
+  /** 今天的状态倾向：'ease'（缓一缓）/ 'push'（适合推）/ ''。render 时算一次，卡片共用 */
+  var adviceMode = '';
 
   // 计划选色复用课程那套 20 色，保证全 App 同一套色卡
   var COLORS = (typeof Store !== 'undefined' && Store.COLORS) ||
@@ -31822,6 +31937,12 @@ window.DragGesture = (function () {
       }, ['plan']);
       if (tagFilter) root.appendChild(tagFilter);
 
+      /* ---------- 昨晚睡得怎么样 → 今天该推哪个计划 ---------- */
+      var adv = Store.planLoadAdvice ? Store.planLoadAdvice() : null;
+      adviceMode = (adv && adv.has) ? adv.mode : '';
+      var advCard = adv ? loadAdviceCard(adv) : null;
+      if (advCard) root.appendChild(advCard);
+
       /* ---------- 列表 ---------- */
       var list = Store.plans.filter(function (p) {
         if (state.status === 'running' && p.done) return false;
@@ -31857,6 +31978,118 @@ window.DragGesture = (function () {
   };
 
   /* ==========================================================
+   * 身体状态 × 计划：今天该推哪个、该缓哪个
+   * 只提示，不算打卡、不动记录——「缓一缓」才是唯一的写操作。
+   * ========================================================== */
+  function todayStr() { return DateUtil.toStr(DateUtil.today()); }
+
+  function loadAdviceCard(a) {
+    // 有睡眠判定、有计划、但一个都没标档位 —— 给一句「怎么用」的提示，不喧宾夺主
+    if (!a.has) {
+      var known = a.level === 'low' || a.level === 'mild' || a.level === 'good';
+      if (!known || !a.todo || a.tagged) return null;
+      return el('div', {
+        style: {
+          display: 'flex', gap: '6px', alignItems: 'flex-start',
+          fontSize: '11.5px', color: 'var(--text-3)', lineHeight: '1.6', margin: '-2px 0 10px'
+        }
+      }, [
+        el('span', { style: { flex: 'none', display: 'flex', marginTop: '2px' } }, [V.svg(V.icons.moon, 13)]),
+        el('span', { text: '给计划标一个耗能档位（点开计划 → 编辑），缺觉那天我就会告诉你哪几个该缓一缓。' })
+      ]);
+    }
+
+    var ease = a.mode === 'ease';
+    var tone = ease
+      ? { c: '#f59e0b', bg: 'rgba(245,158,11,.10)', bd: 'rgba(245,158,11,.35)', icon: V.icons.moon }
+      : { c: '#16a34a', bg: 'rgba(34,197,94,.09)', bd: 'rgba(34,197,94,.30)', icon: V.icons.sun };
+    var title = (ease ? '昨晚 ' : '昨晚 ') + TimeUtil.humanMin(a.total) +
+                (ease ? ' · 这几个计划今天先缓一缓' : ' · 今天适合推这几个');
+    var body = ease
+      ? '不是让你放弃，是别在今天硬顶。缓一天不算断签，连续天数照旧。'
+      : '状态在线，趁今天把这几个吃力的往前推一推。';
+
+    var rows = [];
+    a.heavy.forEach(function (p) {
+      rows.push(el('div', {
+        dataset: { id: p.id },
+        style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0' }
+      }, [
+        el('span', {
+          style: {
+            flex: '1', minWidth: '0', fontSize: '13px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+          },
+          text: p.title, title: p.title
+        }),
+        ease ? el('button', {
+          class: 'btn btn-sm',
+          style: { flex: 'none', padding: '2px 8px', fontSize: '12px' },
+          onclick: function () {
+            var r = Store.togglePlanExempt(p.id, todayStr());
+            V.toast('已缓一天 · 连续 ' + ((r && r.streak) || 0) + ' 天没断', 'ok');
+            view.render();
+          }
+        }, ['今天缓一缓']) : el('button', {
+          class: 'btn btn-sm btn-primary',
+          style: { flex: 'none', padding: '2px 8px', fontSize: '12px' },
+          onclick: function () {
+            var res = Store.togglePlanCheckin(p.id, todayStr());
+            V.toast(res && res.gain ? '打卡成功，+' + res.gain + ' 积分' : '已打卡', 'ok');
+            view.render();
+          }
+        }, ['去打卡'])
+      ]));
+    });
+
+    var kids = [
+      el('div', { style: { display: 'flex', alignItems: 'flex-start', gap: '8px' } }, [
+        el('span', { style: { color: tone.c, display: 'flex', flex: 'none', marginTop: '1px' } },
+          [V.svg(tone.icon, 16)]),
+        el('div', { style: { flex: '1', minWidth: '0' } }, [
+          el('div', { style: { fontWeight: '700', fontSize: '13.5px', color: tone.c }, text: title }),
+          el('div', {
+            style: { fontSize: '12px', color: 'var(--text-2)', marginTop: '2px', lineHeight: '1.5' },
+            text: body
+          })
+        ])
+      ])
+    ];
+
+    if (rows.length) {
+      kids.push(el('div', { style: { marginTop: '6px' } },
+        rows.concat(ease && a.heavy.length > 1 ? [
+          el('button', {
+            class: 'link-btn',
+            style: { fontSize: '12px', marginTop: '2px' },
+            onclick: function () {
+              a.heavy.forEach(function (p) { Store.togglePlanExempt(p.id, todayStr()); });
+              V.toast('已把 ' + a.heavy.length + ' 个计划缓一天，连续天数都没断', 'ok');
+              view.render();
+            }
+          }, ['全部缓一缓 ›'])
+        ] : [])
+      ));
+    }
+
+    if (ease && a.light.length) {
+      kids.push(el('div', {
+        style: { fontSize: '11.5px', color: 'var(--text-3)', marginTop: '4px' },
+        text: '今天做「' + a.light.slice(0, 2).map(function (p) { return p.title; }).join('」「') + '」这类轻的就够了。'
+      }));
+    }
+
+    return el('div', {
+      class: 'card cp-plan-advice',
+      style: {
+        padding: '12px 14px', marginBottom: '12px',
+        background: tone.bg, border: '1px solid ' + tone.bd,
+        borderLeft: '3px solid ' + tone.c
+      }
+    }, kids);
+  }
+
+  /* ==========================================================
    * 计划卡片
    * ========================================================== */
   function planCard(p, view) {
@@ -31878,6 +32111,11 @@ window.DragGesture = (function () {
         el('div', { class: 'plan-meta' }, [
           el('span', { text: PLAN_TYPES[p.type].name + ' · ' + PLAN_PERIODS[p.period].name }),
           p.startDate ? el('span', { text: '始于 ' + p.startDate.slice(5) }) : null,
+          (global.PLAN_LOADS || {})[p.load] ? el('span', {
+            class: 'chip' + (p.load === 'high' && adviceMode === 'ease' ? ' chip-amber' : ''),
+            text: p.load === 'high' && adviceMode === 'ease'
+              ? '吃力 · 今天缓' : global.PLAN_LOADS[p.load].name
+          }) : null,
           Store.planStreak(p) >= 2 ? el('span', {
             class: 'chip chip-amber', text: '连续 ' + Store.planStreak(p) + ' 天'
           }) : null
@@ -31910,9 +32148,11 @@ window.DragGesture = (function () {
       card.appendChild(el('div', { class: 'plan-grid len-' + (slots.length <= 7 ? 7 : slots.length <= 21 ? 21 : 30) },
         slots.map(function (ds) {
           var rec = Store.planRecordOfDate(p, ds);
+          var ex = !rec && Store.planExemptedOn(p, ds);
           return el('div', {
-            class: 'plan-cell' + (rec ? ' on' : '') + (ds === today ? ' today' : '') + (ds > today ? ' future' : ''),
-            title: ds + (rec ? ' 已打卡' : ' 未打卡'),
+            class: 'plan-cell' + (rec ? ' on' : '') + (ex ? ' exempt' : '') +
+                   (ds === today ? ' today' : '') + (ds > today ? ' future' : ''),
+            title: ds + (rec ? ' 已打卡' : ex ? ' 已缓一缓（不算断签）' : ' 未打卡'),
             onclick: function (e) {
               e.stopPropagation();
               checkinWithAnim(p.id, ds, view, card);
@@ -31924,19 +32164,46 @@ window.DragGesture = (function () {
     /* ---- 操作 ---- */
     if (!p.done) {
       var row = el('div', { class: 'plan-foot', style: { marginTop: '11px' } });
+      var exemptToday = Store.planExemptedOn(p, today);
       if (isCheckin) {
-        row.appendChild(el('button', {
-          class: 'plan-check-btn' + (doneToday ? ' on' : ''),
-          onclick: function (e) {
-            e.stopPropagation();
-            checkinWithAnim(p.id, today, view, card);
-          }
-        }, [doneToday ? '今日已打卡 ✓' : '今日打卡']));
+        if (exemptToday) {
+          // 今天已经缓过了：给一条「其实我还是想做」的回头路
+          row.appendChild(el('button', {
+            class: 'plan-check-btn',
+            onclick: function (e) {
+              e.stopPropagation();
+              Store.togglePlanExempt(p.id, today);
+              V.toast('已恢复今天的打卡');
+              view.render();
+            }
+          }, ['今天已缓 · 仍要打卡']));
+        } else {
+          row.appendChild(el('button', {
+            class: 'plan-check-btn' + (doneToday ? ' on' : ''),
+            onclick: function (e) {
+              e.stopPropagation();
+              checkinWithAnim(p.id, today, view, card);
+            }
+          }, [doneToday ? '今日已打卡 ✓' : '今日打卡']));
+        }
       } else {
         row.appendChild(el('button', {
           class: 'plan-check-btn',
           onclick: function (e) { e.stopPropagation(); openAddValueDialog(p, view); }
         }, ['+ 记一笔' + (p.type === 'duration' ? '时长' : '进度')]));
+      }
+      // 欠睡 + 吃力档 → 给一个「今天缓一缓」的出口（主按钮右边的小字）
+      if (adviceMode === 'ease' && p.load === 'high' && !doneToday && !exemptToday && isCheckin) {
+        row.appendChild(el('button', {
+          class: 'plan-check-btn',
+          style: { marginLeft: '6px', borderColor: 'var(--line)', color: 'var(--text-2)' },
+          onclick: function (e) {
+            e.stopPropagation();
+            var r = Store.togglePlanExempt(p.id, today);
+            V.toast('已缓一天 · 连续 ' + ((r && r.streak) || 0) + ' 天没断', 'ok');
+            view.render();
+          }
+        }, ['缓一缓']));
       }
     card.appendChild(row);
   }
@@ -32025,7 +32292,13 @@ window.DragGesture = (function () {
       el('div', { text: '进度：' + fmtNum(pg.value) + ' / ' + fmtNum(pg.target) + (p.unit ? ' ' + p.unit : '') + '（' + pg.pct + '%）' }),
       el('div', { text: '类型：' + PLAN_TYPES[p.type].name + ' · ' + PLAN_PERIODS[p.period].name }),
       el('div', { text: '开始：' + p.startDate }),
+      (global.PLAN_LOADS || {})[p.load]
+        ? el('div', { text: '耗能：' + global.PLAN_LOADS[p.load].name })
+        : null,
       Store.planStreak(p) ? el('div', { text: '连续打卡：' + Store.planStreak(p) + ' 天' }) : null,
+      p.exemptDays && p.exemptDays.length
+        ? el('div', { style: { color: 'var(--text-3)' }, text: '已缓 ' + p.exemptDays.length + ' 天（不算断签）' })
+        : null,
       p.note ? el('div', { text: '备注：' + p.note }) : null,
       p.tags && p.tags.length ? el('div', { class: 'plan-meta', style: { marginTop: '6px' } }, V.tagChips(p.tags)) : null
     ]));
@@ -32160,6 +32433,15 @@ window.DragGesture = (function () {
       }
     });
 
+    /* 耗能档位：只有显式标过才参与「缺觉那天缓一缓」的建议，不按标题猜 */
+    var load = p ? (p.load || '') : '';
+    var loadSeg = V.segment([
+      { value: '', label: '不标' },
+      { value: 'low', label: '轻松' },
+      { value: 'mid', label: '一般' },
+      { value: 'high', label: '吃力' }
+    ], load, function (v) { load = v; });
+
     var colorBox = el('div', { class: 'theme-grid' });
     function drawColors() {
       colorBox.innerHTML = '';
@@ -32214,6 +32496,8 @@ window.DragGesture = (function () {
         optBox,
         V.field('开始日期', fStart),
         V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
+        V.field('耗能档位', loadSeg,
+          '标了才参与联动：缺觉那天「吃力」的会建议缓一缓，「轻松」的会被优先推荐。不标就不管。'),
         V.field('备注', fNote),
         V.field('标签', fTags, '支持二级标签，如「学习/英语」'),
         V.field('颜色', colorBox),
@@ -32234,7 +32518,7 @@ window.DragGesture = (function () {
               days: parseInt(fDays.value, 10) || 21,
               startDate: fStart.value,
               note: fNote.value, tags: fTags.getValue(),
-              color: color, important: impOn
+              color: color, important: impOn, load: load
             };
             if (type !== 'checkin') {
               data.target = parseFloat(fTarget.value) || 1;

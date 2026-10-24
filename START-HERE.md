@@ -29,7 +29,7 @@
 cd course-planner-deploy
 npm install          # 首次需要（eslint + playwright）
 npm run ci           # build + 891 条单测 + ESLint
-npm run e2e          # 58 个 Playwright 端到端（首次需 npx playwright install chromium）
+npm run e2e          # 75 个 Playwright 端到端（首次需 npx playwright install chromium）
 ```
 
 期望结果：`891 通过 / 0 失败`、`e2e 58 通过 / 0 失败`、lint 无输出。
@@ -89,7 +89,7 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 > 2. 改完源码**必须 `npm run build`**，否则 e2e 验证的是旧产物；
 > 3. `el()` 会自动给 class 加 `cp-` 前缀，写 CSS / 选择器时都要带（`.card` → `.cp-card`）。
 >
-> **验证命令**：`npm test`（891 条）→ `npm run lint`（0 错误）→ `npm run e2e`（58 个）。
+> **验证命令**：`npm test`（891 条）→ `npm run lint`（0 错误）→ `npm run e2e`（75 个）。
 > **安卓构建**：`export ANDROID_HOME=/opt/android-sdk && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`，在 `android/` 下用 `/opt/gradle-8.14.3/bin/gradle assembleDebug --no-daemon`。
 >
 > 请先跑一遍 `npm run ci` 确认基线是绿的，再开始改。

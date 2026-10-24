@@ -10,11 +10,11 @@
 
 | 项 | 当前状态 |
 |---|---|
-| 交付形态 | **单文件 `index.html`**（约 2121 KB，CSS/JS/语料全内联，禁止手改） |
+| 交付形态 | **单文件 `index.html`**（约 2266 KB，CSS/JS/语料全内联，禁止手改） |
 | 源码 | `src/index.template.html` + `assets/css` + `assets/js`（30+ 模块 / 20 个视图） |
 | 构建 | `npm run build`（`python3 build.py`，顺带产出 `dist/`） |
 | 单测 | `npm test` → **891 条全过**（纯函数，node 直接跑） |
-| 样式/e2e | `npm run e2e` → **58 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
+| 样式/e2e | `npm run e2e` → **75 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
 | Lint | `npm run lint` → **0 错误**（ESLint flat config） |
 | CI | `.github/workflows/ci.yml`：lint + 单测 + build + e2e 双 job |
 | 安卓 | Capacitor 8，minSdk **26**，debug APK 约 **8.45 MB** |
@@ -45,7 +45,7 @@ course-planner-deploy/
 ├── tests/run.mjs               # 单测（891 条）
 ├── tests/run-e2e.mjs           # e2e 聚合运行器（自动扫描 verify_*.mjs）
 ├── test-utils.mjs              # e2e 共用静态服务器（绑 127.0.0.1）
-├── verify_*.mjs                # 58 个功能点 e2e
+├── verify_*.mjs                # 75 个功能点 e2e
 ├── eslint.config.mjs           # flat config（已 0 错误）
 └── android/                    # Capacitor 8 工程（含自写 Kotlin 插件）
 ```
@@ -55,7 +55,7 @@ npm install                 # 首次：eslint / playwright
 npm run build               # 生成 index.html + dist/
 npm test                    # 891 条单测
 npm run lint                # ESLint 全项目
-npm run e2e                 # 58 个 e2e（自动起共享服务器）
+npm run e2e                 # 75 个 e2e（自动起共享服务器）
 npm run e2e activity        # 按文件名过滤
 npm run ci                  # build + test + lint 三连
 ```

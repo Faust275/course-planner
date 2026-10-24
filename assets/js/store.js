@@ -951,6 +951,18 @@
     once: { name: '单次' }
   };
 
+  /**
+   * 计划的「耗能档位」。只有用户显式标过才参与健康联动，
+   * 不按标题猜（猜错的代价比不猜大得多）。
+   */
+  var PLAN_LOADS = {
+    low:  { name: '轻松', hint: '久坐也能做，缺觉时优先推它' },
+    mid:  { name: '一般', hint: '照常推进' },
+    high: { name: '吃力', hint: '缺觉时会被建议缓一缓' }
+  };
+  /** 连续豁免上限：连缓超过这么多天就真的算断了，避免用豁免刷连续 */
+  var PLAN_EXEMPT_MAX = 2;
+
   /* ===== 统计范围 ===== */
   /**
    * 两种口径：
@@ -2543,6 +2555,12 @@
       if (state.pomodoro.focusMinutes == null) state.pomodoro.focusMinutes = 0;
       if (!state.pomodoro.sessions) state.pomodoro.sessions = [];
       if (!state.plans) state.plans = [];
+      // 计划的耗能档位 / 豁免日：老档没这两列，补上默认值（只补不覆盖）
+      state.plans.forEach(function (p) {
+        if (!p) return;
+        if (p.load == null) p.load = '';
+        if (!Array.isArray(p.exemptDays)) p.exemptDays = [];
+      });
       if (!Array.isArray(state.goals)) state.goals = [];
       // 目标设置逐项补默认值，别让旧 settings 整块覆盖
       var gopt = state.settings.goals || {};
@@ -6233,6 +6251,8 @@
         records: [],
         done: false,
         important: !!data.important,
+        load: PLAN_LOADS[data.load] ? data.load : '',
+        exemptDays: [],   // 「今天缓一缓」的日子：不打勾也不算断签
         doneAt: '',
         createdAt: new Date().toISOString()
       };
@@ -6255,6 +6275,7 @@
         if (k === 'tags') plan.tags = normalizeTags(data.tags);
         else if (k === 'days') plan.days = Math.max(1, parseInt(data[k], 10) || plan.days);
         else if (k === 'target') plan.target = Math.max(1, parseFloat(data[k]) || plan.target);
+        else if (k === 'load') plan.load = PLAN_LOADS[data.load] ? data.load : '';
         else plan[k] = typeof data[k] === 'string' ? data[k].trim() : data[k];
       });
       // 打卡型：目标始终跟随天数
@@ -6581,15 +6602,53 @@
       if (plan.type !== 'checkin' || plan.period !== 'daily') return 0;
       var doneDay = {};
       plan.records.forEach(function (r) { if (r.date) doneDay[r.date] = 1; });
-      var n = 0;
+      var exempt = {};
+      (plan.exemptDays || []).forEach(function (d) { exempt[d] = 1; });
+      var n = 0, skipped = 0;
       var cur = DateUtil.today();
       // 今天还没打卡时从昨天算起，不打断连续性
       if (!doneDay[DateUtil.toStr(cur)]) cur = DateUtil.addDays(cur, -1);
-      while (doneDay[DateUtil.toStr(cur)]) {
-        n++;
-        cur = DateUtil.addDays(cur, -1);
+      // 往前最多翻 700 天，脏数据也拖不死
+      for (var guard = 0; guard < 700; guard++) {
+        var ds = DateUtil.toStr(cur);
+        if (doneDay[ds]) { n++; skipped = 0; cur = DateUtil.addDays(cur, -1); continue; }
+        // 豁免日：跨过去但不算断签；连缓超过上限就当真的断了
+        if (exempt[ds] && skipped < PLAN_EXEMPT_MAX) {
+          skipped++;
+          cur = DateUtil.addDays(cur, -1);
+          continue;
+        }
+        break;
       }
       return n;
+    },
+
+    /** 计划在某天是否被「缓一缓」过 */
+    planExemptedOn: function (plan, dateStr) {
+      if (!plan || !plan.exemptDays) return false;
+      return plan.exemptDays.indexOf(dateStr || DateUtil.toStr(DateUtil.today())) >= 0;
+    },
+
+    /**
+     * 标记 / 取消「今天先缓一缓」。
+     * 不打勾、不给积分，但连续天数不断（最多连缓两天）。
+     */
+    togglePlanExempt: function (id, dateStr) {
+      var plan = this.getPlan(id);
+      if (!plan) return null;
+      var ds = dateStr || DateUtil.toStr(DateUtil.today());
+      if (!plan.exemptDays) plan.exemptDays = [];
+      var i = plan.exemptDays.indexOf(ds);
+      var on = i < 0;
+      if (on) plan.exemptDays.push(ds);
+      else plan.exemptDays.splice(i, 1);
+      // 只留最近 120 天，别让豁免记录无限长
+      if (plan.exemptDays.length > 120) {
+        plan.exemptDays = plan.exemptDays.slice(-120);
+      }
+      this.save();
+      this.emit();
+      return { on: on, streak: this.planStreak(plan) };
     },
 
     /** 今日是否已打卡 */
@@ -6614,6 +6673,10 @@
         if (this.pomodoro.points >= back) this.spendPoints(back);
       } else {
         plan.records.push({ date: dateStr, value: 1, note: '', at: new Date().toISOString() });
+        // 打了卡就没必要再挂「缓一缓」，否则同一格里既是打卡又是豁免，说不清
+        if (plan.exemptDays && plan.exemptDays.length) {
+          plan.exemptDays = plan.exemptDays.filter(function (d) { return d !== dateStr; });
+        }
         this.bumpUsage('plan');
         if (this.markAction) this.markAction('plancheck', 1);
       }
@@ -6679,10 +6742,50 @@
       state.plans.forEach(function (p) {
         if (p.done) { finished++; return; }
         running++;
-        // 只有打卡型才有「今日待打卡」概念
-        if (p.type === 'checkin' && !self.planDoneToday(p)) todayPending++;
+        // 只有打卡型才有「今日待打卡」概念；今天已缓一缓的也不再催
+        if (p.type === 'checkin' && !self.planDoneToday(p) && !self.planExemptedOn(p)) todayPending++;
       });
       return { running: running, finished: finished, todayPending: todayPending, total: state.plans.length };
+    },
+
+    /**
+     * 计划 × 身体状态：今天该推哪些、该缓哪些。
+     * 判定完全来自 bodyAdvice（不重算睡眠），这里只负责挑出候选。
+     * 只看今天：计划没标耗能档位就不给建议，不按标题猜。
+     */
+    planLoadAdvice: function () {
+      var adv = this.bodyAdvice();
+      var today = DateUtil.toStr(DateUtil.today());
+      var self = this;
+      var out = {
+        has: false, level: adv.level, mode: '', total: adv.total, q: adv.q,
+        todo: 0, tagged: 0, heavy: [], light: [], rest: []
+      };
+      if (!adv.has) return out;
+
+      var todo = [];
+      state.plans.forEach(function (p) {
+        if (!p || p.done) return;
+        if (self.planDoneToday(p) || self.planExemptedOn(p, today)) return;
+        if (p.startDate && p.startDate > today) return;   // 还没开始的不算今天的活
+        todo.push(p);
+      });
+
+      var byImp = function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); };
+      var heavy = todo.filter(function (p) { return p.load === 'high'; });
+      var light = todo.filter(function (p) { return p.load === 'low'; });
+      var rest  = todo.filter(function (p) { return p.load !== 'high' && p.load !== 'low'; });
+      heavy.sort(byImp); light.sort(byImp); rest.sort(byImp);
+
+      out.todo = todo.length;
+      out.tagged = todo.filter(function (p) { return !!p.load; }).length;
+      out.heavy = heavy;
+      out.light = light;
+      out.rest = rest;
+      if (adv.level === 'low' || adv.level === 'mild') out.mode = heavy.length ? 'ease' : '';
+      else if (adv.level === 'good') out.mode = heavy.length ? 'push' : '';
+      out.has = !!out.mode;
+      return out;
     },
 
     /** 区间内的时间去向汇总（按 from|to 缓存，整学期的重复渲染不再逐天重算） */
@@ -8404,6 +8507,7 @@
   global.eachDate = eachDate;
   global.PLAN_TYPES = PLAN_TYPES;
   global.PLAN_PERIODS = PLAN_PERIODS;
+  global.PLAN_LOADS = PLAN_LOADS;
   global.normalizeTags = normalizeTags;
   global.tagParts = tagParts;
   global.tagFull = tagFull;

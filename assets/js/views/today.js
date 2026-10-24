@@ -785,6 +785,7 @@
     list.slice(0, 4).forEach(function (p) {
       var pg = Store.planProgress(p);
       var done = Store.planDoneToday(p);
+      var exempt = !done && Store.planExemptedOn(p);
       var isCheckin = p.type === 'checkin';
 
       var mark = el('button', {
@@ -811,7 +812,7 @@
           el('div', { class: 'task-title', text: p.title }),
           el('div', { class: 'task-meta' }, [
             el('span', { text: isCheckin
-              ? (done ? '今日已打卡' : '今日待打卡')
+              ? (done ? '今日已打卡' : exempt ? '今天缓一缓 · 不算断签' : '今日待打卡')
               : ('进度 ' + pg.value + ' / ' + pg.target + (p.unit ? ' ' + p.unit : '')) }),
             el('span', { class: 'plan-mini-bar' }, [
               el('i', { style: { width: pg.pct + '%', background: p.color } })
