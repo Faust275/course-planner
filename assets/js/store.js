@@ -293,6 +293,7 @@
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
       metrics: [],     // 健康联动每日活动量：{ id, date, steps, calories, distance, source }
+      weightLog: [],   // 体重记录（按天一条）：{ id, date, kg }
       sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
@@ -2508,6 +2509,8 @@
       if (!state.sleeps) state.sleeps = [];
       // 每日活动量（健康联动 / 手动）：老档没有这个字段，补空数组，避免下游 filter 抛错
       if (!Array.isArray(state.metrics)) state.metrics = [];
+      // 体重记录：老档补空数组
+      if (!Array.isArray(state.weightLog)) state.weightLog = [];
       // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
       state.sleeps.forEach(function (s) {
         ['deep', 'light', 'rem', 'awake', 'efficiency', 'awakenings'].forEach(function (k) {
@@ -4366,6 +4369,44 @@
 
     getMetric: function (dateStr) {
       return state.metrics.filter(function (m) { return m.date === dateStr; })[0] || null;
+    },
+
+    /* ---------- 体重记录（按天一条，供曲线与 TDEE 使用） ---------- */
+    /** 记录某天体重（同一天覆盖）；合理范围 20–300kg。返回记录或 null */
+    logWeight: function (dateStr, kg) {
+      dateStr = dateStr || DateUtil.toStr(DateUtil.today());
+      kg = Math.round(Number(kg) * 10) / 10;
+      if (!(kg >= 20 && kg <= 300)) return null;
+      if (!Array.isArray(state.weightLog)) state.weightLog = [];
+      var exist = state.weightLog.filter(function (w) { return w.date === dateStr; })[0];
+      var rec;
+      if (exist) { exist.kg = kg; rec = exist; }
+      else { rec = { id: uid('w'), date: dateStr, kg: kg }; state.weightLog.push(rec); }
+      // 同步最新体重到档案，供 TDEE / BMI 估算
+      var diet = state.settings.diet;
+      if (diet) { diet.profile = diet.profile || {}; diet.profile.weight = kg; }
+      this.emit();
+      return rec;
+    },
+
+    /** 体重序列（按日期升序）；nDays 可选，只取最近 n 天（含今天） */
+    weightSeries: function (nDays) {
+      var arr = (state.weightLog || []).slice().sort(function (a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      });
+      if (nDays) {
+        var from = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -(nDays - 1)));
+        arr = arr.filter(function (w) { return w.date >= from; });
+      }
+      return arr;
+    },
+
+    /** 最新体重：优先体重记录，其次档案里的体重 */
+    latestWeight: function () {
+      var arr = this.weightSeries();
+      if (arr.length) return arr[arr.length - 1].kg;
+      var pf = (this.dietConfig().profile) || {};
+      return Number(pf.weight) || null;
     },
 
     /** 睡眠总分钟（按实际时刻归属：跨午夜的部分算到后一天） */

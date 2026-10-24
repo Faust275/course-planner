@@ -6117,6 +6117,7 @@ window.AK_OPS = [
       meals: [],       // 饮食记录
       sleeps: [],      // 睡眠记录
       metrics: [],     // 健康联动每日活动量：{ id, date, steps, calories, distance, source }
+      weightLog: [],   // 体重记录（按天一条）：{ id, date, kg }
       sleepSession: null,  // 进行中的睡眠计时：{ date: 入睡日, start: 'HH:MM', at: 毫秒时间戳 }
       achievements: { done: {} },  // 成就系统：{ done: { 成就id: { at: 时间戳 } } }
       usage: {},                // 功能使用次数：{ 功能key: 次数 }（历练成就用）
@@ -8332,6 +8333,8 @@ window.AK_OPS = [
       if (!state.sleeps) state.sleeps = [];
       // 每日活动量（健康联动 / 手动）：老档没有这个字段，补空数组，避免下游 filter 抛错
       if (!Array.isArray(state.metrics)) state.metrics = [];
+      // 体重记录：老档补空数组
+      if (!Array.isArray(state.weightLog)) state.weightLog = [];
       // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
       state.sleeps.forEach(function (s) {
         ['deep', 'light', 'rem', 'awake', 'efficiency', 'awakenings'].forEach(function (k) {
@@ -10190,6 +10193,44 @@ window.AK_OPS = [
 
     getMetric: function (dateStr) {
       return state.metrics.filter(function (m) { return m.date === dateStr; })[0] || null;
+    },
+
+    /* ---------- 体重记录（按天一条，供曲线与 TDEE 使用） ---------- */
+    /** 记录某天体重（同一天覆盖）；合理范围 20–300kg。返回记录或 null */
+    logWeight: function (dateStr, kg) {
+      dateStr = dateStr || DateUtil.toStr(DateUtil.today());
+      kg = Math.round(Number(kg) * 10) / 10;
+      if (!(kg >= 20 && kg <= 300)) return null;
+      if (!Array.isArray(state.weightLog)) state.weightLog = [];
+      var exist = state.weightLog.filter(function (w) { return w.date === dateStr; })[0];
+      var rec;
+      if (exist) { exist.kg = kg; rec = exist; }
+      else { rec = { id: uid('w'), date: dateStr, kg: kg }; state.weightLog.push(rec); }
+      // 同步最新体重到档案，供 TDEE / BMI 估算
+      var diet = state.settings.diet;
+      if (diet) { diet.profile = diet.profile || {}; diet.profile.weight = kg; }
+      this.emit();
+      return rec;
+    },
+
+    /** 体重序列（按日期升序）；nDays 可选，只取最近 n 天（含今天） */
+    weightSeries: function (nDays) {
+      var arr = (state.weightLog || []).slice().sort(function (a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      });
+      if (nDays) {
+        var from = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -(nDays - 1)));
+        arr = arr.filter(function (w) { return w.date >= from; });
+      }
+      return arr;
+    },
+
+    /** 最新体重：优先体重记录，其次档案里的体重 */
+    latestWeight: function () {
+      var arr = this.weightSeries();
+      if (arr.length) return arr[arr.length - 1].kg;
+      var pf = (this.dietConfig().profile) || {};
+      return Number(pf.weight) || null;
     },
 
     /** 睡眠总分钟（按实际时刻归属：跨午夜的部分算到后一天） */
@@ -15419,6 +15460,68 @@ window.AK_OPS = [
     return chartBars(items, opts);
   }
 
+  /**
+   * 折线图（体重等连续数值）。items: [{ label, value }]
+   * 自适应宽度、保留折线/面积；点上有 title 悬停提示。
+   */
+  function chartLine(items, opts) {
+    opts = opts || {};
+    var NS = 'http://www.w3.org/2000/svg';
+    var list = items || [];
+    var W = opts.width || 560, H = opts.height || 96, pad = 10;
+    var color = opts.color || 'var(--primary)';
+    var wrap = el('div', { class: 'chart-line', style: { width: '100%', maxWidth: W + 'px', margin: '0 auto' } });
+    if (!list.length) return wrap;
+
+    var vals = list.map(function (p) { return Number(p.value) || 0; });
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    if (max === min) max = min + 1;
+    var range = max - min, n = list.length;
+    function X(i) { return n === 1 ? W / 2 : pad + (W - pad * 2) * (i / (n - 1)); }
+    function Y(v) { return pad + (H - pad * 2) * (1 - (v - min) / range); }
+
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.style.width = '100%';
+    svg.style.height = 'auto';
+    svg.style.display = 'block';
+
+    var dArea = 'M' + X(0).toFixed(1) + ',' + (H - pad);
+    list.forEach(function (p, i) { dArea += ' L' + X(i).toFixed(1) + ',' + Y(Number(p.value) || 0).toFixed(1); });
+    dArea += ' L' + X(n - 1).toFixed(1) + ',' + (H - pad) + ' Z';
+    var area = document.createElementNS(NS, 'path');
+    area.setAttribute('d', dArea);
+    area.setAttribute('fill', color);
+    area.setAttribute('opacity', '0.12');
+    svg.appendChild(area);
+
+    var dLine = '';
+    list.forEach(function (p, i) { dLine += (i === 0 ? 'M' : 'L') + X(i).toFixed(1) + ',' + Y(Number(p.value) || 0).toFixed(1); });
+    var line = document.createElementNS(NS, 'path');
+    line.setAttribute('d', dLine);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linejoin', 'round');
+    line.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(line);
+
+    var dotR = n > 24 ? 1.6 : n > 12 ? 2.2 : 3;
+    list.forEach(function (p, i) {
+      var c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', X(i).toFixed(1));
+      c.setAttribute('cy', Y(Number(p.value) || 0).toFixed(1));
+      c.setAttribute('r', String(dotR));
+      c.setAttribute('fill', color);
+      var t = document.createElementNS(NS, 'title');
+      t.textContent = (p.label || '') + ' ' + (opts.fmt ? opts.fmt(p.value) : p.value);
+      c.appendChild(t);
+      svg.appendChild(c);
+    });
+    wrap.appendChild(svg);
+    return wrap;
+  }
+
   /** 范围切换：今天 / 一周 / 一月 / 一季 */
   /**
    * 统计范围切换条
@@ -15691,7 +15794,7 @@ window.AK_OPS = [
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
     toggle: toggle,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,
-    chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, rangeTabs: rangeTabs,
+    chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, chartLine: chartLine, rangeTabs: rangeTabs,
     icons: {
       calendar: ['M8 2v4M16 2v4M3 10h18', 'M5 4h14a2 2 0 012 2v13a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z'],
       today: ['M12 2v3M18.4 5.6l-2.1 2.1M22 11h-3M5.6 5.6L3.5 7.7M2 11h3', 'M12 8a4 4 0 100 8 4 4 0 000-8z'],
@@ -27139,6 +27242,7 @@ window.DragGesture = (function () {
       root.appendChild(this.rhythmCard());
       root.appendChild(this.stepsCard());
       root.appendChild(this.kcalCard(h));
+      root.appendChild(this.weightCard());
       root.appendChild(this.weekCard());
       root.appendChild(this.courseLinkCard());
       root.appendChild(this.socialJetLagCard());
@@ -27215,6 +27319,56 @@ window.DragGesture = (function () {
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '8px' },
           text: '还没有饮食记录。记一笔饮食、补上身高体重后，这里才会算出消耗与净热量。' }));
       }
+      return card(children);
+    },
+
+    /* ---------- 3.5) 体重曲线 ---------- */
+    weightCard: function () {
+      var series = Store.weightSeries(90);      // 近 90 天有记录的点
+      var latest = Store.latestWeight();
+
+      var fDate = V.input({ type: 'date', value: DateUtil.toStr(DateUtil.today()) });
+      var fKg = V.input({
+        type: 'number', step: '0.1', min: '20', max: '300', placeholder: 'kg',
+        value: latest != null ? String(latest) : ''
+      });
+      var btn = el('button', {
+        class: 'btn btn-sm btn-primary',
+        onclick: function () {
+          var kg = parseFloat(fKg.value);
+          if (!kg || kg < 20 || kg > 300) { UI.toast('请输入合理体重（20–300kg）', 'err'); return; }
+          Store.logWeight(fDate.value || DateUtil.toStr(DateUtil.today()), kg);
+          UI.toast('已记录体重');
+          view.render();
+        }
+      }, ['记录']);
+
+      var children = [
+        sectionTitle(V.icons.heartbeat, '体重曲线'),
+        el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' } }, [
+          fDate, fKg, btn
+        ])
+      ];
+
+      if (!series.length) {
+        children.push(el('div', {
+          style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.7' },
+          text: '还没有体重记录。先记一次今天的体重，之后每天记一笔就能看到趋势（也可以选过去的日期补记）。'
+        }));
+        return card(children);
+      }
+
+      var first = series[0], last = series[series.length - 1];
+      var diff = Math.round((last.kg - first.kg) * 10) / 10;
+      var diffColor = diff > 0.05 ? '#ef4444' : diff < -0.05 ? '#22c55e' : 'var(--text-3)';
+      children.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800' }, text: last.kg + ' kg' }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: last.date + ' · 共 ' + series.length + ' 次' }),
+        el('div', { style: { fontSize: '12px', color: diffColor }, text: (diff > 0 ? '+' : '') + diff + ' kg（近 90 天）' })
+      ]));
+      children.push(V.chartLine(series.map(function (p) {
+        return { label: p.date.slice(5), value: p.kg };
+      }), { color: 'var(--primary)', fmt: function (v) { return v + ' kg'; } }));
       return card(children);
     },
 

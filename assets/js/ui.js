@@ -695,6 +695,68 @@
     return chartBars(items, opts);
   }
 
+  /**
+   * 折线图（体重等连续数值）。items: [{ label, value }]
+   * 自适应宽度、保留折线/面积；点上有 title 悬停提示。
+   */
+  function chartLine(items, opts) {
+    opts = opts || {};
+    var NS = 'http://www.w3.org/2000/svg';
+    var list = items || [];
+    var W = opts.width || 560, H = opts.height || 96, pad = 10;
+    var color = opts.color || 'var(--primary)';
+    var wrap = el('div', { class: 'chart-line', style: { width: '100%', maxWidth: W + 'px', margin: '0 auto' } });
+    if (!list.length) return wrap;
+
+    var vals = list.map(function (p) { return Number(p.value) || 0; });
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    if (max === min) max = min + 1;
+    var range = max - min, n = list.length;
+    function X(i) { return n === 1 ? W / 2 : pad + (W - pad * 2) * (i / (n - 1)); }
+    function Y(v) { return pad + (H - pad * 2) * (1 - (v - min) / range); }
+
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.style.width = '100%';
+    svg.style.height = 'auto';
+    svg.style.display = 'block';
+
+    var dArea = 'M' + X(0).toFixed(1) + ',' + (H - pad);
+    list.forEach(function (p, i) { dArea += ' L' + X(i).toFixed(1) + ',' + Y(Number(p.value) || 0).toFixed(1); });
+    dArea += ' L' + X(n - 1).toFixed(1) + ',' + (H - pad) + ' Z';
+    var area = document.createElementNS(NS, 'path');
+    area.setAttribute('d', dArea);
+    area.setAttribute('fill', color);
+    area.setAttribute('opacity', '0.12');
+    svg.appendChild(area);
+
+    var dLine = '';
+    list.forEach(function (p, i) { dLine += (i === 0 ? 'M' : 'L') + X(i).toFixed(1) + ',' + Y(Number(p.value) || 0).toFixed(1); });
+    var line = document.createElementNS(NS, 'path');
+    line.setAttribute('d', dLine);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-linejoin', 'round');
+    line.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(line);
+
+    var dotR = n > 24 ? 1.6 : n > 12 ? 2.2 : 3;
+    list.forEach(function (p, i) {
+      var c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', X(i).toFixed(1));
+      c.setAttribute('cy', Y(Number(p.value) || 0).toFixed(1));
+      c.setAttribute('r', String(dotR));
+      c.setAttribute('fill', color);
+      var t = document.createElementNS(NS, 'title');
+      t.textContent = (p.label || '') + ' ' + (opts.fmt ? opts.fmt(p.value) : p.value);
+      c.appendChild(t);
+      svg.appendChild(c);
+    });
+    wrap.appendChild(svg);
+    return wrap;
+  }
+
   /** 范围切换：今天 / 一周 / 一月 / 一季 */
   /**
    * 统计范围切换条
@@ -967,7 +1029,7 @@
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,
     toggle: toggle,
     tagInput: tagInput, tagFilter: tagFilter, tagChips: tagChips,
-    chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, rangeTabs: rangeTabs,
+    chartPie: chartPie, chartBars: chartBars, chartDaily: chartDaily, chartLine: chartLine, rangeTabs: rangeTabs,
     icons: {
       calendar: ['M8 2v4M16 2v4M3 10h18', 'M5 4h14a2 2 0 012 2v13a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z'],
       today: ['M12 2v3M18.4 5.6l-2.1 2.1M22 11h-3M5.6 5.6L3.5 7.7M2 11h3', 'M12 8a4 4 0 100 8 4 4 0 000-8z'],

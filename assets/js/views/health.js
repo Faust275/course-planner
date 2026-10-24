@@ -117,6 +117,7 @@
       root.appendChild(this.rhythmCard());
       root.appendChild(this.stepsCard());
       root.appendChild(this.kcalCard(h));
+      root.appendChild(this.weightCard());
       root.appendChild(this.weekCard());
       root.appendChild(this.courseLinkCard());
       root.appendChild(this.socialJetLagCard());
@@ -193,6 +194,56 @@
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '8px' },
           text: '还没有饮食记录。记一笔饮食、补上身高体重后，这里才会算出消耗与净热量。' }));
       }
+      return card(children);
+    },
+
+    /* ---------- 3.5) 体重曲线 ---------- */
+    weightCard: function () {
+      var series = Store.weightSeries(90);      // 近 90 天有记录的点
+      var latest = Store.latestWeight();
+
+      var fDate = V.input({ type: 'date', value: DateUtil.toStr(DateUtil.today()) });
+      var fKg = V.input({
+        type: 'number', step: '0.1', min: '20', max: '300', placeholder: 'kg',
+        value: latest != null ? String(latest) : ''
+      });
+      var btn = el('button', {
+        class: 'btn btn-sm btn-primary',
+        onclick: function () {
+          var kg = parseFloat(fKg.value);
+          if (!kg || kg < 20 || kg > 300) { UI.toast('请输入合理体重（20–300kg）', 'err'); return; }
+          Store.logWeight(fDate.value || DateUtil.toStr(DateUtil.today()), kg);
+          UI.toast('已记录体重');
+          view.render();
+        }
+      }, ['记录']);
+
+      var children = [
+        sectionTitle(V.icons.heartbeat, '体重曲线'),
+        el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' } }, [
+          fDate, fKg, btn
+        ])
+      ];
+
+      if (!series.length) {
+        children.push(el('div', {
+          style: { fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.7' },
+          text: '还没有体重记录。先记一次今天的体重，之后每天记一笔就能看到趋势（也可以选过去的日期补记）。'
+        }));
+        return card(children);
+      }
+
+      var first = series[0], last = series[series.length - 1];
+      var diff = Math.round((last.kg - first.kg) * 10) / 10;
+      var diffColor = diff > 0.05 ? '#ef4444' : diff < -0.05 ? '#22c55e' : 'var(--text-3)';
+      children.push(el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' } }, [
+        el('div', { style: { fontSize: '26px', fontWeight: '800' }, text: last.kg + ' kg' }),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-3)' }, text: last.date + ' · 共 ' + series.length + ' 次' }),
+        el('div', { style: { fontSize: '12px', color: diffColor }, text: (diff > 0 ? '+' : '') + diff + ' kg（近 90 天）' })
+      ]));
+      children.push(V.chartLine(series.map(function (p) {
+        return { label: p.date.slice(5), value: p.kg };
+      }), { color: 'var(--primary)', fmt: function (v) { return v + ' kg'; } }));
       return card(children);
     },
 
