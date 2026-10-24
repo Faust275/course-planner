@@ -122,9 +122,16 @@ App.bus.clearRelay()
 ---
 
 ## 4. 核查结论：哪些「看似要做」其实已存在
-开工前已核对，**不要重复造轮子**：
+开工前已核对，**不要重复造轮子**（这几条都曾出现在待办清单里，实际早就有）：
 - **课表 ICS 导入**：已实现（`schedule.js#parseIcsCourseTable`，上传框 `accept` 已含 `.ics/.html/.csv`）。
 - **打卡热力图**：已实现（`stats.js#heatCard` 周热力条 + `heatLevel` 0–4 分级）。
+- **ICS 导出的时区与重复事件**：已实现（`remind.js` 里有 `VTIMEZONE` + `RRULE`，换教室/调课另生成单次事件——因为 RRULE 带不了单次变更）。别去 `schedule-export.js` 找，那个是**课表海报 PNG** 导出。
+- **移动端 PWA 基础**：已就绪（模板有 `viewport-fit=cover`、`theme-color`、`mobile-web-app-capable`，CSS 多处已用 `env(safe-area-inset-*)`）。
+
+## 3.6 离线二维码同步（后加的大模块）
+- `assets/js/qr-sync.js`（1577 行）：纯原生 QR 编码器（ISO/IEC 18004，V1–20，EC-L）、课表骨架单码、Gzip/Base64 动态切片轮播码、扫码解码，另含 WebDAV 云同步。
+- 全局是 **`QrSync`**（注意大小写，不是 `QRSync`），入口在 设置 → 数据 →「手机 ⇄ 电脑同步」四个按钮。
+- 已接入 `src/index.template.html`，有对应单测（含「QR 矩阵无损解码还原 CPQR1」）。
 
 ---
 
@@ -142,11 +149,32 @@ App.bus.clearRelay()
 ---
 
 ## 6. 待办 / 下一步建议（未做，按价值排序）
-1. **移动端 / 安卓壳**（safe-area、返回键拦截、横屏矩阵）——本期按需求**主动跳过**，体量最大，建议单独排期。
-2. ICS 导入已存在，但**导出**可增强（重复事件、时区）。
-3. 待办到期「本地提醒」目前是页面内提醒；若要真·系统级通知，需评估 HTTPS/安装为 PWA 后的 Notification（当前 file:// 不可用）。
+1. **真·系统级通知**：目前提醒是页面内 toast（`remind.js` 刻意不用 Notification，因为 `file://` 非安全上下文）。装成 App 后可以走 Notification / 通知插件。
+2. **安卓硬件返回键**：WebView 里默认直接退出，需要按当前是否有弹窗/二级页做拦截，否则体验很差。
+3. **横屏 / 平板布局**：窄屏（390px）已验证无横向溢出，但横屏与平板尺寸下的课表矩阵未专门适配。
 4. 复盘可加：计划 vs 实际偏差的**趋势图**、打卡热力图与计划的联动。
-5. 代码层面：仍有少量 `window.__cp*` 之外的跨文件全局；可继续收敛（但风险低，优先级靠后）。
+5. 代码层面：仍有少量 `window.__cp*` 之外的跨文件全局；可继续收敛（风险低，优先级靠后）。
+
+> 注：早期清单里的「移动端 / 安卓壳」已拆开处理——PWA/离线/安装基础已具备，剩下就是打包与返回键（见第 8 节）。
+
+---
+
+## 8. 安卓打包（Capacitor）
+产物是一个把 `index.html` 装进 WebView 的 APK。**先构建再打包**：
+
+```bash
+npm run build                 # 生成根目录 index.html（单文件，已内联全部 CSS/JS）
+npm run e2e                   # 建议打包前跑一遍，56 条应全绿
+npx cap sync android          # 把 webDir(dist) 同步进 android/app/src/main/assets/public
+cd android && ./gradlew assembleDebug
+# 产物：android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+要点：
+- `capacitor.config.json` 的 `webDir` 指向 **`dist/`**（由 `build.py` 顺带产出，只含 index.html + manifest + sw.js + 图标，避免把 node_modules 打进去）。
+- 应用 id / 名称见 `capacitor.config.json`；改图标走 `npx capacitor-assets generate`（或手放 `android/app/src/main/res/mipmap-*`）。
+- 签名发布包需要自己生成 keystore 并在 `android/app/build.gradle` 配 `signingConfigs`；debug 包可直接装。
+- 调试：`adb install -r app-debug.apk`；看 WebView 日志用 `chrome://inspect`。
 
 ---
 

@@ -1,11 +1,22 @@
 /* 可选伴侣文件：离线 PWA 缓存。仅当把 index.html 部署到 http(s) 网址、且本文件
  * 与 index.html 同目录时才生效。直接双击本地 index.html（file://）不会注册 SW。
  * 主交付始终是单一 index.html；本文件可忽略，不影响单文件使用。 */
-const CACHE = 'cp-app-v1';
-const SHELL = ['./', './index.html', './sw.js'];
+// v2：补齐 manifest 与各尺寸图标。之前只缓存 index.html/sw.js，离线冷启动时
+// manifest 与图标取不到，安装出来的桌面图标会掉成默认样式。
+const CACHE = 'cp-app-v2';
+const SHELL = [
+  './', './index.html', './sw.js', './manifest.webmanifest',
+  './icon-192.png', './icon-512.png', './icon-512-maskable.png', './apple-touch-icon.png'
+];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    // 逐项 add 而不是 addAll：addAll 只要有一个 404 就整批失败，
+    // 那样连 index.html 都缓存不上，离线直接打不开。这里允许个别资源缺失。
+    return Promise.all(SHELL.map(function (u) {
+      return c.add(u).catch(function () { return null; });
+    }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {

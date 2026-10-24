@@ -77,7 +77,14 @@ const nodeGlobals = {
 };
 
 export default [
-  { ignores: ['index.html', 'node_modules/**', 'preview/**', 'course-planner-deploy/**'] },
+  // dist/ 与 android/ 是构建产物：dist 由 build.py 生成、android 是 Capacitor 原生工程，
+  // 里面还拷贝了一份 sw.js（含 caches/fetch/Response 等 SW 全局），不能按源码规则检查。
+  {
+    ignores: [
+      'index.html', 'node_modules/**', 'preview/**', 'course-planner-deploy/**',
+      'dist/**', 'android/**'
+    ]
+  },
   js.configs.recommended,
   {
     files: ['assets/js/**/*.js', 'sw.js'],

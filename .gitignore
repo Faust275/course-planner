@@ -4,3 +4,16 @@ node_modules/
 *.bak
 *.log
 
+# 构建产物：由 python3 build.py 生成
+dist/
+
+# Capacitor 安卓工程：工程源码入仓库，构建产物与同步出来的 web 资源忽略
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
+*.apk
+*.aab
+

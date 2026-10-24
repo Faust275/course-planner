@@ -961,6 +961,7 @@
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,
     modal: modal, confirm: confirm, showAchievement: showAchievement,
+    topClose: topClose,   // 关掉最上层弹窗（安卓返回键与遮罩点击复用）
     addSwipe: addSwipe,
     field: field, input: input, textarea: textarea, select: select,
     segment: segment, colorPicker: colorPicker, empty: empty, statCard: statCard,

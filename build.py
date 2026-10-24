@@ -62,3 +62,20 @@ if 'href="assets' in html or 'src="assets' in html:
 
 OUT.write_text(html, encoding="utf-8")
 print(f"[build] 已生成 {OUT}  ({len(html)/1024:.1f} KB)")
+
+# ---- 额外产出 dist/：给 Capacitor 打安卓包用 ----
+# 只放运行必需的文件。不能把仓库根目录直接当 webDir，
+# 否则 node_modules / src / tests / verify_*.mjs 全会塞进 APK。
+import shutil
+
+DIST = ROOT / "dist"
+DIST.mkdir(exist_ok=True)
+(DIST / "index.html").write_text(html, encoding="utf-8")
+for name in ["manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png",
+             "icon-512-maskable.png", "apple-touch-icon.png"]:
+    src = ROOT / name
+    if src.exists():
+        shutil.copy2(src, DIST / name)
+    else:
+        print(f"[build] 警告: 缺少 {name}，dist/ 里将不含它（不影响单文件使用）")
+print(f"[build] 已同步 dist/ -> {DIST}")

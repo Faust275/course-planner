@@ -285,6 +285,32 @@
     else window.addEventListener('load', fn);
   }
 
+  /* ---------- 安卓硬件返回键 ----------
+   * 打包成 App 后，WebView 默认行为是「直接退出」，体验很差。
+   * 这里改成三级递进：有弹窗/浮层 → 关掉最上层；否则退回上一个视图；
+   * 已经在主视图（历史里没有上一步）才真正退出。
+   * 浏览器里没有 Capacitor，这段代码自动跳过，不影响 Web 行为。 */
+  function setupAndroidBackButton() {
+    try {
+      var AppPlugin = global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.App;
+      if (!AppPlugin || !AppPlugin.addListener) return;
+
+      AppPlugin.addListener('backButton', function () {
+        // 1) 弹窗 / 截图对话框 / 移动菜单：关掉最上层
+        if (UI.topClose && document.querySelector('.cp-modal-wrap')) { UI.topClose(); return; }
+        var float = document.querySelector('.cp-shot, .cp-move-menu, .cp-ob-mask');
+        if (float) {
+          var btn = float.querySelector('.cp-icon-btn, .cp-btn');
+          if (btn) { btn.click(); return; }
+        }
+        // 2) 有上一步就后退
+        if (window.history && window.history.length > 1) { window.history.back(); return; }
+        // 3) 主视图：退出
+        if (AppPlugin.exitApp) AppPlugin.exitApp();
+      });
+    } catch (e) { /* 非安卓环境忽略 */ }
+  }
+
   async function boot() {
     await Store.init();
 
@@ -297,6 +323,7 @@
       watchSwUpdate();
     }
     installManifest();
+    setupAndroidBackButton();
 
     window.Pet.init();
     // 页面内上课提醒：只在页面可见时跑，不申请任何权限
