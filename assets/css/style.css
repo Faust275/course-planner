@@ -4371,3 +4371,40 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cp-gr-wi-hint { color: var(--text-3); }
 .cp-gr-wi-delta.up { color: var(--green); font-weight: 600; }
 .cp-gr-wi-delta.down { color: var(--red); font-weight: 600; }
+
+/* ===== 顶栏下拉菜单（课表按钮分组） ===== */
+.cp-menu-wrap { display: inline-block; }
+.cp-menu {
+  position: fixed;
+  z-index: 900;
+  min-width: 184px;
+  max-width: 260px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+}
+.cp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cp-menu-item:hover { background: var(--surface-2); }
+.cp-menu-item:active { background: var(--line); }
+.cp-menu-item.danger { color: var(--red); }
+.cp-menu-item-ph { display: inline-block; width: 15px; flex: 0 0 15px; }
+.cp-menu-item-label { overflow: hidden; text-overflow: ellipsis; }
+.cp-menu-item svg { flex: 0 0 auto; color: var(--text-3); }
+.cp-menu-item.danger svg { color: var(--red); }

@@ -70,6 +70,9 @@
     return App.views.filter(function (v) {
       if (v.nav === false) return false;
       if (v.id === 'today' || v.id === 'settings') return true;
+      // 健康看板有独立总开关（settings.healthOn）：默认关，没开启就不占导航位。
+      // 只是不显示入口，#/health 深链接仍然能进，书签不会失效。
+      if (v.id === 'health' && !(Store.healthEnabled && Store.healthEnabled())) return false;
       return cfg[v.id] !== false;
     });
   }
@@ -178,6 +181,7 @@
 
     // 重建该视图的操作按钮区
     var actions = UI.$('#viewActions');
+    if (UI.cleanupMenus) UI.cleanupMenus();   // 顶栏下拉面板挂在 body 上，按钮要销毁了得一起收
     actions.innerHTML = '';
     if (v.actions) v.actions(actions);
 
@@ -357,6 +361,8 @@
       }
       function syncHealthOnce() {
         if (Store.settings && Store.settings.healthAutoSync === false) return;   // 开关关 -> 全部跳过
+        // 健康看板没开启就完全不碰系统健康数据（不拉取、不弹授权）
+        if (Store.healthEnabled && !Store.healthEnabled()) return;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
         HealthConnect.autoSync().then(function (ok) {
           if (!ok) return;
@@ -441,9 +447,66 @@
     // 第一次打开：走一遍新手教程，结束后回到进来时那一页（默认课程表，方便直接排课）
     if (!Store.state.settings.guided && global.Onboard) {
       setTimeout(function () {
-        Onboard.start(startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {});
+        Onboard.start(Object.assign(
+          startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {},
+          { onDone: function () { askHealthOnce(); } }
+        ));
       }, 420);
+    } else {
+      // 老用户 / 已看过教程：等界面稳定一点再问，别和首屏动画抢
+      setTimeout(askHealthOnce, 1200);
     }
+  }
+
+  /**
+   * 健康看板的首次询问：装完只问一次（问过即写 settings.healthOn.asked）。
+   * 只在「装好的环境」里问——安卓壳（Capacitor）或装到桌面的 PWA。
+   * 浏览器标签页里不弹：那里既读不到系统健康数据，也不该一打开就压一层弹窗。
+   * 之后随时可以在「设置 → 模块显示」里开关，不需要再打扰。
+   */
+  function askHealthOnce() {
+    if (!Store.state || !Store.state.settings) return;
+    if (Store.healthAsked && Store.healthAsked()) return;
+
+    var inApp = !!(global.Capacitor && global.Capacitor.Plugins &&
+                   global.Capacitor.Plugins.HealthConnect);
+    var installed = !!(global.Capacitor || (App.isStandalone && App.isStandalone()));
+    if (!installed) return;
+    if (document.querySelector('.cp-modal')) return;      // 已有弹窗在前面，让位
+
+    var body = UI.el('div', {}, [
+      UI.el('p', {
+        style: { margin: '0 0 10px', fontSize: '13px', lineHeight: '1.7', color: 'var(--text-2)' },
+        text: '健康看板把睡眠、精力、热量、体重、步数汇成一页，还会和课表、番茄专注做交叉分析。'
+      }),
+      UI.el('p', {
+        style: { margin: 0, fontSize: '12.5px', lineHeight: '1.7', color: 'var(--text-3)' },
+        text: inApp
+          ? '开启后可从手机 Health Connect 自动读取睡眠与活动量。不开启完全不影响其他功能。'
+          : '当前环境读不到系统健康数据，但可以手动记录睡眠、活动量与体重。'
+      })
+    ]);
+
+    var m = UI.modal({ title: '要不要开启健康看板？', width: '420px', body: body });
+    m.setFooter(UI.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } }, [
+      UI.el('button', {
+        class: 'btn',
+        onclick: function () {
+          m.close();
+          Store.setHealthOn(false);
+          UI.toast('健康看板已隐藏，可在「设置 → 模块显示」随时打开');
+        }
+      }, ['先不用']),
+      UI.el('button', {
+        class: 'btn btn-primary',
+        onclick: function () {
+          m.close();
+          Store.setHealthOn(true);
+          if (App.rebuildNav) App.rebuildNav();
+          go('health');
+        }
+      }, ['开启'])
+    ]));
   }
 
   function markActive(id) {

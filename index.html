@@ -4482,6 +4482,43 @@ html[data-mode="dark"] body.cp-has-bg .cp-filter-tab { background: rgba(24, 27, 
 .cp-gr-wi-delta.up { color: var(--green); font-weight: 600; }
 .cp-gr-wi-delta.down { color: var(--red); font-weight: 600; }
 
+/* ===== 顶栏下拉菜单（课表按钮分组） ===== */
+.cp-menu-wrap { display: inline-block; }
+.cp-menu {
+  position: fixed;
+  z-index: 900;
+  min-width: 184px;
+  max-width: 260px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+}
+.cp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cp-menu-item:hover { background: var(--surface-2); }
+.cp-menu-item:active { background: var(--line); }
+.cp-menu-item.danger { color: var(--red); }
+.cp-menu-item-ph { display: inline-block; width: 15px; flex: 0 0 15px; }
+.cp-menu-item-label { overflow: hidden; text-overflow: ellipsis; }
+.cp-menu-item svg { flex: 0 0 auto; color: var(--text-3); }
+.cp-menu-item.danger svg { color: var(--red); }
+
 </style>
 <script>
 
@@ -6010,6 +6047,9 @@ window.AK_OPS = [
         showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
+        // 健康看板总开关：默认关。装完只问一次（asked），没关联健康数据就不占导航位置。
+        // 注意别和上面的 health（今日健康提示）混为一谈。
+        healthOn: { enabled: false, asked: false },
         theme: 'indigo', customColor: '#4f46e5',
         themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
         themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
@@ -8259,6 +8299,9 @@ window.AK_OPS = [
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
       if (!state) state = defaultState();
+      // 「老档有没有这个字段」必须在 validateSchema 之前取样：
+      // 那之后默认值会把缺的字段补齐，就分不清「老档没有」还是「用户真的是 false」。
+      var hadHealthOn = !!(state && state.settings && state.settings.healthOn);
       migrateSchema(state);      // 版本升级：必须早于 validateSchema（否则默认值会盖掉旧结构）
       hoistLegacy(state);        // 旧值抢救：必须早于 validateSchema，否则旧值会被默认值覆盖、再也搬不动
       state = validateSchema(state);
@@ -8357,6 +8400,22 @@ window.AK_OPS = [
       if (!state.sleeps) state.sleeps = [];
       // 每日活动量（健康联动 / 手动）：老档没有这个字段，补空数组，避免下游 filter 抛错
       if (!Array.isArray(state.metrics)) state.metrics = [];
+      /* 健康看板总开关：老档没有这个字段。
+         已经有健康数据（睡眠 / 活动量 / 体重 / 饮食）的老用户按「已开启 + 已问过」迁移，
+         免得升级后入口凭空消失；其余人保持关闭，等新手教程结束问一次。 */
+      if (!hadHealthOn) {
+        var hasHealthData = (state.sleeps && state.sleeps.length) ||
+                            (state.metrics && state.metrics.length) ||
+                            (state.weightLog && state.weightLog.length) ||
+                            (state.meals && state.meals.length);
+        state.settings.healthOn = { enabled: !!hasHealthData, asked: !!hasHealthData };
+      } else {
+        var ho = state.settings.healthOn || {};
+        state.settings.healthOn = {
+          enabled: ho.enabled === true,
+          asked: ho.asked === true
+        };
+      }
       // 体重记录：老档补空数组
       if (!Array.isArray(state.weightLog)) state.weightLog = [];
       // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
@@ -12995,6 +13054,27 @@ window.AK_OPS = [
       this.emit();
     },
 
+    /* ===== 健康看板总开关 ===== */
+    /** 健康看板是否开启（未开启时导航里不出现，自动同步也不跑） */
+    healthEnabled: function () {
+      return !!(state.settings && state.settings.healthOn && state.settings.healthOn.enabled);
+    },
+    /** 是否已经问过「要不要用健康看板」（装完只问一次） */
+    healthAsked: function () {
+      return !!(state.settings && state.settings.healthOn && state.settings.healthOn.asked);
+    },
+    /** 开/关健康看板；开关一次就算问过了 */
+    setHealthOn: function (on) {
+      this.updateSettings({ healthOn: { enabled: !!on, asked: true } });
+    },
+    /** 本机是否已有健康数据（用于设置页提示与首次询问的文案） */
+    hasHealthData: function () {
+      return !!((state.sleeps && state.sleeps.length) ||
+                (state.metrics && state.metrics.length) ||
+                (state.weightLog && state.weightLog.length) ||
+                (state.meals && state.meals.length));
+    },
+
     get settings() { return state.settings; },
 
     /* ===== 24 小时统计 ===== */
@@ -15806,8 +15886,121 @@ window.AK_OPS = [
     return out;
   }
 
+  /* ==========================================================
+   * 下拉菜单（顶栏按钮分组用）
+   * ----------------------------------------------------------
+   * 触发按钮 + 一组菜单项。面板挂到 <body> 上并 fixed 定位：
+   * 顶栏在窄屏是横向滚动容器（overflow-x:auto），面板留在里面会被裁掉；
+   * 挂 body 还能躲开祖先的 backdrop-filter（它会成为 fixed 的包含块）。
+   *
+   * 菜单项始终渲染进 DOM，关闭时只是 display:none —— 这样按文案找按钮的
+   * 端到端脚本仍能查到，DOM click 也照常触发（不需要先展开菜单）。
+   * ========================================================== */
+  var MENUS = [];
+
+  function closeAllMenus(except) {
+    MENUS.forEach(function (m) { if (m !== except) m.close(); });
+  }
+
+  /** 清掉触发按钮已被移除的菜单（视图切走时由 app.js 调用，避免面板堆在 body 里） */
+  function cleanupMenus() {
+    for (var i = MENUS.length - 1; i >= 0; i--) {
+      var m = MENUS[i];
+      if (document.contains(m.wrap)) continue;
+      m.close();
+      if (m.panel.parentNode) m.panel.parentNode.removeChild(m.panel);
+      MENUS.splice(i, 1);
+    }
+  }
+
+  /**
+   * @param {Object} opts { label, icon, primary, active, items: [{ label, icon, danger, onclick }] }
+   * @returns {HTMLElement} 外层 wrap（直接 append 到顶栏）
+   */
+  function menuButton(opts) {
+    opts = opts || {};
+    var items = (opts.items || []).filter(Boolean);
+    var wrap = el('div', { class: 'menu-wrap' });
+    var panel = el('div', { class: 'menu', style: { display: 'none' } });
+    var chevron = svg('M6 9l6 6 6-6', 14);
+    var btn = el('button', {
+      class: 'btn' + (opts.primary ? ' btn-primary' : '') + (opts.active ? ' btn-on' : ''),
+      'aria-haspopup': 'true',
+      onclick: function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (panel.style.display === 'block') close(); else open();
+      }
+    }, [opts.icon ? svg(opts.icon, 16) : null, el('span', { text: opts.label || '' }), chevron]);
+    wrap.appendChild(btn);
+
+    items.forEach(function (it) {
+      panel.appendChild(el('button', {
+        class: 'menu-item' + (it.danger ? ' danger' : ''),
+        onclick: function () {
+          close();
+          // 延后一拍：等面板收起再做动作，避免同时触发滚动/焦点跳动
+          setTimeout(function () { if (it.onclick) it.onclick(); }, 0);
+        }
+      }, [
+        it.icon ? svg(it.icon, 15) : el('span', { class: 'menu-item-ph' }),
+        el('span', { class: 'menu-item-label', text: it.label })
+      ]));
+    });
+
+    function place() {
+      var r = btn.getBoundingClientRect();
+      var vw = global.innerWidth || document.documentElement.clientWidth || 360;
+      var vh = global.innerHeight || document.documentElement.clientHeight || 640;
+      var pw = panel.offsetWidth || 180;
+      var ph = panel.offsetHeight || 0;
+      var left = Math.min(Math.max(8, r.right - pw), Math.max(8, vw - pw - 8));
+      var top = r.bottom + 6;
+      // 下方放不下就向上翻，别溢出屏幕
+      if (top + ph > vh - 8 && r.top - ph - 6 > 8) top = r.top - ph - 6;
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+
+    function onDoc(e) {
+      if (wrap.contains(e.target) || panel.contains(e.target)) return;
+      close();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') { close(); btn.focus(); }
+    }
+
+    function open() {
+      closeAllMenus(entry);
+      panel.style.display = 'block';
+      place();
+      panel.classList.add('cp-open');
+      document.addEventListener('click', onDoc, true);
+      document.addEventListener('keydown', onKey, true);
+      global.addEventListener('resize', close, true);
+      // capture=true：滚动可能发生在顶栏这个内部容器上，冒泡收不到
+      global.addEventListener('scroll', close, true);
+    }
+
+    function close() {
+      if (panel.style.display !== 'block') return;
+      panel.style.display = 'none';
+      panel.classList.remove('cp-open');
+      document.removeEventListener('click', onDoc, true);
+      document.removeEventListener('keydown', onKey, true);
+      global.removeEventListener('resize', close, true);
+      global.removeEventListener('scroll', close, true);
+    }
+
+    var entry = { wrap: wrap, panel: panel, close: close };
+    MENUS.push(entry);
+    document.body.appendChild(panel);
+    return wrap;
+  }
+
   global.UI = {
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
+    menuButton: menuButton, cleanupMenus: cleanupMenus,
     cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,
@@ -16922,7 +17115,9 @@ window.DragGesture = (function () {
     // 合并后原来的独立模块改挂到宿主页的分页，旧深链接照常生效
     agenda: { id: 'calendar', tab: 'agenda' },
     quadrant: { id: 'tasks', tab: 'quadrant' },
-    stats: { id: 'tasks', tab: 'stats' }
+    stats: { id: 'tasks', tab: 'stats' },
+    // 活动已并入健康看板，旧深链接 #/activity 照常落到「活动」分页
+    activity: { id: 'health', tab: 'activity' }
   };
 
   /** 取一段地址并做最宽松的规整：去掉 #、/ 与首尾空白 */
@@ -19281,60 +19476,59 @@ window.DragGesture = (function () {
 
     /** 顶栏右侧操作按钮（由 App.go 每次切页时调用） */
     actions: function (host) {
+      var self = this;
+
+      /** 切换「按节次添加」；退出时清空已选格子 */
+      function togglePick() {
+        pickMode = !pickMode;
+        if (!pickMode) picked = {};
+        view.render();
+        var box = V.$('#viewActions');
+        if (box) {
+          if (V.cleanupMenus) V.cleanupMenus();
+          box.innerHTML = '';
+          view.actions(box);
+        }
+      }
+
+      /* 8 个按钮收成 3 组 + 月历：窄屏顶栏是横向滚动条，铺开一排要滑才能看全。
+         菜单项文案保持原样，端到端脚本按文案找按钮/点击都不受影响。 */
       host.appendChild(
         el('button', {
           class: 'btn',
           onclick: function () { App.go('calendar'); }
         }, [V.svg(V.icons.calendar, 16), '月历'])
       );
-      host.appendChild(
-        el('button', {
-          class: 'btn' + (pickMode ? ' btn-on' : ''),
-          onclick: function () {
-            pickMode = !pickMode;
-            if (!pickMode) picked = {};
-            view.render();
-            var box = V.$('#viewActions');
-            if (box) { box.innerHTML = ''; view.actions(box); }
-          }
-        }, [V.svg(V.icons.grid || V.icons.calendar, 16), pickMode ? '退出选择' : '按节次添加'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); }
-        }, [V.svg(V.icons.camera, 16), '导入课表'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { batchImportDialog(); }
-        }, [V.svg(V.icons.upload || V.icons.download, 16), '批量导入'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.Remind) Remind.exportDialog(); }
-        }, [V.svg(V.icons.clock, 16), '导出日历'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
-        }, [V.svg(V.icons.grid || V.icons.calendar, 16), '二维码分享'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); }
-        }, [V.svg(V.icons.download || V.icons.upload, 16), '导出图片'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn btn-primary',
-          onclick: function () { CourseDialog.open(); }
-        }, [V.svg(V.icons.plus, 16), '自定义添加'])
-      );
+
+      host.appendChild(V.menuButton({
+        label: '导入',
+        icon: V.icons.camera,
+        items: [
+          { icon: V.icons.camera, label: '导入课表', onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); } },
+          { icon: V.icons.upload || V.icons.download, label: '批量导入', onclick: function () { batchImportDialog(); } }
+        ]
+      }));
+
+      host.appendChild(V.menuButton({
+        label: '导出与分享',
+        icon: V.icons.download,
+        items: [
+          { icon: V.icons.download || V.icons.upload, label: '导出图片', onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); } },
+          { icon: V.icons.clock, label: '导出日历', onclick: function () { if (global.Remind) Remind.exportDialog(); } },
+          { icon: V.icons.grid || V.icons.calendar, label: '二维码分享', onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); } }
+        ]
+      }));
+
+      host.appendChild(V.menuButton({
+        label: '添加',
+        icon: V.icons.plus,
+        primary: true,
+        active: pickMode,
+        items: [
+          { icon: V.icons.plus, label: '自定义添加', onclick: function () { CourseDialog.open(); } },
+          { icon: V.icons.grid || V.icons.calendar, label: pickMode ? '退出选择' : '按节次添加', onclick: togglePick }
+        ]
+      }));
     },
 
     mount: function (host) {
@@ -23271,8 +23465,11 @@ window.DragGesture = (function () {
       ]);
       root.appendChild(hero);
 
-      /* ---------- 健康联动快捷条（精力 / 净热量 / 步数） ---------- */
+      /* ---------- 健康联动快捷条（精力 / 净热量 / 步数） ----------
+         健康看板没开启就整条不出现：没数据时它只会显示「—」，
+         对不用健康的人纯属噪音。已有睡眠/活动数据的老档会自动算作已开启。 */
       (function () {
+        if (Store.healthEnabled && !Store.healthEnabled()) return;
         var hh = Store.dayHealth(todayStr);
         var eInfo = hh.sleepQ >= 0.8 ? ['充沛', '#22c55e']
                    : hh.sleepQ >= 0.65 ? ['良好', '#84cc16']
@@ -25691,7 +25888,7 @@ window.DragGesture = (function () {
         el('span', { class: 'q-count', text: '健康联动' }),
         el('span', {
           class: 'more', style: { cursor: 'pointer' },
-          onclick: function () { App.go('activity'); },
+          onclick: function () { App.go('health', { tab: 'activity' }); },
           text: '详情 →'
         })
       ]));
@@ -26800,15 +26997,15 @@ window.DragGesture = (function () {
     ]);
   }
 
+  /* ==========================================================
+   * 活动分页（原「我的活动」独立模块，已并入健康模块的「活动」分页）
+   * ----------------------------------------------------------
+   * 挂在健康页里当分页用，自己不再注册视图；旧深链接 #/activity
+   * 由 router 的别名转成 #/health/activity。
+   * 其余逻辑（授权 / 同步 / 手动补录 / 改目标）保持原样。
+   * ========================================================== */
   var view = {
-    id: 'activity',
-    name: '活动',
-    icon: V.icons.heartbeat,
-    title: '我的活动',
-    order: 16,
-    nav: true,
-
-    root: null,
+    root: null,      // 宿主容器（每次 render 传进来）
     _fetching: false,
 
     actions: function (host) {
@@ -26822,17 +27019,10 @@ window.DragGesture = (function () {
       }, [V.svg(V.icons.download, 16), '同步']));
     },
 
-    mount: function (host) {
-      this.root = el('section', { class: 'view', id: 'view-activity' });
-      host.appendChild(this.root);
-      this.render();
-      return this.root;
-    },
-
-    onEnter: function () { this.render(); },
-
-    render: function () {
+    /** @param {HTMLElement} [host] 宿主容器；不传则沿用上次的 */
+    render: function (host) {
       var self = this;
+      if (host) this.root = host;
       var root = this.root;
       if (!root) return;
       root.innerHTML = '';
@@ -27141,8 +27331,13 @@ window.DragGesture = (function () {
     if (arr && arr.length) Store.addMetrics(arr);
   }
 
-  view._test = { series: series, km: km, metricOf: metricOf };
-  (window.VIEWS = window.VIEWS || []).push(view);
+  /** 供健康页挂载：用 { render(host), actions(host) } 这一套，与 AgendaPane 一致 */
+  global.ActivityPane = {
+    render: function (host) { view.render(host); },
+    actions: function (host) { view.actions(host); },
+    refresh: function () { view.render(); },
+    _test: { series: series, km: km, metricOf: metricOf }
+  };
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
@@ -27171,6 +27366,10 @@ window.DragGesture = (function () {
   var el = V.el;
   var SM = (typeof window !== 'undefined' && window.SleepModel) ||
            (typeof global !== 'undefined' && global.SleepModel) || null;
+
+  /* 分页：overview（睡眠/热量/体重/联动洞察，默认） | activity（步数/消耗/距离，
+     由 activity.js 的 ActivityPane 提供）。两者原本是两个独立模块，现已合并。 */
+  var healthTab = 'overview';
 
   function num(v) { return Number(v) || 0; }
   function fmt(v) { return num(v).toLocaleString(); }
@@ -27232,13 +27431,32 @@ window.DragGesture = (function () {
     nav: true,
     root: null,
 
+    getTab: function () { return healthTab; },
+    setTab: function (t) {
+      healthTab = (t === 'activity') ? 'activity' : 'overview';
+      this.render();
+      this.refreshActions();
+    },
+    defaultTab: 'overview',
+
+    /** 页内切分页不会走 App.go，顶栏操作区得自己重建，否则还留着上一个分页的按钮 */
+    refreshActions: function () {
+      var box = V.$('#viewActions');
+      if (!box) return;
+      if (V.cleanupMenus) V.cleanupMenus();
+      box.innerHTML = '';
+      this.actions(box);
+    },
+
     actions: function (host) {
+      // 「活动」分页有自己的操作区（手动记录 / 同步）
+      if (healthTab === 'activity') {
+        if (global.ActivityPane) global.ActivityPane.actions(host);
+        return;
+      }
       host.appendChild(el('button', {
         class: 'btn',
-        onclick: function () {
-          var v = App.views.filter(function (x) { return x.id === 'activity'; })[0];
-          if (v) App.go('activity');
-        }
+        onclick: function () { view.setTab('activity'); }
       }, [V.svg(V.icons.heartbeat, 16), '去记录']));
     },
 
@@ -27255,6 +27473,27 @@ window.DragGesture = (function () {
       var root = this.root;
       if (!root) return;
       root.innerHTML = '';
+
+      /* ---- 分页：概览（睡眠/热量/体重/联动洞察） | 活动（步数/消耗/距离） ---- */
+      root.appendChild(el('div', { class: 'pane-tabs', style: { marginBottom: '12px' } }, [
+        el('button', {
+          class: 'pane-tab' + (healthTab !== 'activity' ? ' active' : ''),
+          text: '📊 概览',
+          onclick: function () { view.setTab('overview'); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (healthTab === 'activity' ? ' active' : ''),
+          text: '🏃 活动',
+          onclick: function () { view.setTab('activity'); }
+        })
+      ]));
+
+      if (healthTab === 'activity') {
+        var pane = el('div', { id: 'activityPane' });
+        root.appendChild(pane);
+        if (global.ActivityPane) global.ActivityPane.render(pane);
+        return;
+      }
 
       var todayStr = DateUtil.toStr(DateUtil.today());
       var h = Store.dayHealth(todayStr);
@@ -38429,7 +38668,9 @@ window.DragGesture = (function () {
           var v = App.views.filter(function (x) { return x.id === id; })[0];
           if (!v) return;
           var locked = (id === 'today' || id === 'settings');
-          var on = locked ? true : (cfg[id] !== false);
+          // 健康看板由独立总开关（settings.healthOn）控制，不看 nav 配置
+          var isHealth = (id === 'health');
+          var on = locked ? true : (isHealth ? Store.healthEnabled() : (cfg[id] !== false));
 
           var sw = el('button', {
             class: 'switch' + (on ? ' on' : '') + (locked ? ' locked' : ''),
@@ -38437,6 +38678,12 @@ window.DragGesture = (function () {
               if (locked) { UI.toast('「' + v.name + '」需要保留入口'); return; }
               var next = !sw.classList.contains('cp-on');
               sw.classList.toggle('cp-on', next);
+              if (isHealth) {
+                Store.setHealthOn(next);
+                if (App.rebuildNav) App.rebuildNav();
+                UI.toast(next ? '已显示「' + v.name + '」' : '已隐藏「' + v.name + '」');
+                return;
+              }
               var nav = Object.assign({}, Store.state.settings.nav || {});
               nav[id] = next;
               Store.updateSettings({ nav: nav });
@@ -38449,7 +38696,7 @@ window.DragGesture = (function () {
             el('span', { class: 'nav-idx', text: String(idx + 1) }),
             el('div', { class: 'switch-text' }, [
               el('b', { text: v.name }),
-              el('span', { text: locked ? '始终显示' : (v.title || '') })
+              el('span', { text: locked ? '始终显示' : (isHealth ? '默认关闭，开启后才出现在导航里' : (v.title || '')) })
             ]),
             el('div', { class: 'nav-move' }, [
               moveBtn(V.icons.up, '上移', idx === 0, function () { move(id, -1); }),
@@ -49805,6 +50052,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
   var card = null;
   var fromView = null;
   var fromTab = null;      // 挂着深链接进来时，教程结束后要落回同一个分页
+  var onDoneCb = null;     // 教程结束（看完或跳过）后的回调，用于接「健康看板首次询问」
 
   function build() {
     root = el('div', { class: 'ob-mask' });
@@ -49922,11 +50170,16 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     fromTab = null;
     V.toast(fromNonCore ? '已关闭新功能介绍，可在「设置 → 新手教程」再看'
                         : (skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧'));
+    // 回调放在最后：让教程彻底收尾、界面回到正常页之后再问别的
+    var cb = onDoneCb;
+    onDoneCb = null;
+    if (cb) setTimeout(cb, 0);
   }
 
   /**
    * 开始教程
-   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页, steps: 自定义步骤（抽卡引导用） }
+   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页,
+   *                       steps: 自定义步骤（抽卡引导用）, onDone: 收尾回调 }
    */
   function start(opts) {
     opts = opts || {};
@@ -49934,6 +50187,7 @@ window.FOOD_CATS = ['主食', '肉蛋', '水产', '豆奶', '蔬菜', '水果', 
     recalcNonCore();
     fromView = opts.from || null;
     fromTab = opts.fromTab || null;
+    onDoneCb = typeof opts.onDone === 'function' ? opts.onDone : null;
     idx = 0;
     if (!root) build();
     go(0);
@@ -50209,6 +50463,9 @@ window.Pet = (function () {
     return App.views.filter(function (v) {
       if (v.nav === false) return false;
       if (v.id === 'today' || v.id === 'settings') return true;
+      // 健康看板有独立总开关（settings.healthOn）：默认关，没开启就不占导航位。
+      // 只是不显示入口，#/health 深链接仍然能进，书签不会失效。
+      if (v.id === 'health' && !(Store.healthEnabled && Store.healthEnabled())) return false;
       return cfg[v.id] !== false;
     });
   }
@@ -50317,6 +50574,7 @@ window.Pet = (function () {
 
     // 重建该视图的操作按钮区
     var actions = UI.$('#viewActions');
+    if (UI.cleanupMenus) UI.cleanupMenus();   // 顶栏下拉面板挂在 body 上，按钮要销毁了得一起收
     actions.innerHTML = '';
     if (v.actions) v.actions(actions);
 
@@ -50496,6 +50754,8 @@ window.Pet = (function () {
       }
       function syncHealthOnce() {
         if (Store.settings && Store.settings.healthAutoSync === false) return;   // 开关关 -> 全部跳过
+        // 健康看板没开启就完全不碰系统健康数据（不拉取、不弹授权）
+        if (Store.healthEnabled && !Store.healthEnabled()) return;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
         HealthConnect.autoSync().then(function (ok) {
           if (!ok) return;
@@ -50580,9 +50840,66 @@ window.Pet = (function () {
     // 第一次打开：走一遍新手教程，结束后回到进来时那一页（默认课程表，方便直接排课）
     if (!Store.state.settings.guided && global.Onboard) {
       setTimeout(function () {
-        Onboard.start(startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {});
+        Onboard.start(Object.assign(
+          startRoute ? { from: startRoute.id, fromTab: startRoute.tab } : {},
+          { onDone: function () { askHealthOnce(); } }
+        ));
       }, 420);
+    } else {
+      // 老用户 / 已看过教程：等界面稳定一点再问，别和首屏动画抢
+      setTimeout(askHealthOnce, 1200);
     }
+  }
+
+  /**
+   * 健康看板的首次询问：装完只问一次（问过即写 settings.healthOn.asked）。
+   * 只在「装好的环境」里问——安卓壳（Capacitor）或装到桌面的 PWA。
+   * 浏览器标签页里不弹：那里既读不到系统健康数据，也不该一打开就压一层弹窗。
+   * 之后随时可以在「设置 → 模块显示」里开关，不需要再打扰。
+   */
+  function askHealthOnce() {
+    if (!Store.state || !Store.state.settings) return;
+    if (Store.healthAsked && Store.healthAsked()) return;
+
+    var inApp = !!(global.Capacitor && global.Capacitor.Plugins &&
+                   global.Capacitor.Plugins.HealthConnect);
+    var installed = !!(global.Capacitor || (App.isStandalone && App.isStandalone()));
+    if (!installed) return;
+    if (document.querySelector('.cp-modal')) return;      // 已有弹窗在前面，让位
+
+    var body = UI.el('div', {}, [
+      UI.el('p', {
+        style: { margin: '0 0 10px', fontSize: '13px', lineHeight: '1.7', color: 'var(--text-2)' },
+        text: '健康看板把睡眠、精力、热量、体重、步数汇成一页，还会和课表、番茄专注做交叉分析。'
+      }),
+      UI.el('p', {
+        style: { margin: 0, fontSize: '12.5px', lineHeight: '1.7', color: 'var(--text-3)' },
+        text: inApp
+          ? '开启后可从手机 Health Connect 自动读取睡眠与活动量。不开启完全不影响其他功能。'
+          : '当前环境读不到系统健康数据，但可以手动记录睡眠、活动量与体重。'
+      })
+    ]);
+
+    var m = UI.modal({ title: '要不要开启健康看板？', width: '420px', body: body });
+    m.setFooter(UI.el('div', { style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } }, [
+      UI.el('button', {
+        class: 'btn',
+        onclick: function () {
+          m.close();
+          Store.setHealthOn(false);
+          UI.toast('健康看板已隐藏，可在「设置 → 模块显示」随时打开');
+        }
+      }, ['先不用']),
+      UI.el('button', {
+        class: 'btn btn-primary',
+        onclick: function () {
+          m.close();
+          Store.setHealthOn(true);
+          if (App.rebuildNav) App.rebuildNav();
+          go('health');
+        }
+      }, ['开启'])
+    ]));
   }
 
   function markActive(id) {

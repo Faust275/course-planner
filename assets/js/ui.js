@@ -1017,8 +1017,121 @@
     return out;
   }
 
+  /* ==========================================================
+   * 下拉菜单（顶栏按钮分组用）
+   * ----------------------------------------------------------
+   * 触发按钮 + 一组菜单项。面板挂到 <body> 上并 fixed 定位：
+   * 顶栏在窄屏是横向滚动容器（overflow-x:auto），面板留在里面会被裁掉；
+   * 挂 body 还能躲开祖先的 backdrop-filter（它会成为 fixed 的包含块）。
+   *
+   * 菜单项始终渲染进 DOM，关闭时只是 display:none —— 这样按文案找按钮的
+   * 端到端脚本仍能查到，DOM click 也照常触发（不需要先展开菜单）。
+   * ========================================================== */
+  var MENUS = [];
+
+  function closeAllMenus(except) {
+    MENUS.forEach(function (m) { if (m !== except) m.close(); });
+  }
+
+  /** 清掉触发按钮已被移除的菜单（视图切走时由 app.js 调用，避免面板堆在 body 里） */
+  function cleanupMenus() {
+    for (var i = MENUS.length - 1; i >= 0; i--) {
+      var m = MENUS[i];
+      if (document.contains(m.wrap)) continue;
+      m.close();
+      if (m.panel.parentNode) m.panel.parentNode.removeChild(m.panel);
+      MENUS.splice(i, 1);
+    }
+  }
+
+  /**
+   * @param {Object} opts { label, icon, primary, active, items: [{ label, icon, danger, onclick }] }
+   * @returns {HTMLElement} 外层 wrap（直接 append 到顶栏）
+   */
+  function menuButton(opts) {
+    opts = opts || {};
+    var items = (opts.items || []).filter(Boolean);
+    var wrap = el('div', { class: 'menu-wrap' });
+    var panel = el('div', { class: 'menu', style: { display: 'none' } });
+    var chevron = svg('M6 9l6 6 6-6', 14);
+    var btn = el('button', {
+      class: 'btn' + (opts.primary ? ' btn-primary' : '') + (opts.active ? ' btn-on' : ''),
+      'aria-haspopup': 'true',
+      onclick: function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (panel.style.display === 'block') close(); else open();
+      }
+    }, [opts.icon ? svg(opts.icon, 16) : null, el('span', { text: opts.label || '' }), chevron]);
+    wrap.appendChild(btn);
+
+    items.forEach(function (it) {
+      panel.appendChild(el('button', {
+        class: 'menu-item' + (it.danger ? ' danger' : ''),
+        onclick: function () {
+          close();
+          // 延后一拍：等面板收起再做动作，避免同时触发滚动/焦点跳动
+          setTimeout(function () { if (it.onclick) it.onclick(); }, 0);
+        }
+      }, [
+        it.icon ? svg(it.icon, 15) : el('span', { class: 'menu-item-ph' }),
+        el('span', { class: 'menu-item-label', text: it.label })
+      ]));
+    });
+
+    function place() {
+      var r = btn.getBoundingClientRect();
+      var vw = global.innerWidth || document.documentElement.clientWidth || 360;
+      var vh = global.innerHeight || document.documentElement.clientHeight || 640;
+      var pw = panel.offsetWidth || 180;
+      var ph = panel.offsetHeight || 0;
+      var left = Math.min(Math.max(8, r.right - pw), Math.max(8, vw - pw - 8));
+      var top = r.bottom + 6;
+      // 下方放不下就向上翻，别溢出屏幕
+      if (top + ph > vh - 8 && r.top - ph - 6 > 8) top = r.top - ph - 6;
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+
+    function onDoc(e) {
+      if (wrap.contains(e.target) || panel.contains(e.target)) return;
+      close();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') { close(); btn.focus(); }
+    }
+
+    function open() {
+      closeAllMenus(entry);
+      panel.style.display = 'block';
+      place();
+      panel.classList.add('cp-open');
+      document.addEventListener('click', onDoc, true);
+      document.addEventListener('keydown', onKey, true);
+      global.addEventListener('resize', close, true);
+      // capture=true：滚动可能发生在顶栏这个内部容器上，冒泡收不到
+      global.addEventListener('scroll', close, true);
+    }
+
+    function close() {
+      if (panel.style.display !== 'block') return;
+      panel.style.display = 'none';
+      panel.classList.remove('cp-open');
+      document.removeEventListener('click', onDoc, true);
+      document.removeEventListener('keydown', onKey, true);
+      global.removeEventListener('resize', close, true);
+      global.removeEventListener('scroll', close, true);
+    }
+
+    var entry = { wrap: wrap, panel: panel, close: close };
+    MENUS.push(entry);
+    document.body.appendChild(panel);
+    return wrap;
+  }
+
   global.UI = {
     el: el, appendAll: appendAll, svg: svg, jade: jade, frag: frag,
+    menuButton: menuButton, cleanupMenus: cleanupMenus,
     cn: cn, cls: prefixCls, addClass: addClass, removeClass: removeClass, toggleClass: toggleClass, hasClass: hasClass,
     $: $, $$: $$, escapeHTML: escapeHTML, b64ToBytes: b64ToBytes,
     toast: toast, toastAction: toastAction, moveMenu: moveMenu, hintOnce: hintOnce,

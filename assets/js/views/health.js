@@ -23,6 +23,10 @@
   var SM = (typeof window !== 'undefined' && window.SleepModel) ||
            (typeof global !== 'undefined' && global.SleepModel) || null;
 
+  /* 分页：overview（睡眠/热量/体重/联动洞察，默认） | activity（步数/消耗/距离，
+     由 activity.js 的 ActivityPane 提供）。两者原本是两个独立模块，现已合并。 */
+  var healthTab = 'overview';
+
   function num(v) { return Number(v) || 0; }
   function fmt(v) { return num(v).toLocaleString(); }
   function round1(v) { return Math.round(num(v) * 10) / 10; }
@@ -83,13 +87,32 @@
     nav: true,
     root: null,
 
+    getTab: function () { return healthTab; },
+    setTab: function (t) {
+      healthTab = (t === 'activity') ? 'activity' : 'overview';
+      this.render();
+      this.refreshActions();
+    },
+    defaultTab: 'overview',
+
+    /** 页内切分页不会走 App.go，顶栏操作区得自己重建，否则还留着上一个分页的按钮 */
+    refreshActions: function () {
+      var box = V.$('#viewActions');
+      if (!box) return;
+      if (V.cleanupMenus) V.cleanupMenus();
+      box.innerHTML = '';
+      this.actions(box);
+    },
+
     actions: function (host) {
+      // 「活动」分页有自己的操作区（手动记录 / 同步）
+      if (healthTab === 'activity') {
+        if (global.ActivityPane) global.ActivityPane.actions(host);
+        return;
+      }
       host.appendChild(el('button', {
         class: 'btn',
-        onclick: function () {
-          var v = App.views.filter(function (x) { return x.id === 'activity'; })[0];
-          if (v) App.go('activity');
-        }
+        onclick: function () { view.setTab('activity'); }
       }, [V.svg(V.icons.heartbeat, 16), '去记录']));
     },
 
@@ -106,6 +129,27 @@
       var root = this.root;
       if (!root) return;
       root.innerHTML = '';
+
+      /* ---- 分页：概览（睡眠/热量/体重/联动洞察） | 活动（步数/消耗/距离） ---- */
+      root.appendChild(el('div', { class: 'pane-tabs', style: { marginBottom: '12px' } }, [
+        el('button', {
+          class: 'pane-tab' + (healthTab !== 'activity' ? ' active' : ''),
+          text: '📊 概览',
+          onclick: function () { view.setTab('overview'); }
+        }),
+        el('button', {
+          class: 'pane-tab' + (healthTab === 'activity' ? ' active' : ''),
+          text: '🏃 活动',
+          onclick: function () { view.setTab('activity'); }
+        })
+      ]));
+
+      if (healthTab === 'activity') {
+        var pane = el('div', { id: 'activityPane' });
+        root.appendChild(pane);
+        if (global.ActivityPane) global.ActivityPane.render(pane);
+        return;
+      }
 
       var todayStr = DateUtil.toStr(DateUtil.today());
       var h = Store.dayHealth(todayStr);

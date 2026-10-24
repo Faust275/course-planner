@@ -66,15 +66,15 @@
     ]);
   }
 
+  /* ==========================================================
+   * 活动分页（原「我的活动」独立模块，已并入健康模块的「活动」分页）
+   * ----------------------------------------------------------
+   * 挂在健康页里当分页用，自己不再注册视图；旧深链接 #/activity
+   * 由 router 的别名转成 #/health/activity。
+   * 其余逻辑（授权 / 同步 / 手动补录 / 改目标）保持原样。
+   * ========================================================== */
   var view = {
-    id: 'activity',
-    name: '活动',
-    icon: V.icons.heartbeat,
-    title: '我的活动',
-    order: 16,
-    nav: true,
-
-    root: null,
+    root: null,      // 宿主容器（每次 render 传进来）
     _fetching: false,
 
     actions: function (host) {
@@ -88,17 +88,10 @@
       }, [V.svg(V.icons.download, 16), '同步']));
     },
 
-    mount: function (host) {
-      this.root = el('section', { class: 'view', id: 'view-activity' });
-      host.appendChild(this.root);
-      this.render();
-      return this.root;
-    },
-
-    onEnter: function () { this.render(); },
-
-    render: function () {
+    /** @param {HTMLElement} [host] 宿主容器；不传则沿用上次的 */
+    render: function (host) {
       var self = this;
+      if (host) this.root = host;
       var root = this.root;
       if (!root) return;
       root.innerHTML = '';
@@ -407,6 +400,11 @@
     if (arr && arr.length) Store.addMetrics(arr);
   }
 
-  view._test = { series: series, km: km, metricOf: metricOf };
-  (window.VIEWS = window.VIEWS || []).push(view);
+  /** 供健康页挂载：用 { render(host), actions(host) } 这一套，与 AgendaPane 一致 */
+  global.ActivityPane = {
+    render: function (host) { view.render(host); },
+    actions: function (host) { view.actions(host); },
+    refresh: function () { view.render(); },
+    _test: { series: series, km: km, metricOf: metricOf }
+  };
 })(typeof window !== 'undefined' ? window : this);

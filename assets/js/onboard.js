@@ -266,6 +266,7 @@
   var card = null;
   var fromView = null;
   var fromTab = null;      // 挂着深链接进来时，教程结束后要落回同一个分页
+  var onDoneCb = null;     // 教程结束（看完或跳过）后的回调，用于接「健康看板首次询问」
 
   function build() {
     root = el('div', { class: 'ob-mask' });
@@ -383,11 +384,16 @@
     fromTab = null;
     V.toast(fromNonCore ? '已关闭新功能介绍，可在「设置 → 新手教程」再看'
                         : (skipped ? '已跳过，随时可以在设置里再看' : '教程看完了，先去排课吧'));
+    // 回调放在最后：让教程彻底收尾、界面回到正常页之后再问别的
+    var cb = onDoneCb;
+    onDoneCb = null;
+    if (cb) setTimeout(cb, 0);
   }
 
   /**
    * 开始教程
-   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页, steps: 自定义步骤（抽卡引导用） }
+   * @param {Object} opts { from: 结束后回到哪个页面, fromTab: 该页的哪个分页,
+   *                       steps: 自定义步骤（抽卡引导用）, onDone: 收尾回调 }
    */
   function start(opts) {
     opts = opts || {};
@@ -395,6 +401,7 @@
     recalcNonCore();
     fromView = opts.from || null;
     fromTab = opts.fromTab || null;
+    onDoneCb = typeof opts.onDone === 'function' ? opts.onDone : null;
     idx = 0;
     if (!root) build();
     go(0);

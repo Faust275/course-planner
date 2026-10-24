@@ -64,11 +64,11 @@ const result = await page.evaluate(() => {
   return out;
 });
 
-await page.evaluate(() => App.go('activity'));
+await page.evaluate(() => App.go('health', { tab: 'activity' }));
 await page.waitForTimeout(500);
 
 const ui = await page.evaluate(() => {
-  const view = document.querySelector('#view-activity');
+  const view = document.querySelector('#activityPane');
   if (!view) return { missing: true };
   const cards = [...view.querySelectorAll('.cp-card')];
   return {
@@ -98,7 +98,7 @@ const ok = [
   ['汇总含最活跃日', (ui.full || '').includes('最活跃是')]
 ];
 
-// 手动补录：入口在视图右上角工具栏（不在 #view-activity 内），按文本全局找
+// 手动补录：入口在视图右上角工具栏（不在 #activityPane 内），按文本全局找
 await page.evaluate(() => {
   const btn = [...document.querySelectorAll('button')]
     .find((b) => b.textContent.trim() === '手动记录');
@@ -127,10 +127,10 @@ ok.push(['手动保存为 manual 且数值正确', afterEdit.steps === 6500 && a
 await page.screenshot({ path: '/tmp/activity-filled.png', fullPage: true }).catch(() => {});
 
 // 空态：清空后应出现引导卡且不报错
-await page.evaluate(() => { Store.state.metrics = []; Store.emit(); App.go('activity'); });
+await page.evaluate(() => { Store.state.metrics = []; Store.emit(); App.go('health', { tab: 'activity' }); });
 await page.waitForTimeout(400);
 const empty = await page.evaluate(() => {
-  const v = document.querySelector('#view-activity');
+  const v = document.querySelector('#activityPane');
   return v ? v.innerText : '';
 });
 ok.push(['空态有引导文案', empty.includes('怎么拿到数据')]);

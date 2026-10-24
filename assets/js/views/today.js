@@ -86,8 +86,11 @@
       ]);
       root.appendChild(hero);
 
-      /* ---------- 健康联动快捷条（精力 / 净热量 / 步数） ---------- */
+      /* ---------- 健康联动快捷条（精力 / 净热量 / 步数） ----------
+         健康看板没开启就整条不出现：没数据时它只会显示「—」，
+         对不用健康的人纯属噪音。已有睡眠/活动数据的老档会自动算作已开启。 */
       (function () {
+        if (Store.healthEnabled && !Store.healthEnabled()) return;
         var hh = Store.dayHealth(todayStr);
         var eInfo = hh.sleepQ >= 0.8 ? ['充沛', '#22c55e']
                    : hh.sleepQ >= 0.65 ? ['良好', '#84cc16']

@@ -186,6 +186,9 @@
         showWeekend: true,   // 课表是否显示周六、周日两列（关掉只影响展示，课程数据不动）
         statsWidgets: { time: true, curve: true, sources: true, spend: true, course: true },  // 统计分页里想看哪些卡片
         health: { on: true, sleepMinH: 6, kcalOver: true, activityMinH: 0 },  // 今日健康提示：阈值由用户定
+        // 健康看板总开关：默认关。装完只问一次（asked），没关联健康数据就不占导航位置。
+        // 注意别和上面的 health（今日健康提示）混为一谈。
+        healthOn: { enabled: false, asked: false },
         theme: 'indigo', customColor: '#4f46e5',
         themeSkin: true,          // 机制主题皮肤：开启时跟随奖励模式（森林→自然 / 抽卡→工厂）
         themeSkinAuto: true,      // 自动跟随时由机制提供默认强调色；用户手动选色后变为 false
@@ -2435,6 +2438,9 @@
     /** 补齐缺失字段：加载本地数据、导入备份后都会调用 */
     ensure: function () {
       if (!state) state = defaultState();
+      // 「老档有没有这个字段」必须在 validateSchema 之前取样：
+      // 那之后默认值会把缺的字段补齐，就分不清「老档没有」还是「用户真的是 false」。
+      var hadHealthOn = !!(state && state.settings && state.settings.healthOn);
       migrateSchema(state);      // 版本升级：必须早于 validateSchema（否则默认值会盖掉旧结构）
       hoistLegacy(state);        // 旧值抢救：必须早于 validateSchema，否则旧值会被默认值覆盖、再也搬不动
       state = validateSchema(state);
@@ -2533,6 +2539,22 @@
       if (!state.sleeps) state.sleeps = [];
       // 每日活动量（健康联动 / 手动）：老档没有这个字段，补空数组，避免下游 filter 抛错
       if (!Array.isArray(state.metrics)) state.metrics = [];
+      /* 健康看板总开关：老档没有这个字段。
+         已经有健康数据（睡眠 / 活动量 / 体重 / 饮食）的老用户按「已开启 + 已问过」迁移，
+         免得升级后入口凭空消失；其余人保持关闭，等新手教程结束问一次。 */
+      if (!hadHealthOn) {
+        var hasHealthData = (state.sleeps && state.sleeps.length) ||
+                            (state.metrics && state.metrics.length) ||
+                            (state.weightLog && state.weightLog.length) ||
+                            (state.meals && state.meals.length);
+        state.settings.healthOn = { enabled: !!hasHealthData, asked: !!hasHealthData };
+      } else {
+        var ho = state.settings.healthOn || {};
+        state.settings.healthOn = {
+          enabled: ho.enabled === true,
+          asked: ho.asked === true
+        };
+      }
       // 体重记录：老档补空数组
       if (!Array.isArray(state.weightLog)) state.weightLog = [];
       // 旧档睡眠记录可能没有结构字段，补成 null，避免下游读到 undefined
@@ -7169,6 +7191,27 @@
     updateSettings: function (data) {
       Object.assign(state.settings, data);
       this.emit();
+    },
+
+    /* ===== 健康看板总开关 ===== */
+    /** 健康看板是否开启（未开启时导航里不出现，自动同步也不跑） */
+    healthEnabled: function () {
+      return !!(state.settings && state.settings.healthOn && state.settings.healthOn.enabled);
+    },
+    /** 是否已经问过「要不要用健康看板」（装完只问一次） */
+    healthAsked: function () {
+      return !!(state.settings && state.settings.healthOn && state.settings.healthOn.asked);
+    },
+    /** 开/关健康看板；开关一次就算问过了 */
+    setHealthOn: function (on) {
+      this.updateSettings({ healthOn: { enabled: !!on, asked: true } });
+    },
+    /** 本机是否已有健康数据（用于设置页提示与首次询问的文案） */
+    hasHealthData: function () {
+      return !!((state.sleeps && state.sleeps.length) ||
+                (state.metrics && state.metrics.length) ||
+                (state.weightLog && state.weightLog.length) ||
+                (state.meals && state.meals.length));
     },
 
     get settings() { return state.settings; },

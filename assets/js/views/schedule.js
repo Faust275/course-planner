@@ -1089,60 +1089,59 @@
 
     /** 顶栏右侧操作按钮（由 App.go 每次切页时调用） */
     actions: function (host) {
+      var self = this;
+
+      /** 切换「按节次添加」；退出时清空已选格子 */
+      function togglePick() {
+        pickMode = !pickMode;
+        if (!pickMode) picked = {};
+        view.render();
+        var box = V.$('#viewActions');
+        if (box) {
+          if (V.cleanupMenus) V.cleanupMenus();
+          box.innerHTML = '';
+          view.actions(box);
+        }
+      }
+
+      /* 8 个按钮收成 3 组 + 月历：窄屏顶栏是横向滚动条，铺开一排要滑才能看全。
+         菜单项文案保持原样，端到端脚本按文案找按钮/点击都不受影响。 */
       host.appendChild(
         el('button', {
           class: 'btn',
           onclick: function () { App.go('calendar'); }
         }, [V.svg(V.icons.calendar, 16), '月历'])
       );
-      host.appendChild(
-        el('button', {
-          class: 'btn' + (pickMode ? ' btn-on' : ''),
-          onclick: function () {
-            pickMode = !pickMode;
-            if (!pickMode) picked = {};
-            view.render();
-            var box = V.$('#viewActions');
-            if (box) { box.innerHTML = ''; view.actions(box); }
-          }
-        }, [V.svg(V.icons.grid || V.icons.calendar, 16), pickMode ? '退出选择' : '按节次添加'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); }
-        }, [V.svg(V.icons.camera, 16), '导入课表'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { batchImportDialog(); }
-        }, [V.svg(V.icons.upload || V.icons.download, 16), '批量导入'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.Remind) Remind.exportDialog(); }
-        }, [V.svg(V.icons.clock, 16), '导出日历'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); }
-        }, [V.svg(V.icons.grid || V.icons.calendar, 16), '二维码分享'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn',
-          onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); }
-        }, [V.svg(V.icons.download || V.icons.upload, 16), '导出图片'])
-      );
-      host.appendChild(
-        el('button', {
-          class: 'btn btn-primary',
-          onclick: function () { CourseDialog.open(); }
-        }, [V.svg(V.icons.plus, 16), '自定义添加'])
-      );
+
+      host.appendChild(V.menuButton({
+        label: '导入',
+        icon: V.icons.camera,
+        items: [
+          { icon: V.icons.camera, label: '导入课表', onclick: function () { if (global.OcrDialog) global.OcrDialog.open(); } },
+          { icon: V.icons.upload || V.icons.download, label: '批量导入', onclick: function () { batchImportDialog(); } }
+        ]
+      }));
+
+      host.appendChild(V.menuButton({
+        label: '导出与分享',
+        icon: V.icons.download,
+        items: [
+          { icon: V.icons.download || V.icons.upload, label: '导出图片', onclick: function () { if (global.ScheduleExport) ScheduleExport.previewDialog(); } },
+          { icon: V.icons.clock, label: '导出日历', onclick: function () { if (global.Remind) Remind.exportDialog(); } },
+          { icon: V.icons.grid || V.icons.calendar, label: '二维码分享', onclick: function () { if (global.QrSync) global.QrSync.openDialog('skeleton'); } }
+        ]
+      }));
+
+      host.appendChild(V.menuButton({
+        label: '添加',
+        icon: V.icons.plus,
+        primary: true,
+        active: pickMode,
+        items: [
+          { icon: V.icons.plus, label: '自定义添加', onclick: function () { CourseDialog.open(); } },
+          { icon: V.icons.grid || V.icons.calendar, label: pickMode ? '退出选择' : '按节次添加', onclick: togglePick }
+        ]
+      }));
     },
 
     mount: function (host) {

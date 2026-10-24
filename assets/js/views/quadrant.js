@@ -267,7 +267,7 @@
         el('span', { class: 'q-count', text: '健康联动' }),
         el('span', {
           class: 'more', style: { cursor: 'pointer' },
-          onclick: function () { App.go('activity'); },
+          onclick: function () { App.go('health', { tab: 'activity' }); },
           text: '详情 →'
         })
       ]));

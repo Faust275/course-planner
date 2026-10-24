@@ -1102,7 +1102,9 @@
           var v = App.views.filter(function (x) { return x.id === id; })[0];
           if (!v) return;
           var locked = (id === 'today' || id === 'settings');
-          var on = locked ? true : (cfg[id] !== false);
+          // 健康看板由独立总开关（settings.healthOn）控制，不看 nav 配置
+          var isHealth = (id === 'health');
+          var on = locked ? true : (isHealth ? Store.healthEnabled() : (cfg[id] !== false));
 
           var sw = el('button', {
             class: 'switch' + (on ? ' on' : '') + (locked ? ' locked' : ''),
@@ -1110,6 +1112,12 @@
               if (locked) { UI.toast('「' + v.name + '」需要保留入口'); return; }
               var next = !sw.classList.contains('cp-on');
               sw.classList.toggle('cp-on', next);
+              if (isHealth) {
+                Store.setHealthOn(next);
+                if (App.rebuildNav) App.rebuildNav();
+                UI.toast(next ? '已显示「' + v.name + '」' : '已隐藏「' + v.name + '」');
+                return;
+              }
               var nav = Object.assign({}, Store.state.settings.nav || {});
               nav[id] = next;
               Store.updateSettings({ nav: nav });
@@ -1122,7 +1130,7 @@
             el('span', { class: 'nav-idx', text: String(idx + 1) }),
             el('div', { class: 'switch-text' }, [
               el('b', { text: v.name }),
-              el('span', { text: locked ? '始终显示' : (v.title || '') })
+              el('span', { text: locked ? '始终显示' : (isHealth ? '默认关闭，开启后才出现在导航里' : (v.title || '')) })
             ]),
             el('div', { class: 'nav-move' }, [
               moveBtn(V.icons.up, '上移', idx === 0, function () { move(id, -1); }),
