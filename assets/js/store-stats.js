@@ -11,10 +11,10 @@
   var ctx = Store._ctx;
   var DateUtil = global.DateUtil;
   var TimeUtil = global.TimeUtil;
+  var StatsCalc = global.StatsCalc;
   var mealType = ctx.mealType;
   var touch = ctx.touch;
   var expandRange = ctx.expandRange;
-  var rev = ctx.rev;
   var dayStatCache = ctx.dayStatCache;
 
   Object.assign(Store, {
@@ -179,9 +179,9 @@
   dayStat: function (dateStr) {
     dateStr = dateStr || DateUtil.toStr(DateUtil.today());
     var hit = dayStatCache[dateStr];
-    if (hit && hit.rev === rev) return hit.val;
+    if (hit && hit.rev === ctx.getRev()) return hit.val;
     var val = this._dayStat(dateStr);
-    dayStatCache[dateStr] = { rev: rev, val: val };
+    dayStatCache[dateStr] = { rev: ctx.getRev(), val: val };
     return val;
   },
 

@@ -1429,7 +1429,8 @@
   /* ---- 时间区间：实现已移到 stats-calc.js，这里只保留调用别名 ---- */
   /** 把 (start, end) 拆成 0–1440 内的区间，跨午夜拆为两段 */
   function expandRange(start, end) {
-    return StatsCalc.expandRange(start, end, TimeUtil);
+    var sc = global.StatsCalc || (typeof StatsCalc !== 'undefined' ? StatsCalc : null);
+    return sc ? sc.expandRange(start, end, TimeUtil) : [];
   }
 
   /** 某一天实际睡了多少分钟（跨午夜按实际归属拆到两天） */
@@ -3163,7 +3164,10 @@
 
       // 兼容补齐字段（日程 / 象限 / 记账 / 设置…）
       this.ensure();
-      this.settleGoals();      // 上次关闭期间到期的目标，这里补结算
+      // 目标结算在 store-plans.js；单测/旧脚本可能只加载 store.js，缺了也不能崩
+      if (typeof this.settleGoals === 'function') {
+        this.settleGoals();    // 上次关闭期间到期的目标，这里补结算
+      }
       __perf('ensure-settle');
       var self = this;
       // 坏档时先不落盘：等用户在提示条里选择「导出副本 / 用空数据继续」再写。
@@ -3921,7 +3925,7 @@
         synced.push(p.title);
       });
       this.lastSyncedWordPlans = synced;
-      if (synced.length) this.settleKRs();
+      if (synced.length && typeof this.settleKRs === 'function') this.settleKRs();
       return synced;
     },
 
@@ -4762,6 +4766,8 @@
     expandRange: expandRange,
     dayStatCache: dayStatCache,
     splitOldRecords: splitOldRecords,
+    // rev 是模块内自增的整数，域模块不能拷贝值，只能每次现取
+    getRev: function () { return rev; },
     tagMeta: tagMeta,
     tagStyle: tagStyle,
     tagFull: tagFull,

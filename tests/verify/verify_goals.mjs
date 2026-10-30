@@ -441,13 +441,14 @@ check('成就页有「目标」分组', /不再只是待办/.test(L), L.slice(0,
 check('成就页能看到「说到做到」', /说到做到/.test(L));
 check('成就页能看到「月末回头看」', /月末回头看/.test(L));
 
-const L2 = await p.evaluate(() => window.Onboard.steps);
-check('教程步数（15 核心 + 8 非核心 + 收尾 = 24）', L2 === 24, L2);
+const L2 = await p.evaluate(() => ({ core: window.Onboard.steps, full: window.Onboard.totalSteps }));
+check('核心引导 5 步 / 完整导览 24 步', L2.core === 5 && L2.full === 24, L2);
 
-await p.evaluate(() => { window.Onboard.start(); });
+// 目标步骤在「完整导览」里（核心 5 步只讲最常用的）
+await p.evaluate(() => { window.Onboard.startFull(); });
 await wait(600);
 let guard = 0, hit = null;
-while (guard++ < 20) {
+while (guard++ < 30) {
   const title = await p.evaluate(() => (document.querySelector('.cp-ob-title b') || {}).textContent || '');
   if (title === '目标') {
     await wait(450);
@@ -462,7 +463,7 @@ while (guard++ < 20) {
   await next.click();
   await wait(300);
 }
-check('教程里有「目标」这一步', !!hit, hit);
+check('完整导览里有「目标」这一步', !!hit, hit);
 check('这一步会切到目标分页', !!hit && /^目标/.test(hit.pane || '') && hit.hash === '#/plans/goals', hit);
 await p.evaluate(() => { const b = document.querySelector('.cp-ob-skip'); if (b) b.click(); });
 await wait(450);

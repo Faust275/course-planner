@@ -4616,6 +4616,23 @@ console.log('\n四大新特性：睡眠精力推算、智能时间分配、每�
 }
 
 // ---------------------------------------------------------------------------
+// 统计缓存：写入后必须失效（拆分时 rev 曾被当成值拷贝，导致永远读到旧值）
+// ---------------------------------------------------------------------------
+{
+  console.log('\n统计缓存随写操作失效');
+  const S = await initTestStore();
+  const day = DateUtil.toStr(DateUtil.today());
+  const activityMin = function () {
+    return (S.dayStat(day).segments || [])
+      .filter(function (x) { return x && x.key === 'activity'; })
+      .reduce(function (sum, x) { return sum + (Number(x.minutes) || 0); }, 0);
+  };
+  const before = activityMin();
+  S.addActivity({ date: day, start: '19:00', end: '20:00', name: '自习', type: 'study' });
+  eq('dayStat 写入后重新计算（+60 分钟）', activityMin() - before, 60);
+}
+
+// ---------------------------------------------------------------------------
 // 跨模块联动 2：课程情绪、成绩自动分项（默认关）、小组件钉选
 // ---------------------------------------------------------------------------
 {

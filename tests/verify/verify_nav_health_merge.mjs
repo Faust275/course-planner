@@ -122,7 +122,7 @@ const alias = await page.evaluate(() => ({
 check('#/activity 别名落到 health', alias.current === 'health', alias.current);
 check('#/activity 落在活动分页', alias.tab === 'activity' && alias.pane === true, alias.hash);
 
-/* ---------- 6) 课表顶栏：3 组 + 月历，原 8 个动作仍可用 ---------- */
+/* ---------- 6) 课表顶栏：3 个分组，月历交给分区胶囊 ---------- */
 await page.evaluate(() => App.go('schedule'));
 await page.waitForTimeout(600);
 const bar = await page.evaluate(() => {
@@ -137,9 +137,9 @@ const bar = await page.evaluate(() => {
   };
 });
 check('顶栏收成 3 个分组', bar.menus === 3, bar.triggerLabels.join('|'));
-check('月历仍是独立按钮', bar.plainButtons.length === 1 && bar.plainButtons[0] === '月历', bar.plainButtons.join('|'));
-const need = ['月历', '按节次添加', '导入课表', '批量导入', '导出日历', '二维码分享', '导出图片', '自定义添加'];
-check('原 8 个动作文案都在 DOM 里', need.every((n) => bar.all.includes(n)), bar.all.join('|'));
+check('不再有重复的「月历」独立按钮', bar.plainButtons.length === 0, bar.plainButtons.join('|'));
+const need = ['按节次添加', '导入课表', '批量导入', '导出日历', '二维码分享', '导出图片', '导出空档', '自定义添加'];
+check('原有动作文案都在 DOM 里（月历改由分区胶囊承担）', need.every((n) => bar.all.includes(n)), bar.all.join('|'));
 
 /* 展开「导出与分享」分组 → 面板可见 */
 await page.evaluate(() => {
@@ -159,7 +159,7 @@ const opened = await page.evaluate(() => {
   };
 });
 check('点分组能展开面板', !!opened);
-check('面板里是导出与分享三项', opened && opened.items.join('|') === '导出图片|导出日历|二维码分享', opened && opened.items.join('|'));
+check('面板里是导出与分享四项（含导出空档）', opened && opened.items.join('|') === '导出图片|导出日历|导出空档|二维码分享', opened && opened.items.join('|'));
 check('面板未被顶栏裁切（挂 body + fixed）', opened && opened.inView && opened.notClipped);
 
 /* 「按节次添加」仍能进选择模式，并把标签改成「退出选择」 */

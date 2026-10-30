@@ -27,7 +27,6 @@
   var goalDays = ctx.goalDays;
   var goalPct = ctx.goalPct;
   var normGoal = ctx.normGoal;
-  var rev = ctx.rev;
   var rangeStatCache = ctx.rangeStatCache;
   var PLAN_TYPES = ctx.PLAN_TYPES;
   var PLAN_PERIODS = ctx.PLAN_PERIODS;
@@ -836,11 +835,11 @@
   rangeStat: function (from, to) {
     var ck = from + '|' + to;
     var hit = rangeStatCache[ck];
-    if (hit && hit.rev === rev) return hit.val;
+    if (hit && hit.rev === ctx.getRev()) return hit.val;
     var val = this._rangeStat(from, to);
     // 简单上限：翻很多年后缓存会涨，超过 64 组就清空重来
     if (Object.keys(rangeStatCache).length > 64) rangeStatCache = {};
-    rangeStatCache[ck] = { rev: rev, val: val };
+    rangeStatCache[ck] = { rev: ctx.getRev(), val: val };
     return val;
   },
 

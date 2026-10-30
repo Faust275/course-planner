@@ -1,7 +1,7 @@
 /* 可选伴侣文件：离线 PWA 缓存。仅当把 index.html 部署到普通浏览器 http(s) 网址、且本文件
  * 与 index.html 同目录时才生效。直接双击本地 index.html（file://）或处于 Capacitor 安卓壳内不会注册 SW。
  * 主交付始终是单一 index.html；本文件可忽略，不影响单文件使用。 */
-const CACHE = 'cp-app-ec59b847';
+const CACHE = 'cp-app-f71a7cb5';
 const SHARE_CACHE = 'cp-share-target-v1';
 const SHELL = [
   './', './index.html', './sw.js', './manifest.webmanifest', './quotes-data.js',
