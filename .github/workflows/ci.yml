@@ -18,10 +18,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Lint (ESLint)
         run: npm run lint
-      - name: Unit & Contract tests
-        run: npm test
-      - name: OCR Benchmark
-        run: npm run bench:ocr
       - name: Build & Sync Android Assets (index.html + quotes-data.js + sw.js + dist/ + android/)
         run: |
           npm run build:sync
@@ -29,6 +25,11 @@ jobs:
           cmp -s index.html android/app/src/main/assets/public/index.html
           cmp -s sw.js dist/sw.js
           cmp -s sw.js android/app/src/main/assets/public/sw.js
+      # 单测里有「产物压缩 / 三份 index.html 逐字节一致」这类断言，必须先构建再跑
+      - name: Unit & Contract tests
+        run: npm test
+      - name: OCR Benchmark
+        run: npm run bench:ocr
 
   e2e:
     name: E2E (Playwright)
