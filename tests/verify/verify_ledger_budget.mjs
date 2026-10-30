@@ -2,9 +2,10 @@
 import fs from 'fs';
 import vm from 'vm';
 import path from 'path';
+import { storeSource } from '../store-src.mjs';
 
 const root = process.cwd();
-const src = fs.readFileSync(path.join(root, 'assets/js/store.js'), 'utf8');
+const src = storeSource(root);
 
 const sandbox = {};
 sandbox.window = sandbox;            // store.js 末尾 })(window)

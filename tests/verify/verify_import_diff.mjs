@@ -3,6 +3,7 @@
 import fs from 'fs';
 import vm from 'vm';
 import path from 'path';
+import { storeSource } from '../store-src.mjs';
 
 const root = process.cwd();
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -23,7 +24,7 @@ sandbox.UI = { el: () => ({}), svg: () => ({}), $: () => null, toast: () => {} }
 
 vm.createContext(sandbox);
 vm.runInContext(read('assets/js/sleep-model.js'), sandbox);
-vm.runInContext(read('assets/js/store.js'), sandbox);
+vm.runInContext(storeSource(root), sandbox);
 
 const Store = sandbox.Store;
 await Store.init();

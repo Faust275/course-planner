@@ -2,8 +2,9 @@
 import fs from 'fs';
 import vm from 'vm';
 import path from 'path';
+import { storeSource } from '../store-src.mjs';
 
-const src = fs.readFileSync(path.join(process.cwd(), 'assets/js/store.js'), 'utf8');
+const src = storeSource(process.cwd());
 const smSrc = fs.readFileSync(path.join(process.cwd(), 'assets/js/sleep-model.js'), 'utf8');
 const spSrc = fs.readFileSync(path.join(process.cwd(), 'assets/js/store-planner.js'), 'utf8');
 const sandbox = {};

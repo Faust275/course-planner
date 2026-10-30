@@ -2,9 +2,10 @@
 import fs from 'fs';
 import vm from 'vm';
 import path from 'path';
+import { storeSource } from '../store-src.mjs';
 
 const root = process.cwd();
-const storeSrc = fs.readFileSync(path.join(root, 'assets/js/store.js'), 'utf8');
+const storeSrc = storeSource(root);
 const remindSrc = fs.readFileSync(path.join(root, 'assets/js/remind.js'), 'utf8');
 
 // 把"现在"钉在某个晚上，才能稳定测到点触发
