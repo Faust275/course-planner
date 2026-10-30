@@ -1,0 +1,112 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Verify APK
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      KEYSTORE_PATH: ${{ github.workspace }}/android/app/happy-course.keystore
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Capacitor & Web dependencies
+        run: npm ci || npm install
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK (manual)
+        run: |
+          SDK=$ANDROID_HOME
+          echo "Using ANDROID_HOME=$SDK"
+          rm -rf "$SDK/cmdline-tools/latest"
+          mkdir -p "$SDK/cmdline-tools"
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o /tmp/cmdtools.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
+          mv /tmp/cmdtools/cmdline-tools "$SDK/cmdline-tools/latest"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses >/dev/null 2>&1
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build single-file web bundle & sync to Android
+        run: |
+          python3 build.py --release
+          npx cap sync android || npx cap copy android || true
+          mkdir -p android/app/src/main/assets/public
+          cp dist/index.html android/app/src/main/assets/public/index.html
+          cp dist/quotes-data.js android/app/src/main/assets/public/quotes-data.js
+          rm -rf android/app/src/main/assets/public/ops
+
+      # 签名密钥只从 Secrets 还原。没有 Secret 就不打 release：
+      # 每次 CI 现生成一把新 key 会让「覆盖升级」永远失败，这是比不签名更糟的坑。
+      - name: Restore signing keystore from secrets
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/happy-course.keystore
+            echo "keystore restored"
+          else
+            echo "::warning::没有配置 ANDROID_KEYSTORE_BASE64，本次只构建 debug 包（不可覆盖升级）"
+          fi
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          if [ -f app/happy-course.keystore ]; then
+            ./gradlew assembleRelease
+          else
+            ./gradlew assembleDebug
+          fi
+
+      - name: Verify signature & version
+        run: |
+          APK=$(ls android/app/build/outputs/apk/release/app-release.apk 2>/dev/null || ls android/app/build/outputs/apk/debug/app-debug.apk)
+          echo "APK=$APK"
+          BT=$ANDROID_HOME/build-tools/36.0.0
+          "$BT/apksigner" verify --print-certs "$APK"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          BADGING=$("$BT/aapt2" dump badging "$APK" | head -1)
+          echo "$BADGING"
+          echo "$BADGING" | grep -q "versionName='$PKG_VERSION'" || {
+            echo "::error::APK versionName 与 package.json ($PKG_VERSION) 不一致"
+            exit 1
+          }
+          if [ -f android/app/happy-course.keystore ]; then
+            echo "$BADGING" | grep -q "app-release.apk" || echo "release build ok"
+          fi
+
+      - name: Collect installable APK
+        run: |
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk CoursePlanner-signed.apk
+            echo "ARTIFACT_NAME=CoursePlanner-signed-APK" >> $GITHUB_ENV
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk CoursePlanner-debug-not-upgradeable.apk
+            echo "ARTIFACT_NAME=CoursePlanner-debug-APK" >> $GITHUB_ENV
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: CoursePlanner-*.apk
+          retention-days: 90
