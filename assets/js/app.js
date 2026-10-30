@@ -7,7 +7,7 @@
   'use strict';
 
   /** 与 android/app/build.gradle 的 versionName 保持一致；用于「一次性提示」的版本键。 */
-  var APP_VERSION = '1.4.16';
+  var APP_VERSION = '1.4.17';
 
   var App = {
     views: [],

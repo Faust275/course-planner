@@ -1,6 +1,6 @@
 {
   "name": "course-planner",
-  "version": "1.4.16",
+  "version": "1.4.17",
   "private": true,
   "description": "单文件课程规划 PWA：待办 / 课表 / 番茄钟 / 日记 / 复盘 / 养成。源码在 assets/js，由 build.py 内联并压缩为 index.html。",
   "scripts": {
