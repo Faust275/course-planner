@@ -1,0 +1,11 @@
+{
+  "updatedAt": "2026-10-24",
+  "mode": "ideal",
+  "microF1": 1,
+  "cases": {
+    "c01-clean-grid": 1,
+    "c02-color-blocks": 1,
+    "c03-double-period": 1,
+    "c04-dense-photo": 1
+  }
+}

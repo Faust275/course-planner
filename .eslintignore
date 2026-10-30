@@ -1,0 +1,9 @@
+index.html
+quotes-data.js
+node_modules/**
+preview/**
+course-planner-deploy/**
+dist/**
+android/**
+**/*.mjs
+tests/**

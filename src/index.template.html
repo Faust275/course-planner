@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+<meta charset="UTF-8">
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport">
+<meta content="#4f46e5" name="theme-color">
+<meta content="light dark" name="color-scheme">
+<meta content="课程表与日程、计划、记账、专注的一体化个人管理工具" name="description">
+<meta content="课程表,日程管理,待办清单,番茄钟,GPA计算,大学课表,时间管理,PWA" name="keywords">
+<meta content="课表 Course Planner" property="og:title">
+<meta content="课程表与日程、计划、记账、专注的一体化个人管理工具" property="og:description">
+<meta content="website" property="og:type">
+<meta content="yes" name="apple-mobile-web-app-capable">
+<meta content="yes" name="mobile-web-app-capable">
+<meta content="default" name="apple-mobile-web-app-status-bar-style">
+<meta content="课表" name="apple-mobile-web-app-title">
+<meta content="telephone=no" name="format-detection">
+<link href="manifest.webmanifest" id="cpManifestLink" rel="manifest">
+<link href="icon-192.png" rel="icon">
+<link href="apple-touch-icon.png" rel="apple-touch-icon">
+<title>课表 Course Planner</title>
+</head>
+<body>
+
+<div class="cp-app-bg" id="appBg"></div>
+
+<!-- 机制主题装饰层：种树（藤蔓/花）/ 抽卡（HUD 标线），按 data-mech 显隐 -->
+<div class="cp-deco" aria-hidden="true">
+  <svg class="deco-tree deco-a" viewBox="0 0 160 200" style="left:-12px;top:-12px;width:150px;height:190px" fill="none" stroke="#3f7d3d" stroke-width="1.6" stroke-linecap="round">
+    <path d="M150 195 C 110 175, 138 140, 96 126 C 58 113, 86 78, 50 64 C 26 54, 34 34, 18 22"/>
+    <g fill="#4c8c4a" stroke="none">
+      <path d="M96 126 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M50 64 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M18 22 q12 -8 20 -3 q-5 10 -20 3 Z"/>
+    </g>
+    <g fill="#ff9ec4" stroke="none">
+      <circle cx="20" cy="20" r="2.4"/><circle cx="14" cy="25" r="2.4"/><circle cx="26" cy="26" r="2.4"/><circle cx="20" cy="30" r="2.4"/>
+    </g>
+    <circle cx="20" cy="25" r="2.6" fill="#ffd866" stroke="none"/>
+  </svg>
+  <svg class="deco-tree deco-b" viewBox="0 0 160 200" style="right:-14px;bottom:-14px;width:140px;height:180px;transform:scaleX(-1)" fill="none" stroke="#3f7d3d" stroke-width="1.6" stroke-linecap="round">
+    <path d="M150 195 C 110 175, 138 140, 96 126 C 58 113, 86 78, 50 64 C 26 54, 34 34, 18 22"/>
+    <g fill="#4c8c4a" stroke="none">
+      <path d="M96 126 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M50 64 q14 -10 24 -4 q-6 12 -24 4 Z"/>
+      <path d="M18 22 q12 -8 20 -3 q-5 10 -20 3 Z"/>
+    </g>
+  </svg>
+  <svg class="deco-tree deco-c" viewBox="0 0 100 100" style="right:18px;top:14px;width:60px;height:60px" fill="#4c8c4a" stroke="none">
+    <path d="M50 90 C50 62 30 52 30 32 C30 16 50 16 50 32 C50 16 70 16 70 32 C70 52 50 62 50 90 Z"/>
+  </svg>
+
+  <svg class="deco-factory deco-a" viewBox="0 0 120 120" style="right:8px;top:8px;width:96px;height:96px" fill="none" stroke="var(--primary)" stroke-width="1.6">
+    <circle cx="60" cy="60" r="34"/>
+    <path d="M60 10 V30 M60 90 V110 M10 60 H30 M90 60 H110"/>
+    <circle cx="60" cy="60" r="3" fill="var(--primary)" stroke="none"/>
+    <path d="M60 46 l8 14 h-16 z" fill="var(--primary)" stroke="none" opacity=".85"/>
+  </svg>
+  <svg class="deco-factory deco-b" viewBox="0 0 120 120" style="left:10px;bottom:10px;width:84px;height:84px" fill="none" stroke="#101418" stroke-width="1.4">
+    <path d="M30 20 L60 4 L90 20 L90 56 L60 72 L30 56 Z"/>
+    <path d="M30 20 L60 36 L90 20 M60 36 V72"/>
+  </svg>
+
+  <!-- 萤火虫：仅深色森林显示 -->
+  <div class="deco-fireflies"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+</div>
+
+<div class="cp-app">
+  <!-- 侧边栏（桌面端） -->
+  <aside class="cp-sidebar" id="sidebar" aria-label="侧边导航栏">
+    <div class="cp-brand">
+      <div class="cp-brand-logo">课</div>
+      <div class="cp-brand-text">
+        <strong>Course Planner</strong>
+        <span id="brandSub">我的课程表</span>
+      </div>
+    </div>
+
+    <nav class="cp-nav" id="nav" aria-label="模块导航"></nav>
+
+    <div class="cp-sidebar-foot">
+      <div class="cp-term-card" id="termCard"></div>
+    </div>
+  </aside>
+
+  <!-- 主内容区 -->
+  <main class="cp-main" role="main">
+    <header class="cp-topbar">
+      <button class="cp-icon-btn cp-desk-only" id="btnCollapse" aria-label="折叠侧边栏" title="折叠侧边栏" style="margin-right:8px;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><path d="M9.2 4.5v15"/><path d="M15.4 9.6L13 12l2.4 2.4"/></svg>
+      </button>
+      <h1 class="cp-topbar-title" id="viewTitle">课程表</h1>
+      <div class="cp-topbar-actions" id="viewActions"></div>
+      <button class="cp-icon-btn cp-desk-only" id="btnShortcuts" aria-label="键盘快捷键" title="键盘快捷键（按 ? 查看）" style="margin-left:6px;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M8 15h8"/></svg>
+      </button>
+      <button class="cp-icon-btn" id="btnSearch" aria-label="搜索" title="搜索（Ctrl/⌘ + K 或 /）" style="margin-left:6px;flex:0 0 auto">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </button>
+    </header>
+
+    <div class="cp-view-wrap" id="views">
+      <div class="cp-boot-skeleton" id="bootSkeleton" style="padding:36px 20px;text-align:center;color:#64748b;font-size:13px">
+        <div style="width:28px;height:28px;margin:0 auto 10px;border:2.5px solid rgba(79,70,229,.2);border-top-color:#4f46e5;border-radius:50%;animation:cpSpin .8s linear infinite"></div>
+        <div>正在加载课表与日程…</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部导航（移动端） -->
+  <nav class="cp-tabbar cp-mobile-only" id="tabbar" aria-label="底部六大分区导航"></nav>
+</div>
+
+<!-- 遮罩 -->
+<div class="cp-scrim" id="scrim"></div>
+
+<!-- 通用弹窗容器 -->
+<div class="cp-modal-root" id="modalRoot"></div>
+
+<!-- 轻提示 -->
+<div class="cp-toast-root" id="toastRoot" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="assets/js/cp-registry.js"></script>
+<script src="assets/js/ak_ops.js"></script>
+<script src="assets/js/lunar.js"></script>
+<script src="assets/js/palette.js"></script>
+<script src="assets/js/course-exception.js"></script>
+<script src="assets/js/plan-quota.js"></script>
+<script src="assets/js/import-safe.js"></script>
+<script src="assets/js/undo.js"></script>
+<script src="assets/js/holidays-cn.js"></script>
+<script src="assets/js/stats-calc.js"></script>
+<script src="assets/js/store-presets.js"></script>
+<script src="assets/js/store.js"></script>
+  <script src="assets/js/store-ledger.js"></script>
+  <script src="assets/js/attendance.js"></script>
+  <script src="assets/js/store-health.js"></script>
+  <script src="assets/js/store-tasks.js"></script>
+  <script src="assets/js/backup-crypto.js"></script>
+  <script src="assets/js/store-course.js"></script>
+  <script src="assets/js/store-reward.js"></script>
+  <script src="assets/js/store-backup.js"></script>
+  <script src="assets/js/store-io.js"></script>
+  <script src="assets/js/store-plans.js"></script>
+  <script src="assets/js/store-stats.js"></script>
+  <script src="assets/js/store-records.js"></script>
+<script src="assets/js/store-planner.js"></script>
+  <script src="assets/js/packing.js"></script>
+  <script src="assets/js/deadline.js"></script>
+<script src="assets/js/sleep-model.js"></script>
+<script src="assets/js/task-nlp.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/drag-gesture.js"></script>
+<script src="assets/js/virtual-list.js"></script>
+<script src="assets/js/save-file.js"></script>
+<script src="assets/js/router.js"></script>
+<script src="assets/js/remind.js"></script>
+<script src="assets/js/search.js"></script>
+<script src="assets/js/views/schedule.js"></script>
+<script src="assets/js/schedule-export.js"></script>
+<script src="assets/js/qr-sync.js"></script>
+<script src="assets/js/white-noise.js"></script>
+<script src="assets/js/white-paper.js"></script>
+<script src="assets/js/views/today.js"></script>
+<script src="assets/js/views/calendar.js"></script>
+<script src="assets/js/views/agenda.js"></script>
+<script src="assets/js/views/quadrant.js"></script>
+<script src="assets/js/views/activity.js"></script>
+<script src="assets/js/views/health.js"></script>
+<script src="assets/js/views/stats.js"></script>
+<script src="assets/js/views/tasks.js"></script>
+<script src="assets/js/views/goals.js"></script>
+<script src="assets/js/views/plans.js"></script>
+<script src="assets/js/views/ocr-dialog.js"></script>
+<script src="assets/js/views/task-shot.js"></script>
+<script src="assets/js/views/notes.js"></script>
+<script src="assets/js/views/diary.js"></script>
+<script src="assets/js/views/ledger.js"></script>
+<script src="assets/js/views/gacha.js"></script>
+<script src="assets/js/views/pomodoro.js"></script>
+<script src="assets/js/views/collection.js"></script>
+<script src="assets/js/views/grades.js"></script>
+<script src="assets/js/views/settings.js"></script>
+<script src="assets/js/quotes-mini.js"></script>
+<script src="assets/js/foods.js"></script>
+<script src="assets/js/quotes.js"></script>
+<script src="assets/js/speech.js"></script>
+<script src="assets/js/ocr.js"></script>
+<script src="assets/js/health-connect.js"></script>
+<script src="assets/js/theme.js"></script>
+<script src="assets/js/onboard.js"></script>
+<script src="assets/js/pet.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

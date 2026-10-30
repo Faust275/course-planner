@@ -1,0 +1,118 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+/*
+ * 版本号单一来源：package.json。
+ * versionCode 由 semver 推导（1.4.3 → 10403），保证只增不减；
+ * 需要跳号时设环境变量 APP_VERSION_CODE 覆盖。
+ */
+def cpPkg = new groovy.json.JsonSlurper().parseText(file('../../package.json').text)
+def cpSemver = (cpPkg.version ?: '0.0.1').split('\\.')
+def cpDerivedCode = (cpSemver[0] as int) * 10000 + ((cpSemver.length > 1 ? cpSemver[1] : '0') as int) * 100 + ((cpSemver.length > 2 ? cpSemver[2] : '0') as int)
+def cpVersionCode = (System.getenv('APP_VERSION_CODE') ?: cpDerivedCode) as int
+
+/*
+ * 签名配置从环境变量或 android/keystore.properties 读取，工程里不再放 keystore，
+ * 也不再写死密码。缺签名时 debug 用系统调试证书，release 直接构建失败。
+ */
+def cpKsProps = new Properties()
+def cpKsPropsFile = rootProject.file('keystore.properties')
+if (cpKsPropsFile.exists()) {
+    cpKsPropsFile.withInputStream { cpKsProps.load(it) }
+}
+def cpKsPath = System.getenv('KEYSTORE_PATH') ?: cpKsProps.getProperty('storeFile') ?: ''
+def cpKsFileObj = cpKsPath ? file(cpKsPath) : null
+def cpHasKeystore = cpKsFileObj != null && cpKsFileObj.exists()
+
+android {
+    namespace = "com.faust275.courseplanner"
+    compileSdk = rootProject.ext.compileSdkVersion
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+    defaultConfig {
+        applicationId "com.faust275.courseplanner"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode cpVersionCode
+        versionName cpPkg.version
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // 保持轻量下载：排除体积较大的离线立绘/头像包（如果有残留），头像统一走在线加载 + IndexedDB 缓存
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:ops'
+        }
+    }
+    signingConfigs {
+        // 固定签名，方便覆盖升级；密钥文件与密码都不进版本库。
+        happySign {
+            if (cpHasKeystore) {
+                storeFile cpKsFileObj
+                storePassword System.getenv('KEYSTORE_PASSWORD') ?: cpKsProps.getProperty('storePassword')
+                keyAlias System.getenv('KEY_ALIAS') ?: cpKsProps.getProperty('keyAlias')
+                keyPassword System.getenv('KEY_PASSWORD') ?: cpKsProps.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            if (cpHasKeystore) {
+                signingConfig signingConfigs.happySign
+            }
+        }
+        release {
+            if (cpHasKeystore) {
+                signingConfig signingConfigs.happySign
+            }
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+// 明确失败，避免打出一个没签名却看起来「成功」的 release 包
+tasks.configureEach { t ->
+    if (t.name == 'assembleRelease' || t.name == 'bundleRelease') {
+        t.doFirst {
+            if (!cpHasKeystore) {
+                throw new GradleException(
+                    "缺少签名文件：请在 android/keystore.properties 配置 storeFile/storePassword/keyAlias/keyPassword，" +
+                    "或设置 KEYSTORE_PATH / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD 环境变量。")
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    // 健康联动（Health Connect）：读取小米手环等写入系统的睡眠数据
+    implementation "androidx.health.connect:connect-client:1.1.0"
+    // 协程：插件用 Kotlin 协程调用 Health Connect 的 suspend API
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

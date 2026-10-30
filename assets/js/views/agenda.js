@@ -1,0 +1,524 @@
+
+
+/* ==========================================================
+ * 视图：日程（未来 7 天安排 + 一次性日程）
+ * ========================================================== */
+(function (global) {
+  'use strict';
+
+  var V = UI;
+  var el = V.el;
+  var DAYS = 7;
+
+  var viewState = { showCourses: true };
+
+  var agendaHost = null;
+
+  function renderAgenda(host) {
+    agendaHost = host;
+    host.innerHTML = '';
+    var root = host;
+
+      var today = DateUtil.today();
+      var upcoming = Store.upcomingEvents(DAYS);
+      var rows = [];
+
+      for (var i = 0; i < DAYS; i++) {
+        var date = DateUtil.addDays(today, i);
+        var dateStr = DateUtil.toStr(date);
+        var items = [];
+
+        // 课程（含单次调课例外：停课的不出现，调进来的会出现）
+        if (viewState.showCourses) {
+          Store.coursesOnDate(dateStr).forEach(function (c) {
+            var t = Store.courseTime(c);
+            items.push({
+              kind: 'course', sort: t ? t.start : '00:00',
+              title: c.name, sub: c.location || (c.teacher || ''),
+              start: t ? t.start : '—', end: t ? t.end : '—', color: c.color, course: c
+            });
+          });
+        }
+
+        // 考试（支持期中考试、期末考试及自定义测验）
+        Store.examsOf(dateStr).forEach(function (e) {
+          var exLbl = e.examLabel || '考试';
+          items.push({
+            kind: 'exam', sort: e.start || '08:00',
+            title: e.name + ' · ' + exLbl,
+            sub: [e.location, '课程' + exLbl].filter(Boolean).join(' · '),
+            start: e.start || '—', end: e.end || '—',
+            color: '#ef4444', courseId: e.courseId
+          });
+        });
+
+        // 一次性日程
+        Store.eventsOf(dateStr).forEach(function (e) {
+          var evCourse = e.courseId ? Store.getCourse(e.courseId) : null;
+          items.push({
+            kind: 'event', sort: e.start, eventId: e.id, done: e.done, important: !!e.important,
+            title: e.title,
+            sub: [evCourse ? ('📚 ' + evCourse.name) : '', e.location, e.note].filter(Boolean).join(' · '),
+            start: e.start, end: e.end, color: '#ec4899'
+          });
+        });
+
+        // 当日截止待办（日程与待办深度合并：有截止日期的待办同步汇入 7 日日程流）
+        (Store.tasks || []).forEach(function (t) {
+          if (!t || t.parentId || t.dueDate !== dateStr) return;
+          var cObj = t.courseId ? Store.getCourse(t.courseId) : null;
+          items.push({
+            kind: 'task',
+            sort: t.dueTime || '23:59',
+            taskId: t.id,
+            done: t.status === 'done',
+            important: !!t.important || t.priority === 'high',
+            title: t.title,
+            sub: [cObj ? ('📚 ' + cObj.name) : '', (t.tags && t.tags.length) ? ('#' + t.tags.join(' #')) : ''].filter(Boolean).join(' · '),
+            start: t.dueTime || '全天',
+            end: '待办截止',
+            color: t.priority === 'high' ? '#f59e0b' : '#0ea5e9'
+          });
+        });
+
+        items.sort(function (a, b) {
+          if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+          return a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0;
+        });
+        rows.push({ date: date, dateStr: dateStr, index: i, items: items });
+      }
+
+      /* ---- 概览 ---- */
+      var totalEvents = upcoming.length;
+      var todayNum = rows[0].items.length;
+      var pending = upcoming.filter(function (e) { return !e.done; }).length;
+
+      root.appendChild(el('div', { class: 'task-summary' }, [
+        V.statCard(todayNum, '今天安排', 'var(--primary)'),
+        V.statCard(totalEvents, '7 天日程', 'var(--blue)'),
+        V.statCard(pending, '未完成', 'var(--amber)'),
+        V.statCard(DAYS - rows.filter(function (r) { return r.items.length; }).length, '空闲天数', 'var(--green)')
+      ]));
+
+      var emptyDays = rows.filter(function (r) { return r.items.length; }).length === 0;
+
+      if (emptyDays) {
+        root.appendChild(el('div', { class: 'card' }, [
+          V.empty(
+            V.icons.agenda, '未来 7 天还很空',
+            '可以在这里添加一次性的日程，比如班会、讲座、约饭。每周重复的课请在「课程表」里排。',
+            el('button', { class: 'btn btn-primary', onclick: function () { EventDialog.open(); } },
+              [V.svg(V.icons.plus, 16), '新建日程'])
+          )
+        ]));
+        return;
+      }
+
+      rows.forEach(function (row) {
+        var freeInfo = Store.calcDayFreeSlots ? Store.calcDayFreeSlots(row.dateStr) : null;
+        var head = el('div', { class: 'group-head', style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } }, [
+          el('span', { text: dayTitle(row.date, row.index) }),
+          el('span', { class: 'group-count', text: row.items.length ? String(row.items.length) : '空' }),
+          freeInfo ? el('span', {
+            style: { marginLeft: 'auto', fontSize: '11.5px', color: 'var(--text-3)', fontWeight: '400' },
+            text: '空档：' + freeInfo.text
+          }) : null
+        ]);
+        root.appendChild(head);
+
+        if (!row.items.length) {
+          root.appendChild(el('div', { class: 'card day-empty' }, [
+            el('span', { text: '今天没有安排' })
+          ]));
+          return;
+        }
+
+        var box = el('div', { class: 'card', style: { padding: '4px 6px', marginBottom: '14px' } });
+        row.items.forEach(function (it) {
+          box.appendChild(el('button', {
+            class: 'ag-item' + ((it.kind === 'event' || it.kind === 'task') && it.done ? ' is-done' : ''),
+            onclick: function () {
+              if (it.kind === 'course') global.__CourseDialog.detail(it.course.id);
+              else if (it.kind === 'exam') { if (it.courseId) global.__CourseDialog.detail(it.courseId); }
+              else if (it.kind === 'task') { if (global.TaskDialog) TaskDialog.open(it.taskId); }
+              else EventDetail.open(it.eventId);
+            }
+          }, [
+            el('span', { class: 'ag-bar', style: { background: it.color } }),
+            el('span', { class: 'ag-time' }, [
+              el('b', { text: it.start }),
+              el('i', { text: it.end })
+            ]),
+            el('span', { class: 'ag-main' }, [
+              el('span', { class: 'ag-title', text: it.title }),
+              it.sub ? el('span', { class: 'ag-sub', text: it.sub }) : null
+            ]),
+            it.kind === 'course'
+              ? el('span', { class: 'chip', text: '课程' })
+              : it.kind === 'exam'
+                ? el('span', { class: 'chip chip-red', text: '考试' })
+                : it.kind === 'task'
+                  ? (it.done ? el('span', { class: 'chip chip-green', text: '待办已完' }) : el('span', { class: 'chip chip-amber', text: '待办' }))
+                  : (it.done ? el('span', { class: 'chip chip-green', text: '已完成' })
+                    : el('span', { class: 'chip chip-primary', text: '日程' }))
+          ]));
+        });
+        root.appendChild(box);
+      });
+    }
+
+  var AgendaPane = {
+    render: renderAgenda,
+    actions: function (host) {
+      host.appendChild(el('button', {
+        class: 'btn', title: viewState.showCourses ? '隐藏课程' : '显示课程',
+        onclick: function () {
+          viewState.showCourses = !viewState.showCourses;
+          if (agendaHost) renderAgenda(agendaHost);
+        }
+      }, [V.svg(V.icons.calendar, 16), viewState.showCourses ? '隐藏课程' : '显示课程']));
+
+      host.appendChild(el('button', {
+        class: 'btn',
+        title: '一键生成本周或今日空闲时间段文本',
+        onclick: function () {
+          if (global.exportFreeTimeDialog) global.exportFreeTimeDialog(Store.currentWeek());
+        }
+      }, ['📋 导出空闲时间']));
+
+      host.appendChild(el('button', {
+        class: 'btn',
+        onclick: function () { AnnivDialog.open(); }
+      }, [V.svg(V.icons.clock, 16), '纪念日']));
+
+      host.appendChild(el('button', {
+        class: 'btn btn-primary',
+        onclick: function () { EventDialog.open(); }
+      }, [V.svg(V.icons.plus, 16), '新建日程']));
+    }
+  };
+
+
+  function dayTitle(date, index) {
+    var map = ['今天', '明天', '后天'];
+    var base = (date.getMonth() + 1) + '月' + date.getDate() + '日 ' + DateUtil.weekdayCN(date);
+    if (index < 3) return base + ' · ' + map[index];
+    return base;
+  }
+
+  /* ==========================================================
+   * 日程弹窗：新建 / 编辑
+   * ========================================================== */
+  var EventDialog = {
+    open: function (eventId, preset) {
+      var isEdit = !!eventId;
+      var e = eventId ? Store.getEvent(eventId) : null;
+      var today = DateUtil.toStr(DateUtil.today());
+
+      var fTitle = V.input({
+        placeholder: '例如：班会 / 讲座 / 约饭',
+        value: e ? e.title : '', dataset: { autofocus: '1' }
+      });
+      var fDate = V.input({ type: 'date', value: e ? e.date : (preset && preset.date) || today });
+      var nowHM = DateUtil.nowHM();
+      var fStart = V.input({ type: 'time', value: e ? e.start : nowHM });
+      var fEnd = V.input({ type: 'time', value: e ? e.end : TimeUtil.addMin(nowHM, 60) });
+      var fLoc = V.input({ placeholder: '可选', value: e ? e.location : '' });
+      var courseOpts = [{ value: '', label: '不关联课程' }].concat(
+        (Store.courses || []).map(function (c) { return { value: c.id, label: c.name }; })
+      );
+      var fCourse = V.select(courseOpts, e ? (e.courseId || '') : ((preset && preset.courseId) || ''));
+      var fNote = V.textarea({ placeholder: '可选', value: e ? e.note : '' });
+
+      var impOn = e ? !!e.important : false;
+      var fImp = el('button', {
+        class: 'chip', type: 'button',
+        style: impOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: impOn ? '★ 已标记重要' : '标记为重要',
+        onclick: function () {
+          impOn = !impOn;
+          this.style.background = impOn ? 'var(--primary)' : '';
+          this.style.color = impOn ? '#fff' : '';
+          this.textContent = impOn ? '★ 已标记重要' : '标记为重要';
+        }
+      });
+
+      // 快捷选择：今天 / 明天 / 后天
+      var quick = el('div', { style: { display: 'flex', gap: '6px', marginTop: '7px' } },
+        [{ l: '今天', d: 0 }, { l: '明天', d: 1 }, { l: '后天', d: 2 }, { l: '一周后', d: 7 }].map(function (q) {
+          return el('button', {
+            class: 'chip', style: { cursor: 'pointer' }, text: q.l,
+            onclick: function () { fDate.value = DateUtil.toStr(DateUtil.addDays(DateUtil.today(), q.d)); }
+          });
+        })
+      );
+
+      var body = [
+        V.field('日程标题', fTitle),
+        V.field('日期', el('div', {}, [fDate, quick])),
+        el('div', { class: 'field-row' }, [
+          V.field('开始时间', fStart),
+          V.field('结束时间', fEnd)
+        ]),
+        V.field('地点', fLoc),
+        V.field('关联课程', fCourse),
+        V.field('重要日程', fImp, '标记后置顶，并在「今日」页显示倒计时'),
+        V.field('备注', fNote)
+      ];
+
+      var m = V.modal({
+        title: isEdit ? '编辑日程' : '新建一次性日程',
+        body: body,
+        autofocus: true,
+        footer: el('div', { class: 'modal-foot' }, [
+          isEdit ? el('button', {
+            class: 'btn btn-danger', text: '删除',
+            onclick: function () {
+              m.close();
+              setTimeout(function () {
+                V.confirm({ title: '删除日程', message: '确定删除「' + e.title + '」吗？', danger: true, okText: '删除' })
+                  .then(function (ok) { if (ok) { Store.removeEvent(eventId); UI.toast('日程已删除'); } });
+              }, 220);
+            }
+          }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+          el('button', {
+            class: 'btn btn-primary', text: '保存',
+            onclick: function () {
+              var d = {
+                title: fTitle.value, date: fDate.value,
+                start: fStart.value, end: fEnd.value,
+                location: fLoc.value, courseId: fCourse.value || '', note: fNote.value,
+                important: impOn
+              };
+              if (!d.title.trim()) { UI.toast('请填写日程标题', 'err'); fTitle.focus(); return; }
+              if (!d.date) { UI.toast('请选择日期', 'err'); return; }
+              if (TimeUtil.toMin(d.end) <= TimeUtil.toMin(d.start)) {
+                UI.toast('结束时间需晚于开始时间', 'err'); return;
+              }
+              if (isEdit) Store.updateEvent(eventId, d);
+              else Store.addEvent(d);
+              m.close();
+              UI.toast(isEdit ? '日程已更新' : '日程已添加');
+            }
+          })
+        ])
+      });
+    }
+  };
+
+  /* ==========================================================
+   * 日程详情
+   * ========================================================== */
+  var EventDetail = {
+    open: function (id) {
+      var e = Store.getEvent(id);
+      if (!e) return;
+      var d = DateUtil.parse(e.date);
+
+      var evCourse = e.courseId ? Store.getCourse(e.courseId) : null;
+      var info = el('div', { class: 'preview-box' }, [
+        el('div', { style: { fontSize: '15px', fontWeight: '650', marginBottom: '6px' }, text: e.title }),
+        el('div', { text: '时间：' + (d ? DateUtil.mdShort(d) + ' ' + DateUtil.weekdayCN(d) : e.date) + ' ' + e.start + '–' + e.end }),
+        evCourse ? el('div', { text: '课程：📚 ' + evCourse.name }) : null,
+        e.location ? el('div', { text: '地点：' + e.location }) : null,
+        e.note ? el('div', { style: { marginTop: '6px' }, text: '备注：' + e.note }) : null,
+        el('div', { style: { marginTop: '6px' }, text: '时长：' + TimeUtil.humanMin(TimeUtil.diffMin(e.start, e.end)) })
+      ]);
+
+      var m = V.modal({
+        title: '日程详情',
+        body: [info],
+        footer: el('div', { class: 'modal-foot' }, [
+          el('button', {
+            class: 'btn',
+            text: e.done ? '标为未完成' : '标为完成',
+            onclick: function () {
+              var wasDone = !!e.done;
+              Store.toggleEvent(id);
+              m.close();
+              UI.toast(wasDone ? '已标为未完成' : '已完成，做得好');
+            }
+          }),
+          el('button', {
+            class: 'btn btn-primary', text: '编辑',
+            onclick: function () { m.close(); setTimeout(function () { EventDialog.open(id); }, 200); }
+          })
+        ])
+      });
+    }
+  };
+
+  /* ==========================================================
+   * 倒数纪念日编辑
+   *
+   * 纪念日复用 events 存储，靠 repeat（yearly/monthly）+ kind + lunar 区分：
+   *   repeat = 'none'   -> 普通一次性日程（不在此弹窗管理）
+   *   repeat = 'yearly' -> 每年一次（生日 / 周年），过了自动顺延到下一年的第 N 届
+   *   repeat = 'monthly'-> 每月一次（如每月还款日）
+   * lunar = true 时用 lunarMonth / lunarDay 记农历，由 global.Lunar 换算公历。
+   * ========================================================== */
+
+  var AnnivDialog = {
+    open: function (eventId) {
+      var isEdit = !!eventId;
+      var e = eventId ? Store.getEvent(eventId) : null;
+
+      var fTitle = V.input({
+        placeholder: '例如：妈妈生日 / 恋爱纪念日 / 考研倒计时',
+        value: e ? e.title : '', dataset: { autofocus: '1' }
+      });
+
+      var kindVal = e && e.kind ? e.kind : 'anniversary';
+      var fKind = V.segment([
+        { value: 'birthday', label: '生日' },
+        { value: 'anniversary', label: '纪念日' },
+        { value: 'countdown', label: '倒数日' }
+      ], kindVal, function (v) { kindVal = v; });
+
+      // 起算日：定义"第 1 届"是哪天
+      var fDate = V.input({ type: 'date', value: e ? e.date : DateUtil.toStr(DateUtil.today()) });
+
+      var repVal = e && e.repeat && e.repeat !== 'none' ? e.repeat : 'yearly';
+      var fRepeat = V.segment([
+        { value: 'yearly', label: '每年' },
+        { value: 'monthly', label: '每月' }
+      ], repVal, function (v) { repVal = v; });
+
+      /* ---- 农历 ---- */
+      var lunarOn = e ? !!e.lunar : false;
+      var lMonth = e && e.lunarMonth ? e.lunarMonth : 1;
+      var lDay = e && e.lunarDay ? e.lunarDay : 1;
+
+      var lunarInfo = el('div', { class: 'anniv-lunar-preview' });
+
+      function refreshLunarPreview() {
+        if (!lunarOn || !global.Lunar) { lunarInfo.textContent = ''; return; }
+        var thisYear = new Date().getFullYear();
+        var s = global.Lunar.lunarInYear(thisYear, lMonth, lDay, false) ||
+                global.Lunar.lunarInYear(thisYear + 1, lMonth, lDay, false);
+        if (!s) { lunarInfo.textContent = '该农历日期无法换算'; return; }
+        var yr = +s.slice(0, 4);
+        lunarInfo.textContent = '农历' + cnMonth(lMonth) + cnDay(lDay) + ' → ' +
+          yr + ' 年为 ' + s.slice(5);
+      }
+
+      var fLunarToggle = el('button', {
+        class: 'chip', type: 'button',
+        style: lunarOn ? { background: 'var(--primary)', color: '#fff' } : null,
+        text: lunarOn ? '☾ 按农历' : '按公历',
+        onclick: function () {
+          lunarOn = !lunarOn;
+          this.style.background = lunarOn ? 'var(--primary)' : '';
+          this.style.color = lunarOn ? '#fff' : '';
+          this.textContent = lunarOn ? '☾ 按农历' : '按公历';
+          lunarBox.style.display = lunarOn ? '' : 'none';
+          // 切到农历时，用当前公历日期初始化月/日
+          if (lunarOn && global.Lunar && fDate.value) {
+            var p = fDate.value.split('-');
+            var l = global.Lunar.solarToLunar(+p[0], +p[1], +p[2]);
+            if (l) { lMonth = l.month; lDay = l.day; syncLunarSelects(); refreshLunarPreview(); }
+          }
+        }
+      });
+
+      var fLMonth = V.select(
+        Array.from({ length: 12 }, function (_, i) { return { value: String(i + 1), label: cnMonth(i + 1) }; }),
+        String(lMonth),
+        { onchange: function () { lMonth = +this.value; refreshLunarPreview(); } }
+      );
+      var fLDay = V.select(
+        Array.from({ length: 30 }, function (_, i) { return { value: String(i + 1), label: cnDay(i + 1) }; }),
+        String(lDay),
+        { onchange: function () { lDay = +this.value; refreshLunarPreview(); } }
+      );
+      function syncLunarSelects() {
+        fLMonth.value = String(lMonth);
+        fLDay.value = String(lDay);
+      }
+
+      var lunarBox = el('div', { style: lunarOn ? null : { display: 'none' } }, [
+        el('div', { class: 'field-inline' }, [
+          fLMonth, fLDay,
+          el('span', { class: 'rep-iv', text: '（闰月按同名月算）' })
+        ]),
+        lunarInfo
+      ]);
+
+      if (lunarOn) refreshLunarPreview();
+
+      var body = [
+        V.field('名称', fTitle),
+        V.field('类型', fKind),
+        V.field('日期', fDate, '「每年 / 每月」以这一天为起点；倒数日填目标日'),
+        V.field('重复', fRepeat),
+        V.field('历法', fLunarToggle, '农历生日每年对应的公历日都不同，需要用下面的月/日'),
+        lunarBox,
+        el('div', { class: 'anniv-hint', text: '纪念日会出现在「今日」页的倒数卡片里，过了当天自动顺延到下一次。' })
+      ];
+
+      var m = V.modal({
+        title: isEdit ? '编辑纪念日' : '新建纪念日',
+        body: body,
+        autofocus: true,
+        footer: el('div', { class: 'modal-foot' }, [
+          isEdit ? el('button', {
+            class: 'btn btn-danger', text: '删除',
+            onclick: function () {
+              m.close();
+              setTimeout(function () {
+                V.confirm({ title: '删除纪念日', message: '确定删除「' + e.title + '」吗？', danger: true, okText: '删除' })
+                  .then(function (ok) { if (ok) { Store.removeEvent(eventId); UI.toast('纪念日已删除'); } });
+              }, 220);
+            }
+          }) : el('button', { class: 'btn', text: '取消', onclick: function () { m.close(); } }),
+          el('button', {
+            class: 'btn btn-primary', text: '保存',
+            onclick: function () {
+              var d = {
+                title: fTitle.value,
+                date: fDate.value,
+                repeat: repVal,
+                kind: kindVal,
+                lunar: lunarOn,
+                lunarMonth: lunarOn ? lMonth : 0,
+                lunarDay: lunarOn ? lDay : 0,
+                lunarLeap: false,
+                start: e ? e.start : '00:00',
+                end: e ? e.end : '23:59'
+              };
+              if (!d.title.trim()) { UI.toast('请填写名称', 'err'); fTitle.focus(); return; }
+              if (!d.date) { UI.toast('请选择日期', 'err'); return; }
+              if (isEdit) Store.updateEvent(eventId, d);
+              else Store.addEvent(d);
+              m.close();
+              UI.toast(isEdit ? '纪念日已更新' : '纪念日已添加');
+            }
+          })
+        ])
+      });
+    }
+  };
+
+  /* 中文月/日：初一、廿一、正月、腊月 */
+  function cnMonth(m) {
+    var N = ['', '正', '二', '三', '四', '五', '六', '七', '八', '九', '十', '冬', '腊'];
+    return (N[m] || m) + '月';
+  }
+  function cnDay(d) {
+    var N = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    if (d <= 10) return '初' + N[d];
+    if (d < 20) return '十' + N[d - 10];
+    if (d === 20) return '二十';
+    if (d < 30) return '廿' + N[d - 20];
+    return '三十';
+  }
+
+  global.EventDialog = EventDialog;
+  global.EventDetail = EventDetail;
+  global.openAnnivDialog = function (id) { AnnivDialog.open(id); };
+  global.AnnivDialog = AnnivDialog;
+
+  global.AgendaPane = AgendaPane;
+})(window);
+
+
