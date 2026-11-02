@@ -326,6 +326,7 @@
 
   /* 智能规划、精力节律、冲突检测与守夜自律子域已拆分至 assets/js/store-planner.js */
   reset: function () {
+    if (global.Media && global.Media.clearAll) global.Media.clearAll();
     ctx.setState(ctx.defaultState());
     this.emit();
   }

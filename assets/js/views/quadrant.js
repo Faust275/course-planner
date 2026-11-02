@@ -353,6 +353,7 @@
             el('b', { text: t.label + (m.content ? ' · ' + m.content : '') }),
             el('span', { text: m.time + (m.note ? ' · ' + m.note : '') })
           ]),
+          (m.photos && m.photos.length) ? el('span', { class: 'rec-photo-badge', text: '📷' + (m.photos.length > 1 ? m.photos.length : '') }) : null,
           el('span', { class: 'rec-val' }, [
             m.kcal ? el('em', { text: m.kcal + ' kcal' }) : null,
             m.cost ? el('em', { style: { color: 'var(--text-3)', fontWeight: '400' }, text: '¥' + m.cost }) : null
@@ -1319,6 +1320,10 @@
       /** 已选食物明细 */
       var items = (m0 && m0.items) ? JSON.parse(JSON.stringify(m0.items)) : [];
       var manual = m0 ? !!m0.kcalManual : false;
+      /** 本餐照片：[{k, n}]，一张一个食品，可多张 */
+      var photos = (m0 && m0.photos) ? JSON.parse(JSON.stringify(m0.photos)) : [];
+      var initialKeys = photos.map(function (p) { return p.k; });
+      var saved = false;
 
       var fType = V.segment(MEAL_TYPES.map(function (t) {
         return { value: t.value, label: t.label };
@@ -1456,9 +1461,77 @@
         drawGoalHint();
       });
 
+      /* ---------- 照片：一张一个食品，可多张，仅存本机 ---------- */
+      var photoBox = el('div', { class: 'meal-photos' });
+      var photoInput = el('input', { type: 'file', accept: 'image/*', capture: 'environment', style: { display: 'none' } });
+      var albumInput = el('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
+      var photoActions = el('div', { class: 'meal-photo-actions' }, [
+        el('button', { class: 'btn btn-sm', type: 'button', onclick: function () { photoInput.click(); } }, ['📷 拍照']),
+        el('button', { class: 'btn btn-sm', type: 'button', onclick: function () { albumInput.click(); } }, ['🖼 相册'])
+      ]);
+
+      function drawPhotos() {
+        photoBox.innerHTML = '';
+        if (!photos.length) {
+          photoBox.appendChild(el('div', { class: 'q-empty', text: '还没加照片' }));
+          return;
+        }
+        photos.forEach(function (p, i) {
+          var img = el('img', { class: 'mp-img', alt: p.n || '饮食照片' });
+          var item = el('div', { class: 'mp-item' }, [
+            el('div', { class: 'mp-img-wrap' }, [
+              img,
+              el('button', {
+                class: 'mp-del', type: 'button', title: '移除这张',
+                onclick: function () { photos.splice(i, 1); drawPhotos(); }
+              }, ['×'])
+            ]),
+            el('input', {
+              class: 'mp-label', placeholder: '是什么（可选）', value: p.n || '',
+              oninput: function () { p.n = this.value; }
+            })
+          ]);
+          photoBox.appendChild(item);
+          if (global.Media) {
+            global.Media.getUrl(p.k).then(function (url) {
+              if (url) img.src = url; else item.classList.add('cp-mp-missing');
+            });
+          }
+        });
+      }
+
+      function pickPhoto(input) {
+        var f = input.files && input.files[0];
+        input.value = '';
+        if (!f) return;
+        if (!global.Media) { UI.toast('当前环境不支持照片存储', 'err'); return; }
+        UI.toast('处理照片…');
+        global.Media.compress(f, 1080, 0.7).then(function (blob) {
+          if (!blob) throw new Error('压缩失败');
+          return global.Media.put(blob);
+        }).then(function (key) {
+          if (!key) throw new Error('存储失败（可能是不支持本地存储的模式）');
+          photos.push({ k: key, n: '' });
+          drawPhotos();
+          UI.toast('已添加照片');
+        }).catch(function (e) {
+          UI.toast('照片添加失败：' + ((e && e.message) || e), 'err');
+        });
+      }
+      photoInput.addEventListener('change', function () { pickPhoto(photoInput); });
+      albumInput.addEventListener('change', function () { pickPhoto(albumInput); });
+
       var m = V.modal({
         title: isEdit ? '编辑饮食' : '记录饮食',
         width: '540px',
+        onClose: function () {
+          // 取消/关闭时，把这次新加但没保存的照片清掉，避免孤儿占配额
+          if (saved) return;
+          var keep = {};
+          initialKeys.forEach(function (k) { keep[k] = 1; });
+          var orphan = photos.map(function (p) { return p.k; }).filter(function (k) { return !keep[k]; });
+          if (orphan.length && global.Media) global.Media.del(orphan);
+        },
         body: [
           V.field('哪一餐', fType),
           el('div', { class: 'field-row' }, [
@@ -1473,6 +1546,7 @@
             sumBox
           ]),
           V.field('吃了什么', fContent, '选了食物会自动填，也可以自己写'),
+          V.field('照片（可多张，一张一个食品）', el('div', {}, [photoBox, photoActions, photoInput, albumInput]), '只存在本机，不会上传；导出备份不含照片'),
           el('div', { class: 'field-row' }, [
             V.field('热量（千卡）', fKcal, '选了食物自动估算，可以改'),
             el('div', { class: 'field' }, [goalBox])
@@ -1484,6 +1558,7 @@
           isEdit ? el('button', {
             class: 'btn btn-danger', text: '删除',
             onclick: function () {
+              saved = true;
               m.close();
               setTimeout(function () {
                 V.confirm({ title: '删除饮食记录', message: '确定删除这条记录吗？', danger: true, okText: '删除' })
@@ -1498,10 +1573,15 @@
                 date: dateStr, time: fTime.value, type: type,
                 content: fContent.value, cost: fCost.value, kcal: fKcal.value,
                 note: fNote.value, tags: fTags.getValue(),
-                items: items, kcalManual: manual
+                items: items, kcalManual: manual, photos: photos
               };
               if (!d.content.trim()) { UI.toast('请填写吃了什么', 'err'); fContent.focus(); return; }
               if (isEdit) Store.updateMeal(id, d); else Store.addMeal(d);
+              // 保存成功后，删掉这次编辑里被移除的旧照片
+              var kept = photos.map(function (p) { return p.k; });
+              var removed = initialKeys.filter(function (k) { return kept.indexOf(k) < 0; });
+              if (removed.length && global.Media) global.Media.del(removed);
+              saved = true;
               m.close();
               var dpMsg = (Store.lastSyncedDietPlans && Store.lastSyncedDietPlans.length)
                 ? (' · 已联动打卡计划「' + Store.lastSyncedDietPlans.join('、') + '」') : '';
@@ -1512,6 +1592,7 @@
       });
 
       drawPicked();
+      drawPhotos();
     }
   };
 

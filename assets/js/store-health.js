@@ -20,6 +20,16 @@
   var isCheckinLike = ctx.isCheckinLike;
   var normFoodItem = ctx.normFoodItem;
 
+  /** 规范化一餐的照片列表：[{k: 照片键, n: 这一张是什么}] */
+  function normPhotos(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (p) {
+      return p && typeof p.k === 'string' && p.k;
+    }).slice(0, 12).map(function (p) {
+      return { k: p.k, n: String(p.n || '').trim() };
+    });
+  }
+
   Object.assign(Store, {
   /* ===== 饮食记录 ===== */
   addMeal: function (data) {
@@ -32,6 +42,7 @@
       cost: data.cost == null || data.cost === '' ? 0 : Number(data.cost) || 0,
       kcal: data.kcal == null || data.kcal === '' ? 0 : Number(data.kcal) || 0,
       items: Array.isArray(data.items) ? data.items.map(normFoodItem) : [],
+      photos: normPhotos(data.photos),
       kcalManual: !!data.kcalManual,
       // 饮食默认归到「餐饮」，让记账的标签统计不用堆在「未打标签」
       tags: ctx.normalizeTags(data.tags).length ? ctx.normalizeTags(data.tags) : ['餐饮'],
@@ -66,6 +77,7 @@
       d2.items = d2.items.map(normFoodItem).filter(Boolean);
       if (d2.kcalManual == null) d2.kcalManual = false;
     }
+    if (d2.photos) d2.photos = normPhotos(d2.photos);
     Object.keys(d2).forEach(function (k) {
       if (k === 'cost' || k === 'kcal') m[k] = Number(d2[k]) || 0;
       else if (k === 'tags') m.tags = ctx.normalizeTags(d2.tags);
@@ -175,9 +187,14 @@
   },
 
   removeMeal: function (id) {
+    var target = this.getMeal(id);
     var linked = this.ledgerByRef(id);
     if (linked) this.removeLedger(linked.id);
-    Store.state.meals = Store.state.meals.filter(function (m) { return m.id !== id; });
+    Store.state.meals = Store.state.meals.filter(function (x) { return x.id !== id; });
+    // 照片跟餐走：删记录时一并清掉，避免孤儿占配额
+    if (target && target.photos && target.photos.length && global.Media) {
+      global.Media.del(target.photos.map(function (p) { return p.k; }));
+    }
     this.emit();
   },
 
