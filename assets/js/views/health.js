@@ -719,9 +719,16 @@
           var diff = r.actual - r.plan;
           right = '已吃 ' + r.actual + (diff > 0 ? '（+' + diff + '）' : (diff < 0 ? '（' + diff + '）' : ''));
           color = diff > 0 ? 'var(--red)' : 'var(--text-2)';
+        } else if (r.phase === 'past') {
+          // 时段过去了还没记：不再给它分额度，也别假装它还等着你吃
+          right = '未记 · 时段已过';
+          color = 'var(--text-3)';
+        } else if (r.phase === 'current') {
+          right = '建议 ' + r.advised + ' · 进行中';
+          color = 'var(--primary)';
         } else {
           right = '建议 ' + r.advised;
-          color = 'var(--primary)';
+          color = 'var(--text-2)';
         }
         children.push(el('div', {
           style: {
@@ -730,7 +737,10 @@
           }
         }, [
           el('b', { style: { flex: '0 0 42px', fontSize: '12.5px' }, text: r.label }),
-          el('span', { style: { flex: '0 0 72px', fontSize: '11.5px', color: 'var(--text-3)' }, text: '计划 ' + r.plan }),
+          el('span', {
+            style: { flex: '0 0 82px', fontSize: '11px', color: 'var(--text-3)' },
+            text: r.startText + '–' + r.endText
+          }),
           el('span', {
             style: { flex: '1', fontSize: '12px', color: color, fontWeight: '600', textAlign: 'right' },
             text: right
@@ -738,12 +748,32 @@
         ]));
       });
 
+      var footer, footerColor = 'var(--green)';
+      if (p.mode !== 'today') {
+        footer = '这一天的餐次已过，这里只按原始配比列计划值。';
+        footerColor = 'var(--text-3)';
+      } else if (p.over) {
+        footer = '今天已超 ' + p.over + ' 千卡，剩下的餐次已按比例收紧了建议量。';
+        footerColor = 'var(--red)';
+      } else if (p.current) {
+        var curRow = p.meals.filter(function (r) { return r.type === p.current; })[0];
+        footer = curRow.label + '时段进行中，建议 ' + curRow.advised +
+          ' 千卡 · 今天还剩 ' + p.rest + ' 千卡（' + p.doneCount + '/4 餐已记）。';
+      } else if (p.upcoming.length) {
+        var names = p.meals.filter(function (r) { return p.upcoming.indexOf(r.type) >= 0; })
+          .map(function (r) { return r.label; }).join('、');
+        footer = '今天还剩 ' + p.rest + ' 千卡，分给' + names + '（' + p.doneCount + '/4 餐已记）。';
+      } else if (p.rest > 0) {
+        footer = '今天的餐次时段都过了，还剩 ' + p.rest + ' 千卡，可以补记或记成加餐。';
+        footerColor = 'var(--text-2)';
+      } else {
+        footer = '今天已超 ' + p.over + ' 千卡。';
+        footerColor = 'var(--red)';
+      }
+
       children.push(el('div', {
-        style: { fontSize: '11.5px', marginTop: '8px', lineHeight: '1.7',
-          color: p.over ? 'var(--red)' : 'var(--green)' },
-        text: p.over
-          ? '今天已超 ' + p.over + ' 千卡，剩下的餐次已按比例收紧了建议量。'
-          : '今天还剩 ' + p.rest + ' 千卡可分配（' + p.doneCount + '/4 餐已记）。'
+        style: { fontSize: '11.5px', marginTop: '8px', lineHeight: '1.7', color: footerColor },
+        text: footer
       }));
       return card(children);
     },

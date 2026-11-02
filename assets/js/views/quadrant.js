@@ -1294,13 +1294,23 @@
   /* ==========================================================
    * 饮食记录弹窗
    * ========================================================== */
-  /** 按当前时间猜是哪一餐 */
+  /**
+   * 按当前时间猜是哪一餐。
+   * 跟额度里的时段表（Store.mealWindow）保持同一套边界：落在哪个时段就是哪一餐；
+   * 落在两餐之间的空档就取「下一餐」，总比猜成加餐却给出离谱额度强。
+   */
   function guessMealType() {
-    var h = new Date().getHours();
-    if (h < 9) return 'breakfast';
-    if (h < 15) return 'lunch';
-    if (h < 21) return 'dinner';
-    return 'snack';
+    var now = new Date();
+    var min = now.getHours() * 60 + now.getMinutes();
+    var order = ['breakfast', 'lunch', 'dinner'];
+    var next = '';
+    for (var i = 0; i < order.length; i++) {
+      var w = Store.mealWindow ? Store.mealWindow(order[i]) : null;
+      if (!w) continue;
+      if (min >= w.start && min < w.end) return order[i];
+      if (!next && min < w.start) next = order[i];
+    }
+    return next || 'snack';   // 三餐时段都过了 → 加餐
   }
 
   /** 各餐次的默认时间 */
@@ -1509,7 +1519,8 @@
       }
 
       function drawGoalHint() {
-        // 滚动预算：这餐的额度 = 今天剩下的按剩余餐次比例分，早餐超了晚餐就自动收紧
+        // 滚动预算 + 时段感知：剩余额度按「还能吃的那几餐」分，
+        // 已经过去的餐次（如下午三点还没记午餐）不再白占额度，滚给晚餐。
         var plan = Store.mealQuotaPlan ? Store.mealQuotaPlan(dateStr, { excludeMealId: id }) : null;
         if (!plan) { goalBox.style.display = 'none'; return; }
         var row = plan.meals.filter(function (r) { return r.type === type; })[0];
@@ -1520,19 +1531,44 @@
         var cur = Number(fKcal.value) || 0;
         var pct = Math.round(cur / quota * 100);
         var over = cur > quota;
-        // 把当前输入也算进去，告诉用户「记完这顿之后」还剩多少，而不是现在剩多少
-        var leftAfter = plan.rest - cur;
+
+        // 数字是按什么口径给的，标题里就得说清，否则用户看不懂为啥这餐和别的餐不一样
+        var title, note = '';
+        if (plan.mode !== 'today') {
+          title = '这一餐计划';
+          note = plan.mode === 'past-day' ? '补记历史，按原始配比' : '还没到那天，按原始配比';
+        } else if (row.done) {
+          title = '这一餐已记过 · 计划';
+          note = '已经记了 ' + row.actual + ' 千卡';
+        } else if (row.phase === 'past') {
+          title = '这一餐时段已过 · 按计划';
+          note = row.startText + '–' + row.endText + ' 已过，额度已让给后面的餐次';
+        } else {
+          title = '这一餐建议';
+          note = row.phase === 'current'
+            ? row.startText + '–' + row.endText + ' 正在时段内'
+            : row.startText + ' 开始';
+        }
+
+        var hint;
+        if (plan.mode === 'today') {
+          // 把当前输入也算进去，告诉用户「记完这顿之后」还剩多少，而不是现在剩多少
+          var leftAfter = plan.rest - cur;
+          hint = (over ? '比建议多 ' + Math.round(cur - quota) : '比建议少 ' + Math.round(quota - cur)) +
+            '　·　' +
+            (leftAfter >= 0 ? '记完还剩 ' + Math.round(leftAfter) + ' 千卡'
+                            : '记完会超 ' + Math.round(-leftAfter) + ' 千卡');
+        } else {
+          hint = '不影响其他餐次的建议';
+        }
+
         goalBox.style.display = '';
         goalBox.innerHTML =
-          '<div class="cp-fg-row"><span>这一餐建议</span><b>' + quota + ' 千卡</b></div>' +
+          '<div class="cp-fg-row"><span>' + title + '</span><b>' + quota + ' 千卡</b></div>' +
           '<div class="cp-fg-bar"><i style="width:' + Math.min(100, Math.max(0, pct)) + '%;background:' +
           (over ? 'var(--red)' : 'var(--green)') + '"></i></div>' +
-          '<div class="cp-fg-hint"' + (over ? ' style="color:var(--red)"' : '') + '>' +
-          (over ? '比建议多 ' + Math.round(cur - quota) : '比建议少 ' + Math.round(quota - cur)) +
-          '　·　' +
-          (leftAfter >= 0 ? '记完还剩 ' + Math.round(leftAfter) + ' 千卡'
-                          : '记完会超 ' + Math.round(-leftAfter) + ' 千卡') +
-          '</div>';
+          (note ? '<div class="cp-fg-note">' + note + '</div>' : '') +
+          '<div class="cp-fg-hint"' + (over ? ' style="color:var(--red)"' : '') + '>' + hint + '</div>';
       }
 
       fSearch.addEventListener('input', drawResults);

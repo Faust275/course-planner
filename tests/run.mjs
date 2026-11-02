@@ -3569,6 +3569,61 @@ console.log('\n八大跨模块联动、三个问题修复与三个建议全链�
   eq('normFoodItem 保留修饰', (nfMod.mods || []).length, 1);
   eq('无修饰时不写入 mods 字段', S._ctx.normFoodItem({ n: '米饭', q: 200, u: 'g', kcal: 1.16 }).mods, undefined);
 
+  // 2.2 三餐额度的时段感知：过了点的那一餐不再白占额度
+  //     所有断言都显式给 nowMin，不跟着真实钟点漂。
+  const savedMeals = S.state.meals;
+  S.setDiet({
+    goal: 2000,
+    ratio: { breakfast: 30, lunch: 40, dinner: 30, snack: 0 },
+    target: { mode: '', rate: 0.5 },
+    profile: {}
+  });
+  const qAt = (nowMin, meals) => {
+    S.state.meals = (meals || []).map((m) => Object.assign({ id: 'mq-' + Math.random() }, m));
+    return S.mealQuotaPlan(todayStr, { nowMin });
+  };
+  const qRow = (p, t) => p.meals.filter((r) => r.type === t)[0];
+
+  const qMorning = qAt(8 * 60);
+  eq('08:00 早餐处于时段内', qRow(qMorning, 'breakfast').phase, 'current');
+  eq('08:00 午餐还没到点', qRow(qMorning, 'lunch').phase, 'later');
+  eq('08:00 三餐按原配比 600/800/600',
+    qMorning.meals.map((r) => r.advised).slice(0, 3).join('/'), '600/800/600');
+
+  const qAfternoon = qAt(15 * 60 + 30);
+  eq('15:30 未记早餐 → 时段已过', qRow(qAfternoon, 'breakfast').phase, 'past');
+  eq('15:30 未记午餐 → 时段已过', qRow(qAfternoon, 'lunch').phase, 'past');
+  eq('已过的餐次不再分额度', qRow(qAfternoon, 'lunch').advised, 0);
+  eq('额度整笔滚给晚餐', qRow(qAfternoon, 'dinner').advised, 2000);
+
+  const qLunchDone = qAt(15 * 60 + 30, [{ date: todayStr, time: '12:00', type: 'lunch', content: '午餐', kcal: 700 }]);
+  eq('吃过午餐后剩余 1300 全给晚餐', qRow(qLunchDone, 'dinner').advised, 1300);
+  eq('吃过午餐后早餐仍不参与分配', qRow(qLunchDone, 'breakfast').advised, 0);
+
+  const qNight = qAt(23 * 60);
+  eq('23:00 三餐都标记为时段已过',
+    ['breakfast', 'lunch', 'dinner'].map((t) => qRow(qNight, t).phase).join('/'), 'past/past/past');
+
+  const qOver = qAt(8 * 60, [{ date: todayStr, time: '08:00', type: 'breakfast', content: '超量', kcal: 2500 }]);
+  eq('已超支时不再给出负数建议', qOver.meals.every((r) => r.advised >= 0), true);
+  eq('已超支时剩余为负、over 为正', qOver.rest === -500 && qOver.over === 500, true);
+
+  // 补记已过餐次：不给新额度，但保留原始计划当参照
+  const qBackfill = S.mealQuotaPlan(todayStr, { nowMin: 15 * 60 + 30, excludeMealId: 'mq-x' });
+  eq('时段已过的午餐 advised 为 0', qRow(qBackfill, 'lunch').advised, 0);
+  eq('时段已过的午餐仍保留计划 800', qRow(qBackfill, 'lunch').plan, 800);
+
+  // 回看历史日期不滚动
+  const qPast = S.mealQuotaPlan(DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -1)), { nowMin: 10 * 60 });
+  eq('历史日期 mode=past-day', qPast.mode, 'past-day');
+  eq('历史日期按原始配比给计划值', qRow(qPast, 'lunch').advised, 800);
+
+  // 时段表本身
+  eq('午餐时段 11:00–15:00',
+    S.mealWindow('lunch').startText + '-' + S.mealWindow('lunch').endText, '11:00-15:00');
+  S.state.meals = savedMeals;
+
+
   // 3. 问题 3：番茄钟 finishFocus 同时联动打卡型(checkin)、进度型(progress)、时长型(duration)复习计划及课程
   const cMath = S.addCourse({ name: '高等数学', day: 1, periodId: 'p1', startWeek: 1, endWeek: 16 });
   const mathCheckinPlan = S.addPlan({

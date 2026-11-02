@@ -2647,6 +2647,7 @@ input[type="range"]::-moz-range-thumb {
 .cp-fg-bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .cp-fg-bar i { display: block; height: 100%; border-radius: 3px; }
 .cp-fg-hint { font-size: 11px; color: var(--text-3); }
+.cp-fg-note { font-size: 10.5px; color: var(--text-3); opacity: .85; }
 
 /* ---- 饮食与热量设置 ---- */
 .cp-diet-ratio { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }

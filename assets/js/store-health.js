@@ -36,6 +36,29 @@
     });
   }
 
+  /**
+   * 各餐次的时段（分钟，左闭右开）。
+   * 加餐按全天算 —— 它本来就不挑时间，也不该有「过期」这一说。
+   */
+  var MEAL_WINDOWS = {
+    breakfast: { start: 5 * 60, end: 10 * 60 },
+    lunch: { start: 11 * 60, end: 15 * 60 },
+    dinner: { start: 17 * 60, end: 21 * 60 + 30 },
+    snack: { start: 0, end: 24 * 60 }
+  };
+
+  /** 取某一餐的时段，附带可直接显示的 HH:MM 文案 */
+  function mealWindow(type) {
+    var w = MEAL_WINDOWS[type] || MEAL_WINDOWS.snack;
+    var pad = DateUtil.pad;
+    return {
+      start: w.start,
+      end: w.end,
+      startText: pad(Math.floor(w.start / 60)) + ':' + pad(w.start % 60),
+      endText: w.end >= 24 * 60 ? '24:00' : pad(Math.floor(w.end / 60)) + ':' + pad(w.end % 60)
+    };
+  }
+
   Object.assign(Store, {
   /* ===== 饮食记录 ===== */
   addMeal: function (data) {
@@ -275,18 +298,22 @@
     this.emit();
   },
 
-  /** 某一餐的目标配额（按配比） */
   /**
-   * 今日三餐额度（滚动预算）。
+   * 今日三餐额度（滚动预算 + 时段感知）。
    *
-   * 不是「每餐固定 30/40/30 就完事」——早餐超了 100，剩下没吃的餐次就得少 100，
-   * 这才回答得了「这顿吃完了，晚上还能吃多少」。
+   * 两层逻辑，别混在一起：
+   *   1. 钱怎么分：日目标 − 已吃 = 剩余额度，按「还能吃的那几餐」的比例分。
+   *      早餐超了 100，剩下没吃的餐次就得少 100，这才回答得了「这顿吃完晚上还能吃多少」。
+   *   2. 谁的份：下午三点没记午餐，午餐不该继续占着 40% 的额度干等着——它已经过去了，
+   *      额度要滚给晚餐。所以只有「当前时段」和「还没到」的餐次参与分配；
+   *      「已过」的餐次在用户主动补记时按原始计划（plan）算，不再分新额度。
    *
    * @param {string} dateStr
-   * @param {{excludeMealId?: string}} opts
+   * @param {{excludeMealId?: string, nowMin?: number}} opts
    *        excludeMealId：编辑已有记录时先把它从「已吃」里剔掉，
    *        否则它会把自己算进已吃、又给自己分额度，重复一次。
-   * @returns {null|{dailyGoal,source,meals,eaten,rest,over,doneCount}}
+   *        nowMin：覆盖「现在几点」（0–1439），测试和预演用。
+   * @returns {null|{dailyGoal,source,mode,meals,eaten,rest,over,doneCount,current,upcoming}}
    */
   mealQuotaPlan: function (dateStr, opts) {
     opts = opts || {};
@@ -298,6 +325,12 @@
 
     var dailyGoal = Number(h.dynamicDietGoal) || 0;
     if (!(dailyGoal > 0)) return null;
+
+    var today = DateUtil.toStr(DateUtil.today());
+    var isToday = dateStr === today;
+    var isFutureDay = dateStr > today;
+    var now = new Date();
+    var nowMin = opts.nowMin != null ? Number(opts.nowMin) : (now.getHours() * 60 + now.getMinutes());
 
     var ratio = d.ratio || {};
     var ratioSum = 0;
@@ -321,32 +354,73 @@
       var actual = Math.round(byType[t] || 0);
       var done = actual > 0;
       if (done) actualDone += actual;
-      return { type: t, label: mealType(t).label, ratio: pct, plan: plan, actual: actual, done: done, advised: 0 };
+
+      var w = mealWindow(t);
+      var phase;
+      if (done) phase = 'done';
+      else if (!isToday) phase = isFutureDay ? 'later' : 'past';   // 别的日子不谈时段
+      else if (nowMin >= w.end) phase = 'past';                    // 时段已过
+      else if (nowMin >= w.start) phase = 'current';                // 正在这个时段
+      else phase = 'later';                                         // 还没到
+
+      return {
+        type: t, label: mealType(t).label, ratio: pct,
+        plan: plan, actual: actual, done: done, phase: phase,
+        advised: 0,
+        startText: w.startText, endText: w.endText
+      };
     });
 
     var restBudget = dailyGoal - actualDone;     // 今天还能吃多少（负数=已超）
+
+    // 只有「当前」和「未到」的餐次分额度；已过的餐次只保留 plan 供补记参照
+    var candidates = rows.filter(function (r) { return r.phase === 'current' || r.phase === 'later'; });
     var restRatio = 0;
-    rows.forEach(function (r) { if (!r.done) restRatio += r.ratio; });
-    rows.forEach(function (r) {
-      if (r.done) return;
-      r.advised = restRatio > 0 ? Math.round(restBudget * r.ratio / restRatio) : 0;
-    });
+    candidates.forEach(function (r) { restRatio += r.ratio; });
+
+    if (candidates.length && restRatio > 0) {
+      candidates.forEach(function (r) {
+        // 已经超支时建议量没有负数可言，钳到 0（「别再吃了」就是 0 的意思）
+        r.advised = Math.max(0, Math.round(restBudget * r.ratio / restRatio));
+      });
+    } else if (candidates.length) {
+      // 剩下的餐次配比全是 0（比如只给了加餐 0%）→ 平摊，总比显示 0 强
+      candidates.forEach(function (r) {
+        r.advised = Math.max(0, Math.round(restBudget / candidates.length));
+      });
+    }
+
+    // 别的日子不滚动：给原始计划当参照，别拿「还剩多少」误导人
+    if (!isToday) {
+      rows.forEach(function (r) {
+        if (!r.done) r.advised = r.plan;
+      });
+    }
+
+    var currentRow = rows.filter(function (r) { return r.phase === 'current'; })[0] || null;
 
     return {
       date: dateStr,
       dailyGoal: dailyGoal,
       source: h.dietSuggest ? h.dietSuggest.source : 'manual',
+      mode: isToday ? 'today' : (isFutureDay ? 'future-day' : 'past-day'),
+      nowMin: nowMin,
       meals: rows,
       eaten: Math.round(actualDone),
       rest: Math.round(restBudget),
       over: restBudget < 0 ? Math.round(-restBudget) : 0,
-      doneCount: rows.filter(function (r) { return r.done; }).length
+      doneCount: rows.filter(function (r) { return r.done; }).length,
+      current: currentRow ? currentRow.type : '',
+      upcoming: rows.filter(function (r) { return r.phase === 'later'; }).map(function (r) { return r.type; })
     };
   },
 
+  /** 某一餐的时段（供界面显示「11:00–15:00 已过」这类提示） */
+  mealWindow: function (type) { return mealWindow(type); },
+
   /**
    * 某一餐的目标额度。
-   * focusType 用于记饮食弹窗：同一天重复记同一餐时，该餐已被视为「吃完」，
+   * 用于记饮食弹窗：同一天重复记同一餐时，该餐已被视为「吃完」或「已过」，
    * 分摊结果会是 0，这时退回这一餐的原始计划值，免得界面显示「额度 0」。
    */
   mealQuota: function (type, dateStr, opts) {
