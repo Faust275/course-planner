@@ -10,12 +10,12 @@
 
 | 项 | 当前状态 |
 |---|---|
-| 交付形态 | **`index.html`（约 2.0 MB）+ `quotes-data.js`（约 800 KB），两份必须放同一目录**；需要「一个 html 走天下」时用 `python3 build.py --inline` |
+| 交付形态 | **`index.html`（约 1.7 MB）+ `quotes-data.js`（约 800 KB），两份必须放同一目录**；需要「一个 html 走天下」时用 `python3 build.py --inline` |
 | 源码 | `src/index.template.html` + `assets/css` + `assets/js`（30+ 模块 / 20 个视图） |
 | 构建 | `npm run build`（`python3 build.py`，顺带产出 `dist/`）；`--inline` 把语料也内联 |
-| 单测 | `npm test` → **1259 条全过**（纯函数，node 直接跑） |
+| 单测 | `npm test` → **1294 条全过**（纯函数，node 直接跑） |
 | OCR 基准 | `npm run bench:ocr` → **4 个分例 F1 1.00**（结构还原，见 `tests/ocr-bench/README.md`） |
-| 样式/e2e | `npm run e2e` → **81 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
+| 样式/e2e | `npm run e2e` → **83 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
 | Lint | `npm run lint` → **0 错误**（ESLint flat config） |
 | CI | `.github/workflows/ci.yml`：lint + 单测 + build + e2e 双 job |
 | 安卓 | Capacitor 8，minSdk **26**，release APK 约 **6.07 MB**（debug 约 7.6 MB） |
@@ -44,11 +44,11 @@ course-planner/
 │       ├── quotes-data.js      # 完整语料（约 800KB，默认外置到根目录，不进 index.html）
 │       └── views/              # 20 个视图（today/schedule/quadrant/activity/...）
 ├── build.py                    # 打包器：内联模板引用的 CSS/JS → index.html；语料默认只复制不内联
-├── tests/run.mjs               # 单测（1259 条）
+├── tests/run.mjs               # 单测（1294 条）
 ├── tests/ocr-bench/            # OCR 识别基准（理想词表门禁 + 真机录音体检）
 ├── tests/run-e2e.mjs           # e2e 聚合运行器（自动扫描 verify_*.mjs）
 ├── test-utils.mjs              # e2e 共用静态服务器（绑 127.0.0.1）
-├── verify_*.mjs                # 81 个功能点 e2e
+├── verify_*.mjs                # 83 个功能点 e2e
 ├── eslint.config.mjs           # flat config（已 0 错误）
 └── android/                    # Capacitor 8 工程（含自写 Kotlin 插件）
 ```
@@ -56,9 +56,9 @@ course-planner/
 ```bash
 npm install                 # 首次：eslint / playwright
 npm run build               # 生成 index.html + dist/
-npm test                    # 1259 条单测
+npm test                    # 1294 条单测
 npm run lint                # ESLint 全项目
-npm run e2e                 # 81 个 e2e（自动起共享服务器）
+npm run e2e                 # 83 个 e2e（自动起共享服务器）
 npm run e2e activity        # 按文件名过滤
 npm run bench:ocr           # OCR 基准（理想词表，毫秒级，进 ci）
 npm run bench:ocr:real      # OCR 真实分（需联网下模型，只看趋势）
@@ -262,12 +262,11 @@ node tools/ci-secrets.mjs D:\keys\happy-course.keystore
 ## 7. 待办 / 下一步（按价值排序）
 
 1. **签名发布包**：keystore + release AAB，才能上架/正式分发（现在只有 debug）。
-2. **系统级通知**：现提醒是页面内 toast。装成 App 后可走 Notification 通道。
-3. **横屏 / 平板适配**：窄屏 390px 已验证无溢出，但横屏课表矩阵未专门适配。
-4. **真·后台同步**：若要 App 完全退出后仍拉健康数据，需 `WorkManager` + `READ_HEALTH_DATA_IN_BACKGROUND` + 原生→Web 回写桥。**性价比低**：每次启动的 `autoSync` 已覆盖多数场景，且国产 ROM 后台保活不可靠。
-5. 复盘加趋势图、热力图与计划联动。
-6. 少量跨文件全局继续收敛（低优先级）。
-7. **安全**：历史 token 曾出现在命令与日志中，建议到 GitHub 吊销重发。
+2. **横屏 / 平板适配**：窄屏 390px 已验证无溢出，但横屏课表矩阵未专门适配。
+3. **真·后台同步**：若要 App 完全退出后仍拉健康数据，需 `WorkManager` + `READ_HEALTH_DATA_IN_BACKGROUND` + 原生→Web 回写桥。**性价比低**：每次启动的 `autoSync` 已覆盖多数场景，且国产 ROM 后台保活不可靠。
+4. 复盘加趋势图、热力图与计划联动。
+5. 少量跨文件全局继续收敛（低优先级）。
+6. **安全**：历史 token 曾出现在命令与日志中，建议到 GitHub 吊销重发。
 
 ---
 

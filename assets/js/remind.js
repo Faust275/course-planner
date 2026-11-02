@@ -2,14 +2,13 @@
 /* ==========================================================
  * 上课提醒
  * ----------------------------------------------------------
- * 为什么不做「Notification 定时通知」：
- *   · Notification Triggers（showTrigger）Chrome 已停止开发且从未发布，
- *     Firefox / WebKit 无实现 —— 没有服务器就预定不了未来时刻的通知；
- *   · file:// 不是安全上下文，Notification 直接被禁（权限不弹、通知静默失败）；
- *   · iOS Safari 需 16.4+ 且必须先「添加到主屏幕」，后台 Tab 5–10 秒即终止 JS。
- * 所以拆成两条腿：
- *   ① 导出 .ics 到系统日历 —— 定时那部分交给操作系统，锁屏也响，桌面移动通吃；
- *   ② 页面内提醒 —— 只覆盖「页面开着」的场景，零权限零兼容问题。
+ * 提醒通道边界说明：
+ *   · PWA / 网页（file:// 或非安全上下文）：Web Notification 被禁、showTrigger 无实现，
+ *     iOS Safari 后台 Tab 数秒即终止 JS —— 所以网页侧拆成两条腿：
+ *     ① 导出 .ics 进系统日历负责定时（锁屏也响，桌面/移动通吃）；
+ *     ② 页面内 toast 只覆盖「页面开着」的场景，零权限零兼容问题。
+ *   · 装成 App（Capacitor）后：由 assets/js → NotifyPlugin.kt 走系统 AlarmManager 精确排程，
+ *     到点由 NotifyReceiver 发通知，含开机 / 覆盖安装重排；入口见 remind.js 的 native 调度。
  * ========================================================== */
 (function (global) {
   'use strict';
