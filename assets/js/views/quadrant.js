@@ -1509,18 +1509,29 @@
       }
 
       function drawGoalHint() {
-        var quota = Store.mealQuota(type);
-        if (!quota) { goalBox.style.display = 'none'; return; }
+        // 滚动预算：这餐的额度 = 今天剩下的按剩余餐次比例分，早餐超了晚餐就自动收紧
+        var plan = Store.mealQuotaPlan ? Store.mealQuotaPlan(dateStr, { excludeMealId: id }) : null;
+        if (!plan) { goalBox.style.display = 'none'; return; }
+        var row = plan.meals.filter(function (r) { return r.type === type; })[0];
+        if (!row) { goalBox.style.display = 'none'; return; }
+
+        var quota = row.advised > 0 ? row.advised : row.plan;
+        if (!(quota > 0)) { goalBox.style.display = 'none'; return; }
         var cur = Number(fKcal.value) || 0;
         var pct = Math.round(cur / quota * 100);
         var over = cur > quota;
+        // 把当前输入也算进去，告诉用户「记完这顿之后」还剩多少，而不是现在剩多少
+        var leftAfter = plan.rest - cur;
         goalBox.style.display = '';
         goalBox.innerHTML =
-          '<div class="cp-fg-row"><span>这一餐的目标</span><b>' + quota + ' 千卡</b></div>' +
-          '<div class="cp-fg-bar"><i style="width:' + Math.min(100, pct) + '%;background:' +
+          '<div class="cp-fg-row"><span>这一餐建议</span><b>' + quota + ' 千卡</b></div>' +
+          '<div class="cp-fg-bar"><i style="width:' + Math.min(100, Math.max(0, pct)) + '%;background:' +
           (over ? 'var(--red)' : 'var(--green)') + '"></i></div>' +
           '<div class="cp-fg-hint"' + (over ? ' style="color:var(--red)"' : '') + '>' +
-          (over ? '超出 ' + Math.round(cur - quota) + ' 千卡' : ('还剩 ' + Math.round(quota - cur) + ' 千卡')) +
+          (over ? '比建议多 ' + Math.round(cur - quota) : '比建议少 ' + Math.round(quota - cur)) +
+          '　·　' +
+          (leftAfter >= 0 ? '记完还剩 ' + Math.round(leftAfter) + ' 千卡'
+                          : '记完会超 ' + Math.round(-leftAfter) + ' 千卡') +
           '</div>';
       }
 

@@ -198,6 +198,8 @@
       root.appendChild(this.rhythmCard());
       root.appendChild(this.stepsCard());
       root.appendChild(this.kcalCard(h));
+      var quotaC = this.quotaCard(h);
+      if (quotaC) root.appendChild(quotaC);   // 没启用目标时不渲染
       root.appendChild(this.dietCorrCard());
       root.appendChild(this.weightCard());
       root.appendChild(this.weekCard());
@@ -700,6 +702,49 @@
           }, ['记在账本 ›'])
         ]));
       }
+      return card(children);
+    },
+
+    /* ---------- 3.35) 今日三餐额度（滚动预算） ---------- */
+    quotaCard: function (h) {
+      if (!Store.mealQuotaPlan) return null;
+      var p = Store.mealQuotaPlan(h.date);
+      if (!p) return null;
+
+      var children = [sectionTitle(V.icons.drop, '今日三餐额度')];
+      p.meals.forEach(function (r) {
+        if (!r.plan && !r.actual) return;
+        var right, color;
+        if (r.done) {
+          var diff = r.actual - r.plan;
+          right = '已吃 ' + r.actual + (diff > 0 ? '（+' + diff + '）' : (diff < 0 ? '（' + diff + '）' : ''));
+          color = diff > 0 ? 'var(--red)' : 'var(--text-2)';
+        } else {
+          right = '建议 ' + r.advised;
+          color = 'var(--primary)';
+        }
+        children.push(el('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '5px 0', borderBottom: '1px dashed var(--line)'
+          }
+        }, [
+          el('b', { style: { flex: '0 0 42px', fontSize: '12.5px' }, text: r.label }),
+          el('span', { style: { flex: '0 0 72px', fontSize: '11.5px', color: 'var(--text-3)' }, text: '计划 ' + r.plan }),
+          el('span', {
+            style: { flex: '1', fontSize: '12px', color: color, fontWeight: '600', textAlign: 'right' },
+            text: right
+          })
+        ]));
+      });
+
+      children.push(el('div', {
+        style: { fontSize: '11.5px', marginTop: '8px', lineHeight: '1.7',
+          color: p.over ? 'var(--red)' : 'var(--green)' },
+        text: p.over
+          ? '今天已超 ' + p.over + ' 千卡，剩下的餐次已按比例收紧了建议量。'
+          : '今天还剩 ' + p.rest + ' 千卡可分配（' + p.doneCount + '/4 餐已记）。'
+      }));
       return card(children);
     },
 

@@ -276,12 +276,85 @@
   },
 
   /** 某一餐的目标配额（按配比） */
-  mealQuota: function (type) {
+  /**
+   * 今日三餐额度（滚动预算）。
+   *
+   * 不是「每餐固定 30/40/30 就完事」——早餐超了 100，剩下没吃的餐次就得少 100，
+   * 这才回答得了「这顿吃完了，晚上还能吃多少」。
+   *
+   * @param {string} dateStr
+   * @param {{excludeMealId?: string}} opts
+   *        excludeMealId：编辑已有记录时先把它从「已吃」里剔掉，
+   *        否则它会把自己算进已吃、又给自己分额度，重复一次。
+   * @returns {null|{dailyGoal,source,meals,eaten,rest,over,doneCount}}
+   */
+  mealQuotaPlan: function (dateStr, opts) {
+    opts = opts || {};
+    var TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
     var d = this.dietConfig();
-    var goal = Number(d.goal) || 0;
-    if (!goal) return 0;
-    var pct = Number((d.ratio || {})[type]) || 0;
-    return Math.round(goal * pct / 100);
+    var h = this.dayHealth(dateStr);
+    // 没启用目标联动、也没手设目标 → 不打扰
+    if (!h.dietSuggest && !(Number(d.goal) > 0)) return null;
+
+    var dailyGoal = Number(h.dynamicDietGoal) || 0;
+    if (!(dailyGoal > 0)) return null;
+
+    var ratio = d.ratio || {};
+    var ratioSum = 0;
+    TYPES.forEach(function (t) { ratioSum += Number(ratio[t]) || 0; });
+    if (!(ratioSum > 0)) {
+      ratio = { breakfast: 30, lunch: 40, dinner: 30, snack: 0 };
+      ratioSum = 100;
+    }
+
+    var byType = {};
+    this.mealsOf(dateStr).forEach(function (m) {
+      if (!m || m.id === opts.excludeMealId) return;
+      var t = m.type || 'lunch';
+      byType[t] = (byType[t] || 0) + (Number(Store.mealSum(m).kcal) || 0);
+    });
+
+    var actualDone = 0;
+    var rows = TYPES.map(function (t) {
+      var pct = Number(ratio[t]) || 0;
+      var plan = Math.round(dailyGoal * pct / 100);
+      var actual = Math.round(byType[t] || 0);
+      var done = actual > 0;
+      if (done) actualDone += actual;
+      return { type: t, label: mealType(t).label, ratio: pct, plan: plan, actual: actual, done: done, advised: 0 };
+    });
+
+    var restBudget = dailyGoal - actualDone;     // 今天还能吃多少（负数=已超）
+    var restRatio = 0;
+    rows.forEach(function (r) { if (!r.done) restRatio += r.ratio; });
+    rows.forEach(function (r) {
+      if (r.done) return;
+      r.advised = restRatio > 0 ? Math.round(restBudget * r.ratio / restRatio) : 0;
+    });
+
+    return {
+      date: dateStr,
+      dailyGoal: dailyGoal,
+      source: h.dietSuggest ? h.dietSuggest.source : 'manual',
+      meals: rows,
+      eaten: Math.round(actualDone),
+      rest: Math.round(restBudget),
+      over: restBudget < 0 ? Math.round(-restBudget) : 0,
+      doneCount: rows.filter(function (r) { return r.done; }).length
+    };
+  },
+
+  /**
+   * 某一餐的目标额度。
+   * focusType 用于记饮食弹窗：同一天重复记同一餐时，该餐已被视为「吃完」，
+   * 分摊结果会是 0，这时退回这一餐的原始计划值，免得界面显示「额度 0」。
+   */
+  mealQuota: function (type, dateStr, opts) {
+    var p = this.mealQuotaPlan(dateStr || DateUtil.toStr(DateUtil.today()), opts);
+    if (!p) return 0;
+    var row = p.meals.filter(function (r) { return r.type === type; })[0];
+    if (!row) return 0;
+    return row.advised > 0 ? row.advised : row.plan;
   },
 
   /** Mifflin-St Jeor 估算基础代谢，再乘活动系数 */
