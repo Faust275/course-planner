@@ -51,7 +51,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // WebView 在 Capacitor 启动后才会就绪，这里兜底刷新句柄，确保后台同步能取到
         if (getBridge() != null && getBridge().getWebView() != null) {
@@ -60,7 +60,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         sSyncWebView = null;
         super.onDestroy();
     }

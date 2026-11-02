@@ -328,7 +328,7 @@ class HealthConnectPlugin : Plugin() {
      */
     @PluginMethod
     fun setBackgroundSync(call: PluginCall) {
-        val enabled = call.getBoolean("enabled", true)
+        val enabled: Boolean = call.getBoolean("enabled", true) ?: true
         HealthSyncWorker.setEnabled(context, enabled)
         val ret = JSObject()
         ret.put("enabled", enabled)

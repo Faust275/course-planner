@@ -84,6 +84,7 @@ class HealthSyncWorker(
          * 是否启用后台同步。默认开启；用户可在设置页关闭。
          * 用 SharedPreferences 持久化，使开关跨 App 重启依然有效（否则每次启动都重新登记、覆盖用户选择）。
          */
+        @JvmStatic
         fun isEnabled(context: Context): Boolean {
             val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return sp.getBoolean(KEY_ENABLED, true)
@@ -93,6 +94,7 @@ class HealthSyncWorker(
          * 持久化开关并登记 / 取消周期任务。这是设置页开关的调用入口：
          * 开启 → 登记 15 分钟周期任务；关闭 → 取消（进程存活时也停止后台拉取）。
          */
+        @JvmStatic
         fun setEnabled(context: Context, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit()
@@ -102,6 +104,7 @@ class HealthSyncWorker(
         }
 
         /** 注册 / 刷新 15 分钟周期的后台同步任务（幂等：重复调用只会更新，不会叠加） */
+        @JvmStatic
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<HealthSyncWorker>(15, TimeUnit.MINUTES)
                 .setInitialDelay(15, TimeUnit.MINUTES)
@@ -114,6 +117,7 @@ class HealthSyncWorker(
         }
 
         /** 取消后台同步（设置里提供开关时调用） */
+        @JvmStatic
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_NAME)
         }
