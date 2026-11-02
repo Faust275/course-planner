@@ -1360,9 +1360,9 @@
             onclick: function () {
               // 有克数：存「每克营养」，用户填重量（克）自动算热量；没克数：退回按份
               if (f.g > 0) {
-                items.push({ n: f.n, q: f.g, u: 'g', kcal: f.kcal / f.g, p: f.p / f.g, f: f.f / f.g, c: f.c / f.g });
+                items.push({ n: f.n, cat: f.cat, q: f.g, u: 'g', kcal: f.kcal / f.g, p: f.p / f.g, f: f.f / f.g, c: f.c / f.g });
               } else {
-                items.push({ n: f.n, q: 1, u: '', kcal: f.kcal, p: f.p, f: f.f, c: f.c });
+                items.push({ n: f.n, cat: f.cat, q: 1, u: '', kcal: f.kcal, p: f.p, f: f.f, c: f.c });
               }
               manual = false;
               drawPicked();
@@ -1378,15 +1378,69 @@
       }
 
       function sumOf() {
-        var s = { kcal: 0, p: 0, f: 0, c: 0 };
-        items.forEach(function (it) {
-          var q = Number(it.q) || 0;
-          s.kcal += (Number(it.kcal) || 0) * q;
-          s.p += (Number(it.p) || 0) * q;
-          s.f += (Number(it.f) || 0) * q;
-          s.c += (Number(it.c) || 0) * q;
+        // 统一走 Store.sumItems，修饰（做法/糖度/小料/杯型）由它应用
+        return Store.sumItems(items);
+      }
+
+      /** 旧记录没存 cat，按名称回查一次，好让「做法」等选项能补上 */
+      function catOf(it) {
+        if (it.cat) return it.cat;
+        var db = global.FOOD_DB || [];
+        for (var i = 0; i < db.length; i++) {
+          if (db[i][0] === it.n) return db[i][6];
+        }
+        return '';
+      }
+
+      /** 一组勾选项。single=true 为单选（做法/杯型/糖度），否则多选（小料） */
+      function chipRow(keyText, options, it, single) {
+        var F = global.FoodMods;
+        var mods = it.mods || [];
+        function inGroup(m) {
+          for (var i = 0; i < options.length; i++) if (options[i].id === m.id) return true;
+          return false;
+        }
+        var line = el('div', { class: 'fp-mod-line' }, [
+          el('span', { class: 'fp-mod-key', text: keyText })
+        ]);
+        options.forEach(function (o) {
+          var active = false;
+          mods.forEach(function (m) { if (m.id === o.id) active = true; });
+          line.appendChild(el('button', {
+            class: 'mod-chip' + (active ? ' on' : ''),
+            type: 'button',
+            title: o.note || '',
+            text: o.label,
+            onclick: function () {
+              it.mods = it.mods || [];
+              if (single) {
+                var wasOn = active;
+                it.mods = it.mods.filter(function (m) { return !inGroup(m); });
+                if (!wasOn) it.mods.push(F.normMod(o));
+              } else if (active) {
+                it.mods = it.mods.filter(function (m) { return m.id !== o.id; });
+              } else {
+                it.mods.push(F.normMod(o));
+              }
+              drawPicked();
+            }
+          }));
         });
-        return s;
+        return line;
+      }
+
+      /** 这一条食物该显示哪些修饰行（饮品给杯型/糖度/小料，生食材给做法） */
+      function modsBox(it) {
+        var F = global.FoodMods;
+        if (!F) return null;
+        var spec = F.specFor({ n: it.n, cat: catOf(it) });
+        var rows = [];
+        if (spec.cook.length) rows.push(chipRow('做法', spec.cook, it, true));
+        if (spec.size.length) rows.push(chipRow('杯型', spec.size, it, true));
+        if (spec.sugar.length) rows.push(chipRow('糖度', spec.sugar, it, true));
+        if (spec.toppings.length) rows.push(chipRow('小料', spec.toppings, it, false));
+        if (!rows.length) return null;
+        return el('div', { class: 'fp-mods' }, rows);
       }
 
       function drawPicked() {
@@ -1397,7 +1451,8 @@
         items.forEach(function (it, i) {
           var q = Number(it.q) || 1;
           var isGram = it.u === 'g';
-          pickedBox.appendChild(el('div', { class: 'fp-row' }, [
+          var one = Store.sumItem(it);
+          var row = el('div', { class: 'fp-row' }, [
             el('b', { text: it.n }),
             el('input', {
               type: 'number', min: isGram ? '1' : '0.5', step: isGram ? '10' : '0.5', value: q,
@@ -1408,7 +1463,7 @@
               }
             }),
             el('span', { class: 'fp-x', text: isGram ? '克' : '份' }),
-            el('i', { class: 'fp-k', text: Math.round((Number(it.kcal) || 0) * (Number(it.q) || 1)) + ' 千卡' }),
+            el('i', { class: 'fp-k', text: Math.round(one.kcal) + ' 千卡' }),
             el('button', {
               class: 'icon-btn', title: '移除',
               onclick: function () {
@@ -1416,12 +1471,19 @@
                 drawPicked();
               }
             }, [V.svg(V.icons.trash, 14)])
-          ]));
+          ]);
+          pickedBox.appendChild(row);
+          var mb = modsBox(it);
+          if (mb) pickedBox.appendChild(mb);
         });
         drawSum();
         // 「吃了什么」跟着食物明细走（用户没自己写的情况下）
         if (items.length) {
-          fContent.value = items.map(function (x) { return x.n; }).join(' + ');
+          var parts = items.map(function (x) {
+            var sm = (global.FoodMods && global.FoodMods.summary) ? global.FoodMods.summary(x.mods) : '';
+            return x.n + (sm ? '（' + sm + '）' : '');
+          });
+          fContent.value = parts.join(' + ');
         }
       }
 

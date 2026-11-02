@@ -1192,7 +1192,7 @@
     var n = String(it.n || '').trim();
     if (!n) return null;
     var kcal = Number(it.kcal);
-    return {
+    var out = {
       n: n,
       q: Number(it.q) > 0 ? Number(it.q) : 1,
       u: it.u === 'g' ? 'g' : '',
@@ -1201,17 +1201,60 @@
       f: isNaN(Number(it.f)) ? 0 : Number(it.f),
       c: isNaN(Number(it.c)) ? 0 : Number(it.c)
     };
+    // 分类只用于「该给哪些修饰选项」的判断，没有也不影响计算
+    if (it.cat) out.cat = String(it.cat);
+    // 做法 / 糖度 / 杯型 / 小料
+    var mods = (global.FoodMods && global.FoodMods.normMods)
+      ? global.FoodMods.normMods(it.mods)
+      : (Array.isArray(it.mods) ? it.mods : []);
+    if (mods.length) out.mods = mods;
+    return out;
+  }
+
+  /**
+   * 单条食物明细的营养（含修饰）。
+   * 计算顺序：基础×份数×杯型系数，再加糖度/小料（绝对）与做法（每 100g 换算）。
+   * 结果为负时钳到 0（例如给低糖饮品选「无糖」减过头）。
+   */
+  function sumItem(it) {
+    if (!it) return { kcal: 0, p: 0, f: 0, c: 0 };
+    var q = Number(it.q) || 0;
+    var mul = 1, ak = 0, ap = 0, af = 0, ac = 0;
+    (it.mods || []).forEach(function (m) {
+      if (!m || typeof m !== 'object') return;
+      if (m.k === 'mul') {
+        var v = Number(m.v);
+        mul *= (v > 0 ? v : 1);
+      } else if (m.k === 'per100') {
+        var f100 = q / 100;
+        ak += (Number(m.kcal) || 0) * f100;
+        ap += (Number(m.p) || 0) * f100;
+        af += (Number(m.f) || 0) * f100;
+        ac += (Number(m.c) || 0) * f100;
+      } else {
+        ak += Number(m.kcal) || 0;
+        ap += Number(m.p) || 0;
+        af += Number(m.f) || 0;
+        ac += Number(m.c) || 0;
+      }
+    });
+    return {
+      kcal: Math.max(0, (Number(it.kcal) || 0) * q * mul + ak),
+      p: Math.max(0, (Number(it.p) || 0) * q * mul + ap),
+      f: Math.max(0, (Number(it.f) || 0) * q * mul + af),
+      c: Math.max(0, (Number(it.c) || 0) * q * mul + ac)
+    };
   }
 
   /** 食物明细汇总（不四舍五入，供显示层处理） */
   function sumItems(items) {
     var s = { kcal: 0, p: 0, f: 0, c: 0 };
     (items || []).forEach(function (it) {
-      var q = Number(it && it.q) || 0;
-      s.kcal += (Number(it.kcal) || 0) * q;
-      s.p += (Number(it.p) || 0) * q;
-      s.f += (Number(it.f) || 0) * q;
-      s.c += (Number(it.c) || 0) * q;
+      var one = sumItem(it);
+      s.kcal += one.kcal;
+      s.p += one.p;
+      s.f += one.f;
+      s.c += one.c;
     });
     return s;
   }
@@ -4693,6 +4736,7 @@
     sleepByNight: sleepByNight,
     workoutType: workoutType,
     mealType: mealType,
+    sumItem: sumItem,
     sumItems: sumItems,
     r1: r1,
     isCheckinLike: isCheckinLike,
@@ -4784,6 +4828,9 @@
     MOOD_CROSS_MIN_DAYS: MOOD_CROSS_MIN_DAYS
   };
   global.validateSchema = validateSchema;
+  // 热量计算是公开 API：记饮食弹窗与看板必须用同一口径（含做法/糖度/小料）
+  Store.sumItem = sumItem;
+  Store.sumItems = sumItems;
   if (global.StorePlanner) {
     Object.assign(Store, global.StorePlanner);
   }

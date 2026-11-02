@@ -3524,6 +3524,51 @@ console.log('\n八大跨模块联动、三个问题修复与三个建议全链�
   eq('addMeal(breakfast) 自动触发 syncDietToPlans 打卡早餐计划',
     !!S.planRecordOfDate(S.getPlan(bfPlan.id), '2026-10-22'), true);
 
+  // 2.1 食物修饰（做法/杯型/糖度/小料）的热量口径
+  //     1g 油≈9kcal；做法按「每 100g 食材」加，所以要随克数缩放
+  const EGG = { n: '茄子', q: 200, u: 'g', kcal: 0.25, p: 0.01, f: 0.002, c: 0.06 };
+  eq('200g 生茄子 = 50 kcal', Math.round(S.sumItem(EGG).kcal), 50);
+
+  const HOME = S.sumItem(Object.assign({}, EGG, {
+    mods: [{ id: 'home', k: 'per100', kcal: 112, p: 0, f: 12, c: 1 }]
+  }));
+  eq('200g 茄子「家常炒」= 274 kcal（50 + 112×2）', Math.round(HOME.kcal), 274);
+  eq('做法加量按克数缩放（脂肪 0.4 + 24）', Math.round(HOME.f * 10) / 10, 24.4);
+
+  const LIGHT = S.sumItem(Object.assign({}, EGG, {
+    mods: [{ id: 'light', k: 'per100', kcal: 54, p: 0, f: 6, c: 0 }]
+  }));
+  eq('200g 茄子「少油清炒」= 158 kcal', Math.round(LIGHT.kcal), 158);
+  eq('家常炒明显高于少油清炒', HOME.kcal > LIGHT.kcal + 100, true);
+
+  const DRINK = S.sumItem({
+    n: '星冰乐', q: 400, u: 'g', kcal: 1, p: 0.015, f: 0.045, c: 0.1375,
+    mods: [
+      { id: 'large', k: 'mul', v: 1.2 },
+      { id: 'pearl', k: 'add', kcal: 100, p: 1, f: 0, c: 22 }
+    ]
+  });
+  eq('大杯(×1.2) + 珍珠(+100) = 580 kcal', Math.round(DRINK.kcal), 580);
+
+  const CLAMPED = S.sumItem({
+    n: '柠檬水', q: 300, u: 'g', kcal: 0.1, p: 0, f: 0, c: 0.0267,
+    mods: [{ id: 'none', k: 'add', kcal: -200, p: 0, f: 0, c: -40 }]
+  });
+  eq('减糖减过头钳到 0，不出负数', CLAMPED.kcal, 0);
+
+  eq('sumItems 逐条应用修饰后求和',
+    Math.round(S.sumItems([EGG, Object.assign({}, EGG, {
+      mods: [{ id: 'home', k: 'per100', kcal: 112, p: 0, f: 12, c: 1 }]
+    })]).kcal), 324);
+
+  const nfMod = S._ctx.normFoodItem({
+    n: '茄子', q: 200, u: 'g', kcal: 0.25, cat: '蔬菜',
+    mods: [{ id: 'home', k: 'per100', kcal: 112 }]
+  });
+  eq('normFoodItem 保留分类（供勾选项判断）', nfMod.cat, '蔬菜');
+  eq('normFoodItem 保留修饰', (nfMod.mods || []).length, 1);
+  eq('无修饰时不写入 mods 字段', S._ctx.normFoodItem({ n: '米饭', q: 200, u: 'g', kcal: 1.16 }).mods, undefined);
+
   // 3. 问题 3：番茄钟 finishFocus 同时联动打卡型(checkin)、进度型(progress)、时长型(duration)复习计划及课程
   const cMath = S.addCourse({ name: '高等数学', day: 1, periodId: 'p1', startWeek: 1, endWeek: 16 });
   const mathCheckinPlan = S.addPlan({
