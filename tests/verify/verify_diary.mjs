@@ -535,7 +535,7 @@ await p.evaluate(() => {
 });
 await p.waitForTimeout(450);
 const G3 = await p.evaluate(() => document.querySelector('.cp-view.cp-active').textContent);
-check('文件备份说明写明「日记与照片都靠它迁移」', /唯一同时包含「日记」和「吃饭照片」/.test(G3));
+check('文件备份说明写明「只装数据、不含照片」', /文件备份只装数据/.test(G3) && /不含吃饭照片/.test(G3));
 
 await p.evaluate(() => {
   const btn = [...document.querySelectorAll('.cp-view.cp-active button')].find(x => /生成同步文件/.test(x.textContent));

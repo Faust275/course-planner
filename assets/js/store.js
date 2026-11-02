@@ -393,6 +393,10 @@
         fav: { poems: [], words: [] },   // 收藏的每日一句（索引）与每日一词（单词）
         diet: {            // 每日热量目标与三餐配比
           goal: 0,         // 0 = 没设置
+          target: {        // 体重目标联动：留空 = 不启用，仍按手设 goal / 消耗走
+            mode: '',      // '' | 'maintain' | 'lose' | 'gain'
+            rate: 0.5      // 每周目标变化量（kg）
+          },
           ratio: { breakfast: 30, lunch: 40, dinner: 30, snack: 0 },
           protein: 0,      // 三大营养素目标（g），0 = 不显示
           fat: 0,

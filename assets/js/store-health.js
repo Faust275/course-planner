@@ -301,6 +301,45 @@
    * 体重取窗口首尾各最多 3 条均值，压掉单次称重的水分/宿便噪声。
    * 数据不足（跨度 < 10 天或摄入记录 < 7 天）返回 null，调用方退回公式。
    */
+  /**
+   * 按体重目标反推今日建议摄入。
+   *
+   * 关键点：用「实测消耗」而不是公式。实测 TDEE 已经把「你实际掉秤/涨秤的速度」
+   * 吸收进去了（TDEE = 平均摄入 − 体重变化×7700/天），所以拿它加目标缺口，
+   * 得到的建议自带纠偏——吃多了掉秤变慢 → 实测 TDEE 偏低 → 建议值随之下调。
+   * 这也是为什么不需要再额外算一个「误差修正」：修正已经在 TDEE 里了。
+   *
+   * 数据不够（没记满两周体重和饮食）时退回公式，并在 source 上标明。
+   */
+  dietSuggest: function () {
+    var cfg = (Store.state.settings.diet && Store.state.settings.diet.target) || {};
+    var mode = cfg.mode || '';
+    if (!mode || mode === 'off') return null;
+
+    var ad = this.estimateTDEEAdaptive();
+    var fm = this.estimateTDEE();
+    var base = ad ? ad.tdee : (fm ? fm.tdee : null);
+    if (!base) return null;
+
+    var rate = Number(cfg.rate);
+    if (!(rate > 0)) rate = mode === 'maintain' ? 0 : 0.5;
+    var weekly = mode === 'lose' ? -rate : (mode === 'gain' ? rate : 0);
+    var dailyGap = Math.round(weekly * 7700 / 7);
+    var suggest = Math.max(1000, Math.round(base + dailyGap));
+    var actualRate = ad ? Math.round(ad.deltaKg / ad.spanDays * 7 * 100) / 100 : null;
+
+    return {
+      mode: mode,
+      targetRate: Math.round(weekly * 100) / 100,
+      tdee: base,
+      source: ad ? 'adaptive' : 'formula',
+      suggestedKcal: suggest,
+      actualRate: actualRate,
+      gapKcal: dailyGap,
+      detail: ad
+    };
+  },
+
   estimateTDEEAdaptive: function (days) {
     days = days || 21;
     var log = (Store.state.weightLog || []).filter(function (w) {

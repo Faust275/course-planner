@@ -1743,7 +1743,7 @@
           }),
           el('p', {
             style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '文件备份是唯一同时包含「日记」和「吃饭照片」的迁移方式（同步不含这两样）。有照片时导出的是 zip（backup.json + photos/ 原图），没有照片则是单个 json。里面带着日记正文，请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
+            text: '文件备份只装数据（含全部日记正文），不含吃饭照片——照片请用下面的「照片管理 → 导出到相册」单独保存。备份文件请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
           }),
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
             keysBox,
@@ -1943,6 +1943,66 @@
           root.appendChild(host);
         })();
         root.appendChild(dataCard);
+
+        /* ---- 照片管理（照片不进备份，单独管） ---- */
+        (function () {
+          var host = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } });
+          host.appendChild(el('div', { class: 'section-title' }, ['照片管理']));
+
+          var stat = el('div', {
+            style: { fontSize: '12.5px', color: 'var(--text-2)', lineHeight: '1.9' },
+            text: '读取中…'
+          });
+          host.appendChild(stat);
+
+          var btnGallery = el('button', {
+            class: 'btn',
+            title: '把本机所有吃饭照片存进手机相册；桌面 / 网页版会打包成 zip 下载',
+            onclick: function () { exportPhotosToGallery(); }
+          }, [V.svg(V.icons.download, 16), '导出到相册']);
+          var btnOrphan = el('button', {
+            class: 'btn',
+            title: '删掉没有任何餐记录引用的照片',
+            onclick: function () { cleanOrphanPhotos(); }
+          }, ['清理无主照片']);
+          var btnClear = el('button', {
+            class: 'btn btn-danger',
+            onclick: function () { clearAllPhotos(); }
+          }, ['清空照片']);
+
+          host.appendChild(el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } },
+            [btnGallery, btnOrphan, btnClear]));
+          host.appendChild(el('p', {
+            style: { fontSize: '11.5px', color: 'var(--text-3)', margin: '8px 0 0', lineHeight: '1.7' },
+            text: '照片不进备份文件，换设备前请先导出到相册。进了相册的照片会跟着你的云同步走，也能直接分享。导出后 App 里不会自动删，需要时点「清空照片」。'
+          }));
+
+          function refreshPhotos() {
+            if (!global.Media || !global.Media.usage) {
+              stat.textContent = '当前环境不支持本机照片库';
+              btnGallery.disabled = true; btnOrphan.disabled = true; btnClear.disabled = true;
+              return;
+            }
+            global.Media.usage().then(function (u) {
+              var orphan = Math.max(0, (u.count || 0) - countUsedPhotoKeys());
+              stat.innerHTML = '';
+              if (!u.count) {
+                stat.appendChild(el('div', { text: '还没有照片。记饮食时可以拍照，一张一个食品。' }));
+              } else {
+                stat.appendChild(el('div', {
+                  text: '共 ' + u.count + ' 张 · ' + humanSize(u.bytes) +
+                    (orphan ? '（其中 ' + orphan + ' 张已无对应记录）' : '')
+                }));
+              }
+              btnGallery.disabled = !u.count;
+              btnOrphan.disabled = !orphan;
+              btnClear.disabled = !u.count;
+            }).catch(function () { stat.textContent = '照片库读取失败'; });
+          }
+          global.__refreshPhotos = refreshPhotos;
+          refreshPhotos();
+          root.appendChild(host);
+        })();
 
         /* ---- 自动备份（清空 / 覆盖前的回滚点） ---- */
         var bkCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
@@ -2841,6 +2901,132 @@
     }).catch(function () { return askPassword(title, hint); });
   }
 
+  /* ---------------- 照片：统计 / 导出到相册 / 清理 ---------------- */
+
+  /** 被餐记录引用的照片 key 集合 */
+  function usedPhotoKeySet() {
+    var set = {};
+    (Store.state.meals || []).forEach(function (m) {
+      (m.photos || []).forEach(function (p) { if (p && p.k) set[p.k] = 1; });
+    });
+    return set;
+  }
+  function countUsedPhotoKeys() { return Object.keys(usedPhotoKeySet()).length; }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var s = String(fr.result || '');
+        resolve(s.slice(s.indexOf(',') + 1));   // 去掉 data:image/jpeg;base64, 前缀
+      };
+      fr.onerror = function () { reject(fr.error || new Error('读取照片失败')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  function exportPhotosToGallery() {
+    if (!global.Media || !global.Media.all) { UI.toast('当前环境不支持本机照片库', 'err'); return; }
+    global.Media.all().then(function (list) {
+      if (!list || !list.length) { UI.toast('没有照片可导出'); return; }
+      var cap = global.Capacitor;
+      var plugin = cap && cap.Plugins && cap.Plugins.SaveToGallery;
+      if (plugin && typeof plugin.saveImage === 'function') {
+        saveViaNative(plugin, list);
+        return;
+      }
+      savePhotosAsZip(list);
+    }).catch(function (e) {
+      UI.toast('读取照片失败：' + (e && e.message ? e.message : e), 'err');
+    });
+
+    /** 安卓：一张一张写进系统相册 */
+    function saveViaNative(plugin, list) {
+      var ok = 0, bad = 0, legacy = 0, i = 0;
+      UI.toast('正在存入相册（0/' + list.length + '）…');
+      (function next() {
+        if (i >= list.length) {
+          var msg = '已存入相册 ' + ok + ' 张';
+          if (legacy) msg += '（其中 ' + legacy + ' 张因系统版本较低，存到了 App 私有目录）';
+          if (bad) msg += '，' + bad + ' 张失败';
+          UI.toast(msg, bad ? 'err' : 'ok');
+          if (global.__refreshPhotos) global.__refreshPhotos();
+          return;
+        }
+        var item = list[i++];
+        blobToBase64(item.blob).then(function (b64) {
+          return plugin.saveImage({ base64: b64, name: 'cp-meal-' + item.key + '.jpg' });
+        }).then(function (r) {
+          ok++;
+          if (r && r.legacy) legacy++;
+          next();
+        }).catch(function () { bad++; next(); });
+      })();
+    }
+
+    /** 网页 / 桌面：没有相册可写，打成 zip 让用户自己解压 */
+    function savePhotosAsZip(list) {
+      if (!global.Zip) { UI.toast('当前环境不支持打包', 'err'); return; }
+      UI.toast('正在打包 ' + list.length + ' 张照片…');
+      var files = [], chain = Promise.resolve();
+      list.forEach(function (p) {
+        chain = chain.then(function () {
+          return p.blob.arrayBuffer().then(function (buf) {
+            var ext = (global.BackupPhotos && global.BackupPhotos.extOf)
+              ? global.BackupPhotos.extOf(p.blob.type) : 'jpg';
+            files.push({ name: 'photos/' + p.key + '.' + ext, bytes: new Uint8Array(buf) });
+          }).catch(function () {});
+        });
+      });
+      chain.then(function () {
+        if (!files.length) { UI.toast('照片读取失败', 'err'); return; }
+        saveOut('吃饭照片-' + DateUtil.toStr(DateUtil.today()) + '.zip',
+          new Blob([global.Zip.create(files)], { type: 'application/zip' }),
+          'zip', 'application/zip',
+          '这是照片包，解压后 photos/ 里就是原图。照片不进备份文件，请单独保管。');
+      });
+    }
+  }
+
+  function cleanOrphanPhotos() {
+    if (!global.Media || !global.Media.all) return;
+    global.Media.all().then(function (list) {
+      var used = usedPhotoKeySet();
+      var orphans = (list || []).filter(function (p) { return !used[p.key]; }).map(function (p) { return p.key; });
+      if (!orphans.length) { UI.toast('没有无主照片'); return; }
+      V.confirm({
+        title: '清理无主照片',
+        message: '有 ' + orphans.length + ' 张照片已经没有任何餐记录引用（多半是删餐时没清干净，或从旧备份恢复后对不上）。删掉不影响任何记录。',
+        danger: true, okText: '删除 ' + orphans.length + ' 张'
+      }).then(function (ok) {
+        if (!ok) return;
+        global.Media.del(orphans).then(function () {
+          UI.toast('已清理 ' + orphans.length + ' 张');
+          if (global.__refreshPhotos) global.__refreshPhotos();
+        });
+      });
+    });
+  }
+
+  function clearAllPhotos() {
+    if (!global.Media || !global.Media.usage) return;
+    global.Media.usage().then(function (u) {
+      if (!u || !u.count) { UI.toast('没有照片'); return; }
+      V.confirm({
+        title: '清空全部照片',
+        message: '将删除本机 ' + u.count + ' 张吃饭照片（' + humanSize(u.bytes) +
+          '）。餐记录本身不受影响，只是照片位置会显示「照片缺失」。建议先「导出到相册」。',
+        danger: true, okText: '全部删除'
+      }).then(function (ok) {
+        if (!ok) return;
+        global.Media.clearAll().then(function () {
+          UI.toast('已清空照片');
+          if (global.__refreshPhotos) global.__refreshPhotos();
+        });
+      });
+    });
+  }
+
   function humanSize(n) {
     if (!n) return '0 KB';
     if (n >= 1024 * 1024) return (Math.round(n / 1024 / 102.4) / 10) + ' MB';
@@ -2897,37 +3083,9 @@
       });
     }
 
-    // 没有照片，或环境不支持打包 → 走原来的纯数据路径，行为完全不变
-    var canPack = !!(global.Media && global.Media.usage && global.BackupPhotos && global.Zip);
-    if (!canPack) { exportPlain(); return; }
-
-    global.Media.usage().then(function (u) {
-      if (!u || !u.count) { exportPlain(); return; }
-      UI.toast('正在打包 ' + u.count + ' 张照片…');
-      global.BackupPhotos.pack(text).then(function (p) {
-        if (!p.count) { exportPlain(); return; }
-        var hint = '包含 ' + p.count + ' 张照片（' + humanSize(p.photoBytes) +
-          '）与全部数据。解压后 photos/ 里就是照片原图，backup.json 与旧版 JSON 备份一致，可单独取用。';
-        function withPhotos() {
-          if (Store.markBackupExported) Store.markBackupExported();
-          saveOut('课表备份-' + stamp + '.zip', new Blob([p.bytes], { type: 'application/zip' }),
-            'zip', 'application/zip', hint);
-        }
-        if (!encrypted) { withPhotos(); return; }
-        // zip 是二进制，加密容器目前只吃文本。不静默降级，让用户自己选
-        V.confirm({
-          title: '加密 与 照片 只能二选一',
-          message: '加密备份目前只支持纯数据，装不下照片。要带照片就导出未加密的 zip —— 里面是吃饭照片原图，请自己保管好。',
-          okText: '带照片（不加密）',
-          cancelText: '加密（不含照片）'
-        }).then(function (wantPhotos) {
-          if (wantPhotos) withPhotos(); else exportPlain();
-        });
-      }).catch(function (e) {
-        UI.toast('打包失败，已改为纯数据导出：' + (e && e.message ? e.message : e), 'err');
-        exportPlain();
-      });
-    }).catch(function () { exportPlain(); });
+    // 备份只管数据。照片走另一条路（导出到相册），不塞进备份文件——
+    // 塞进去的照片只有本 App 能读，用户反而看不见；进了相册才是他真正能管的东西。
+    exportPlain();
   }
 
   function importData() {
@@ -4172,6 +4330,7 @@
     function saveAll() {
       Store.setDiet({
         goal: parseFloat(fGoal.value) || 0,
+        target: { mode: targetMode, rate: parseFloat(fTargetRate.value) || 0.5 },
         ratio: {
           breakfast: parseFloat(ratioInputs.breakfast.value) || 0,
           lunch: parseFloat(ratioInputs.lunch.value) || 0,
@@ -4186,6 +4345,43 @@
       view.render();
     }
 
+    /* ---- 体重目标联动（按实测消耗反推建议摄入） ---- */
+    var dt = d.target || { mode: '', rate: 0.5 };
+    var targetMode = dt.mode || '';
+    var fTargetRate = V.input({
+      type: 'number', min: '0.1', max: '1', step: '0.1',
+      value: String(dt.rate || 0.5), class: 'input'
+    });
+    var targetBox = el('div', { class: 'ocr-hint' });
+    var fTargetMode = V.segment([
+      { value: '', label: '不启用' },
+      { value: 'maintain', label: '维持' },
+      { value: 'lose', label: '减脂' },
+      { value: 'gain', label: '增肌' }
+    ], targetMode, function (v) { targetMode = v; drawTargetHint(); });
+    var targetRateRow = el('div', {}, [V.field('每周目标变化（kg）', fTargetRate)]);
+
+    function drawTargetHint() {
+      Store.setDiet({ target: { mode: targetMode, rate: parseFloat(fTargetRate.value) || 0.5 } });
+      targetRateRow.style.display = (targetMode === 'lose' || targetMode === 'gain') ? '' : 'none';
+      if (!targetMode) {
+        targetBox.innerHTML = '不启用时，每日目标按上面手填的数字；填 0 就按消耗估算。';
+        return;
+      }
+      var s = Store.dietSuggest();
+      if (!s) {
+        targetBox.innerHTML = '还缺体重或消耗数据。补全下面的个人资料，或先记两周体重与饮食。';
+        return;
+      }
+      var rateText = s.targetRate === 0 ? '维持体重'
+        : '每周 ' + (s.targetRate > 0 ? '+' : '') + s.targetRate + ' kg';
+      targetBox.innerHTML = '建议每日摄入 <b>' + s.suggestedKcal + '</b> 千卡（' +
+        (s.source === 'adaptive' ? '实测' : '公式') + '消耗 ' + s.tdee +
+        (s.gapKcal ? ' ' + (s.gapKcal > 0 ? '+' : '−') + Math.abs(s.gapKcal) : '') +
+        '，' + rateText + '）';
+    }
+    fTargetRate.addEventListener('input', drawTargetHint);
+
     var goalCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [
       el('div', { class: 'section-title' }, ['每日热量目标']),
       el('p', {
@@ -4193,6 +4389,14 @@
         text: '设一个每天想吃到多少千卡。有了目标，记录饮食时会提示这一餐还剩多少额度，超过会标红。填 0 就是只用记录、不设目标。'
       }),
       V.field('每日目标（千卡）', fGoal),
+      el('div', { class: 'sub-title', style: { marginTop: '12px' }, text: '按体重目标自动算' }),
+      el('p', {
+        class: 'ocr-hint', style: { marginBottom: '8px' },
+        text: '选一个目标，建议摄入按你实测的消耗自动算——吃多了掉秤慢，消耗估算会跟着降，建议值自己会校准。启用后上面那个手填数字就不参与计算了。'
+      }),
+      fTargetMode,
+      targetRateRow,
+      targetBox,
       el('div', { class: 'sub-title', style: { marginTop: '12px' }, text: '三餐配比' }),
       ratioBox,
       ratioHint,
@@ -4219,6 +4423,7 @@
         }, ['留出加餐 25/35/30/10'])
       ])
     ]);
+    drawTargetHint();
     root.appendChild(goalCard);
 
     var estCard = el('div', { class: 'card', style: { padding: '16px 18px', marginBottom: '14px' } }, [

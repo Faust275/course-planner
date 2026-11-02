@@ -294,8 +294,13 @@
     var netKcal = (tdeeVal != null) ? Math.round(kcalIn - tdeeVal) : null;
 
     var dietGoal = Number((Store.state.settings.diet && Store.state.settings.diet.goal) || 0);
-    var dietKcalGoal = dietGoal > 0 ? dietGoal : (baseTdee || 2000);
-    var dietBonusKcal = Math.round(activeKcal * 0.8);
+    var dietSuggest = this.dietSuggest ? this.dietSuggest() : null;
+    // 开了目标联动就用建议值；否则尊重用户手设；都没有就按消耗走
+    var dietKcalGoal = dietSuggest ? dietSuggest.suggestedKcal
+      : (dietGoal > 0 ? dietGoal : (baseTdee || 2000));
+    // 实测消耗已含日常活动，再加运动加成会重复计算；只有公式估算才补
+    var dietBonusKcal = (dietSuggest && dietSuggest.source === 'adaptive')
+      ? 0 : Math.round(activeKcal * 0.8);
     var dynamicDietGoal = dietKcalGoal + dietBonusKcal;
 
     var dayWeightRec = (Store.state.weightLog || []).filter(function (w) { return w && w.date === dateStr; })[0];
@@ -323,6 +328,7 @@
       tdeeSource: tdeeAdaptive ? 'adaptive' : (tdee ? 'formula' : null),
       tdeeDetail: tdeeAdaptive || null,
       dietGoal: dietGoal, dietKcalGoal: dietKcalGoal, dietBonusKcal: dietBonusKcal, dynamicDietGoal: dynamicDietGoal,
+      dietSuggest: dietSuggest,
       weight: weight, sleepMinH: sleepMinH,
       sleepMet: sleepMin >= sleepMinH * 60
     };

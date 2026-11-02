@@ -8,6 +8,7 @@ import com.faust275.courseplanner.plugin.NotifyPlugin;
 import com.faust275.courseplanner.plugin.BackupExportPlugin;
 import com.faust275.courseplanner.plugin.VaultPlugin;
 import com.faust275.courseplanner.plugin.HealthSyncWorker;
+import com.faust275.courseplanner.plugin.SaveToGalleryPlugin;
 import com.faust275.courseplanner.bridge.DataBridge;
 import android.os.Bundle;
 import android.webkit.WebView;
@@ -34,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NotifyPlugin.class);
         registerPlugin(BackupExportPlugin.class);
         registerPlugin(VaultPlugin.class);
+        registerPlugin(SaveToGalleryPlugin.class);
         super.onCreate(savedInstanceState);
 
         // 注入桌面小组件数据同步桥（window.AndroidBridge.pushSnapshot）

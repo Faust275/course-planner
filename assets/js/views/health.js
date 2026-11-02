@@ -640,6 +640,37 @@
                 (h.dynamicDietGoal > 0 ? '（今日动态上限 ' + h.dynamicDietGoal + ' kcal）' : '')
         }));
       }
+      // 体重目标联动：按实测消耗反推今天该吃多少
+      if (h.dietSuggest) {
+        var ds = h.dietSuggest;
+        var modeText = ds.mode === 'lose' ? '减脂' : (ds.mode === 'gain' ? '增肌' : '维持');
+        var rateText = ds.targetRate === 0 ? '维持体重'
+          : '每周 ' + (ds.targetRate > 0 ? '+' : '') + ds.targetRate + ' kg';
+        var left = ds.suggestedKcal - h.kcalIn;
+        var lines = ['按' + (ds.source === 'adaptive' ? '实测' : '公式') + '消耗 ' + ds.tdee + ' kcal' +
+          (ds.gapKcal ? ' ' + (ds.gapKcal > 0 ? '+' : '−') + Math.abs(ds.gapKcal) : '') +
+          (ds.actualRate != null ? '；最近实际 ' + (ds.actualRate > 0 ? '+' : '') + ds.actualRate + ' kg/周' : '')];
+        if (h.kcalIn > 0) {
+          lines.push(left >= 0 ? ('今天还可以吃约 ' + left + ' kcal') : ('已超出 ' + Math.abs(left) + ' kcal'));
+        }
+        children.push(el('div', {
+          style: {
+            marginTop: '10px', padding: '9px 11px', borderRadius: '10px',
+            background: 'var(--bg-2)', border: '1px solid var(--line)'
+          }
+        }, [
+          el('div', { style: { display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' } }, [
+            el('b', { style: { fontSize: '17px', color: 'var(--primary)' }, text: ds.suggestedKcal }),
+            el('span', { style: { fontSize: '11.5px', color: 'var(--text-2)' }, text: 'kcal 今日建议 · ' + modeText + '（' + rateText + '）' })
+          ]),
+          el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '4px', lineHeight: '1.7' },
+            text: lines.join('；') })
+        ]));
+        if (ds.source !== 'adaptive') {
+          children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '5px' },
+            text: '现在还是公式估算。连续记满两周体重和饮食后会自动改用实测消耗，建议值也会跟着校准。' }));
+        }
+      }
       if (h.tdeeSource === 'adaptive' && h.tdeeDetail) {
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--green)', marginTop: '8px', fontWeight: '600' },
           text: '✔ 消耗来自近 ' + h.tdeeDetail.spanDays + ' 天体重趋势实测（平均摄入 ' + h.tdeeDetail.avgIntake +
