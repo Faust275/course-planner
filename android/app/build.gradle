@@ -104,6 +104,8 @@ dependencies {
     // 协程：插件用 Kotlin 协程调用 Health Connect 的 suspend API
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    // 后台周期任务：WorkManager 驱动「真·后台健康同步」（HealthSyncWorker.kt）
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
 }
 
 apply from: 'capacitor.build.gradle'

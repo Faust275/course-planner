@@ -1,6 +1,6 @@
 # 接手文档 · 课程表规划 PWA（course-planner）
 
-> 最后更新：**2026-10-24**（已含安卓打包、健康联动、我的活动界面）
+> 最后更新：**2026-11-02**（本轮：AAB 发布包 / 平板适配 / WorkManager 后台同步脚手架 / e2e 日期脆弱性修复 / OCR 性能断言软化 / 模块收敛核对）
 > 读者：接手后续开发的工程师 / 新对话里的 AI 助手。
 > 想最快上手，先看同目录的 **`START-HERE.md`**，本文是完整手册。
 
@@ -18,7 +18,7 @@
 | 样式/e2e | `npm run e2e` → **83 个 `verify_*.mjs` 全过**（Playwright，需 Chromium） |
 | Lint | `npm run lint` → **0 错误**（ESLint flat config） |
 | CI | `.github/workflows/ci.yml`：lint + 单测 + build + e2e 双 job |
-| 安卓 | Capacitor 8，minSdk **26**，release APK 约 **6.07 MB**（debug 约 7.6 MB） |
+| 安卓 | Capacitor 8，minSdk **26**，release 产物已切换为 **AAB**（`android-apk.yml` 产出 `CoursePlanner-signed.aab`；debug 为 `CoursePlanner-debug-not-upgradeable.aab`） |
 | 数据版本 | `SCHEMA_VERSION = 3`，IndexedDB `course-planner:v1`（回退 localStorage） |
 | 远程 | GitHub `Faust275/course-planner`，Pages 已上线 `https://faust275.github.io/course-planner/` |
 
@@ -261,12 +261,12 @@ node tools/ci-secrets.mjs D:\keys\happy-course.keystore
 
 ## 7. 待办 / 下一步（按价值排序）
 
-1. **签名发布包**：keystore + release AAB，才能上架/正式分发（现在只有 debug）。
-2. **横屏 / 平板适配**：窄屏 390px 已验证无溢出，但横屏课表矩阵未专门适配。
-3. **真·后台同步**：若要 App 完全退出后仍拉健康数据，需 `WorkManager` + `READ_HEALTH_DATA_IN_BACKGROUND` + 原生→Web 回写桥。**性价比低**：每次启动的 `autoSync` 已覆盖多数场景，且国产 ROM 后台保活不可靠。
-4. 复盘加趋势图、热力图与计划联动。
-5. 少量跨文件全局继续收敛（低优先级）。
-6. **安全**：历史 token 曾出现在命令与日志中，建议到 GitHub 吊销重发。
+1. **签名发布包（本轮完成）**：`android-apk.yml` 已改为产出 **AAB**（`bundleRelease`/`bundleDebug`，缺 keystore 时直接抛错），产物收为 `CoursePlanner-signed.aab` / `CoursePlanner-debug-not-upgradeable.aab`，版本号绑定 `package.json` 天然一致。**剩外部一步**：Google Play 开发者账号 + Play Console 建应用 +  enrol Play App Signing（配好 `ANDROID_KEYSTORE_BASE64` 等 Secrets 后 CI 自动出可上架的签名 AAB；上传与审核在 Play Console 手动完成）。
+2. **横屏 / 平板适配（本轮完成基础档）**：新增 `@media (min-width:768px) and (max-width:1023px)` 平板块——切回 row 布局、显示左侧栏、隐藏底部 tabbar、课表按可用宽度收缩（不再被 760px 最小宽度撑出横向滚动）。手机(≤767)与桌面(≥1024) 既有规则未动。真·双栏（如日历+今日并排）属后续增强。
+3. **真·后台同步（本轮已实现脚手架）**：新增 `plugin/HealthSyncWorker.kt`（`PeriodicWorkRequest` 15 分钟周期）+ `MainActivity` 注册调度 + `AndroidManifest.xml` 声明 `READ_HEALTH_DATA_IN_BACKGROUND`（受限权限）。进程**存活**时通过 `MainActivity` 持有的 WebView 驱动既有 `HealthConnect.autoSync()` + `persistAllToStore()`；进程被回收后 no-op（真正同步顺延到下次启动）。**仍属性价比低**：受限权限需 Google Play 审核才完整生效，国产 ROM 后台保活不可靠；本机无 Android SDK，未做 Gradle 编译验证，需 `npx cap sync android` 后本地或 CI 构建确认。
+4. 复盘加趋势图、热力图与计划联动（本轮未做，用户未点名）。
+5. **模块收敛（本轮已核完）**：Store 域拆分在 v1.4.6 已收官——业务域全部独立成文件（`store-course/-tasks/-health/-ledger/-plans/-reward/-io/-backup/-records/-stats/-planner/-presets` 等），核心只留 `Store._ctx` + 状态 / 持久化 / 迁移。契约集中在 `cp-registry.js`（`CORE_CONTRACTS` + `selfCheck`），已核对 `index.html` 构建内联的契约副本与 `cp-registry.js` **逐模块完全一致**（Store/UI/Router/StatsCalc/App 共 92 个方法零差异），`npm test` 1294 条全过；无遗留未拆分业务域。
+6. **安全**：历史 token 曾出现在命令与日志中，建议到 GitHub 吊销重发（见文末）。
 
 ---
 

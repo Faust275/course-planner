@@ -139,6 +139,9 @@
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_DISTANCE" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <!-- 后台读取健康数据（受限权限）：仅声明，完整生效需通过 Google Play 审核，
+         否则等价于前台/应用内读取；进程被回收后的纯后台读取仍受国内 ROM 保活限制。 -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

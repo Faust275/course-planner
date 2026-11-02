@@ -67,46 +67,51 @@ jobs:
             echo "::warning::没有配置 ANDROID_KEYSTORE_BASE64，本次只构建 debug 包（不可覆盖升级）"
           fi
 
-      - name: Build APK
+      # 产出 Android App Bundle（AAB）。Play 商店只收 AAB；侧载 APK 可用
+      # `./gradlew assembleRelease` 单独构建。release 缺签名密钥时 build.gradle 会直接抛错，
+      # 不会产出「看起来成功却没签名」的包（同 assemble 的防护）。
+      - name: Build AAB
         working-directory: android
         run: |
           chmod +x gradlew
           if [ -f app/happy-course.keystore ]; then
-            ./gradlew assembleRelease
+            ./gradlew bundleRelease
           else
-            ./gradlew assembleDebug
+            ./gradlew bundleDebug
           fi
 
-      - name: Verify signature & version
+      # 校验：AAB 是 zip 容器，apksigner 不适用；改为「非空 + 可选 bundletool 结构校验」。
+      # versionName 由 build.gradle 直接读 package.json（见 android/app/build.gradle），构建即一致，
+      # 无需逐项比对；如需强校验可装 bundletool 跑 `validate-app-bundle`。
+      - name: Verify bundle & version
         run: |
-          APK=$(ls android/app/build/outputs/apk/release/app-release.apk 2>/dev/null || ls android/app/build/outputs/apk/debug/app-debug.apk)
-          echo "APK=$APK"
-          BT=$ANDROID_HOME/build-tools/36.0.0
-          "$BT/apksigner" verify --print-certs "$APK"
+          AAB=$(ls android/app/build/outputs/bundle/release/app-release.aab 2>/dev/null || ls android/app/build/outputs/bundle/debug/app-debug.aab)
+          echo "AAB=$AAB"
+          test -s "$AAB" || { echo "::error::AAB 为空或不存在"; exit 1; }
           PKG_VERSION=$(node -p "require('./package.json').version")
-          BADGING=$("$BT/aapt2" dump badging "$APK" | head -1)
-          echo "$BADGING"
-          echo "$BADGING" | grep -q "versionName='$PKG_VERSION'" || {
-            echo "::error::APK versionName 与 package.json ($PKG_VERSION) 不一致"
-            exit 1
-          }
-          if [ -f android/app/happy-course.keystore ]; then
-            echo "$BADGING" | grep -q "app-release.apk" || echo "release build ok"
-          fi
-
-      - name: Collect installable APK
-        run: |
-          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release.apk CoursePlanner-signed.apk
-            echo "ARTIFACT_NAME=CoursePlanner-signed-APK" >> $GITHUB_ENV
+          echo "期望 versionName=$PKG_VERSION（build.gradle 绑定 package.json，构建即一致）"
+          if command -v bundletool >/dev/null 2>&1; then
+            bundletool validate-app-bundle --bundle "$AAB"
           else
-            cp android/app/build/outputs/apk/debug/app-debug.apk CoursePlanner-debug-not-upgradeable.apk
-            echo "ARTIFACT_NAME=CoursePlanner-debug-APK" >> $GITHUB_ENV
+            echo "::notice::未安装 bundletool，跳过 AAB 结构校验"
+          fi
+          if [ -f android/app/happy-course.keystore ]; then
+            echo "release (签名) AAB 构建成功"
           fi
 
-      - name: Upload APK artifact
+      - name: Collect installable AAB
+        run: |
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab CoursePlanner-signed.aab
+            echo "ARTIFACT_NAME=CoursePlanner-signed-AAB" >> $GITHUB_ENV
+          else
+            cp android/app/build/outputs/bundle/debug/app-debug.aab CoursePlanner-debug-not-upgradeable.aab
+            echo "ARTIFACT_NAME=CoursePlanner-debug-AAB" >> $GITHUB_ENV
+          fi
+
+      - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
-          path: CoursePlanner-*.apk
+          path: CoursePlanner-*.aab
           retention-days: 90

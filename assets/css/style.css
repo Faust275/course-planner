@@ -972,6 +972,19 @@ input[type="range"]::-moz-range-thumb {
   .cp-modal { max-width: 560px; max-height: 92dvh; border-radius: 14px; }
 }
 
+/* —— 平板（竖屏 768–1023px）：用左侧栏导航，内容占满，课表按可用宽度收缩 —— */
+/* 这一档原来落在「手机」区间（底部 tabbar + 侧栏隐藏），平板上很别扭；
+   这里单独切回 row 布局、显示侧栏、隐藏底部 tabbar，课表不再被 760px 最小宽度撑出横向滚动。
+   只覆盖 768–1023px，不动手机(≤767)与桌面(≥1024) 的既有规则。 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .cp-app { flex-direction: row; }
+  .cp-sidebar { display: flex; }
+  .cp-tabbar { display: none; }
+  .cp-view-wrap { padding: 16px 18px; }
+  .cp-tt { min-width: 0; }
+  .cp-modal { max-width: 600px; }
+}
+
 /* —— 宽屏：内容限宽 + 两栏 —— */
 @media (min-width: 1024px) {
   .cp-view-wrap { padding: 22px 26px; }
