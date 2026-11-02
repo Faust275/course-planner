@@ -93,6 +93,8 @@ npm run ci                  # build + test + bench:ocr + lint
 | `store-planner.js` | 计划/目标/统计等纯计算 | 1,960 |
 | `store-presets.js` | 静态表（树、成就、分类） | 340 |
 | `food-mods.js` | 食物修饰表（做法/杯型/糖度/小料）与热量口径 | 150 |
+| `zip.js` | 零依赖 ZIP 编解码（写 STORE，读兼容 deflate） | 245 |
+| `backup-photos.js` | 带照片的备份包（backup.json + photos/*.jpg） | 150 |
 
 拆分已收官：业务域全部独立成文件，核心只留通用能力。
 

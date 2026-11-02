@@ -843,22 +843,35 @@
       UI.toast('这个功能只在 App 内可用', 'err');
       return Promise.resolve(false);
     }
-    var text;
-    try {
-      text = Store.exportJSON('full', { includeKeys: !!withKeys });
-    } catch (e) {
-      UI.toast('生成备份失败', 'err');
-      return Promise.resolve(false);
+    // 原生接口只吃文本，所以这条路只有 JSON；有照片时如实说明，别让人以为照片也带走了
+    function doSave() {
+      var text;
+      try {
+        text = Store.exportJSON('full', { includeKeys: !!withKeys });
+      } catch (e) {
+        UI.toast('生成备份失败', 'err');
+        return Promise.resolve(false);
+      }
+      var name = 'course-planner-' + DateUtil.toStr(DateUtil.today()) + '.json';
+      return p.saveToDownloads({ name: name, content: text }).then(function (r) {
+        if (Store.markBackupExported) Store.markBackupExported();
+        UI.toast('已保存到 ' + ((r && r.path) || '下载目录'), 'ok');
+        return true;
+      }).catch(function (e) {
+        UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err');
+        return false;
+      });
     }
-    var name = 'course-planner-' + DateUtil.toStr(DateUtil.today()) + '.json';
-    return p.saveToDownloads({ name: name, content: text }).then(function (r) {
-      if (Store.markBackupExported) Store.markBackupExported();
-      UI.toast('已保存到 ' + ((r && r.path) || '下载目录'), 'ok');
-      return true;
-    }).catch(function (e) {
-      UI.toast('保存失败：' + (e && e.message ? e.message : e), 'err');
-      return false;
-    });
+
+    if (global.Media && global.Media.usage) {
+      return global.Media.usage().then(function (u) {
+        if (u && u.count) {
+          UI.toast('下载目录那份只有数据、不带照片（共 ' + u.count + ' 张）。要连照片一起带走请用「导出备份」');
+        }
+        return doSave();
+      }).catch(function () { return doSave(); });
+    }
+    return doSave();
   }
   App.exportBackupToDownloads = exportBackupToDownloads;
 

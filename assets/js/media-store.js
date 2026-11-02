@@ -175,10 +175,69 @@
     }).catch(function () {});
   }
 
+  /** 按指定 key 写回（备份恢复用，保证 meals 里的 key 对得上） */
+  function putAt(key, blob) {
+    if (!idbOK() || !key || !blob) return Promise.resolve(null);
+    return openDB().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(blob, key);
+        tx.oncomplete = function () { resolve(key); };
+        tx.onerror = function () { reject(tx.error || new Error('写入失败')); };
+      });
+    }).catch(function () { return null; });
+  }
+
+  /** 取出全部照片 [{key, blob}]，备份打包用 */
+  function all() {
+    if (!idbOK()) return Promise.resolve([]);
+    return openDB().then(function (db) {
+      return new Promise(function (resolve) {
+        var tx = db.transaction(STORE, 'readonly');
+        var os = tx.objectStore(STORE);
+        var out = [];
+        var req = os.openCursor();
+        req.onsuccess = function () {
+          var cur = req.result;
+          if (!cur) { resolve(out); return; }
+          if (cur.value) out.push({ key: String(cur.key), blob: cur.value });
+          cur.continue();
+        };
+        req.onerror = function () { resolve(out); };
+      });
+    }).catch(function () { return []; });
+  }
+
+  /** 只取 Blob（不建 objectURL），备份用 */
+  function getBlob(key) {
+    if (!key || !idbOK()) return Promise.resolve(null);
+    return openDB().then(function (db) {
+      return new Promise(function (resolve) {
+        var tx = db.transaction(STORE, 'readonly');
+        var r = tx.objectStore(STORE).get(key);
+        r.onsuccess = function () { resolve(r.result || null); };
+        r.onerror = function () { resolve(null); };
+      });
+    }).catch(function () { return null; });
+  }
+
+  /** 统计张数与总字节，设置页展示用 */
+  function usage() {
+    return all().then(function (list) {
+      var bytes = 0;
+      list.forEach(function (x) { bytes += (x.blob && x.blob.size) || 0; });
+      return { count: list.length, bytes: bytes };
+    });
+  }
+
   global.Media = {
     compress: compress,
     put: put,
+    putAt: putAt,
     getUrl: getUrl,
+    getBlob: getBlob,
+    all: all,
+    usage: usage,
     del: del,
     clearAll: clearAll,
     isAvailable: idbOK

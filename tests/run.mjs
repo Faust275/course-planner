@@ -4730,5 +4730,38 @@ console.log('\n四大新特性：睡眠精力推算、智能时间分配、每�
   eq('小组件优先显示钉住的待办', snap.nextTodo && snap.nextTodo.id, pin.id);
 }
 
+/* ==========================================================
+ * ZIP 编解码（带照片的备份包）
+ * ========================================================== */
+console.log('\nZip: 备份包编解码（写 STORE，读兼容 deflate）');
+{
+  const zipSrc = readFileSync(new URL('../assets/js/zip.js', import.meta.url), 'utf8');
+  const zg = {};
+  new Function('window', 'global', zipSrc)(zg, zg);
+  const Z = zg.Zip;
+
+  eq('crc32("123456789") 命中标准值', Z.crc32(new TextEncoder().encode('123456789')), 0xCBF43926);
+
+  const jsonBytes = new TextEncoder().encode(JSON.stringify({ hello: '你好', n: 42 }));
+  const img = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0, 1, 2, 3, 4, 5]);
+  const zipped = Z.create([
+    { name: 'backup.json', bytes: jsonBytes },
+    { name: 'photos/m_abc.jpg', bytes: img }
+  ]);
+
+  eq('打包结果以 PK\\x03\\x04 开头', Z.looksLikeZip(zipped), true);
+  eq('EOCD 记录的条目数为 2', zipped[zipped.length - 12], 2);
+  eq('普通 JSON 不被误判成 zip', Z.looksLikeZip(new TextEncoder().encode('{"a":1}')), false);
+
+  const back = await Z.read(zipped);
+  eq('读回 2 个条目', back.length, 2);
+  eq('条目名称与顺序保持（含中文内容）', back.map(x => x.name), ['backup.json', 'photos/m_abc.jpg']);
+  eq('backup.json 文本一致', new TextDecoder().decode(back[0].bytes), JSON.stringify({ hello: '你好', n: 42 }));
+  eq('照片字节逐字节一致', Array.from(back[1].bytes), Array.from(img));
+
+  const empty = Z.create([]);
+  eq('空包可正常读回', (await Z.read(empty)).length, 0);
+}
+
 console.log(`\n结果: ${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);

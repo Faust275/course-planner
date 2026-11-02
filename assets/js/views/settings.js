@@ -1743,7 +1743,7 @@
           }),
           el('p', {
             style: { fontSize: '12px', color: 'var(--text-3)', marginBottom: '12px', lineHeight: '1.7' },
-            text: '文件备份是唯一包含「日记」的迁移方式（同步不含日记）。导出的 json 里带着全部日记正文，请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
+            text: '文件备份是唯一同时包含「日记」和「吃饭照片」的迁移方式（同步不含这两样）。有照片时导出的是 zip（backup.json + photos/ 原图），没有照片则是单个 json。里面带着日记正文，请存在自己放心的位置；语音 / OCR 的 API 密钥默认不含。'
           }),
           el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } }, [
             keysBox,
@@ -2841,82 +2841,139 @@
     }).catch(function () { return askPassword(title, hint); });
   }
 
+  function humanSize(n) {
+    if (!n) return '0 KB';
+    if (n >= 1024 * 1024) return (Math.round(n / 1024 / 102.4) / 10) + ' MB';
+    return Math.max(1, Math.round(n / 102.4) / 10) + ' KB';
+  }
+
+  function saveOut(name, content, ext, mime, hint) {
+    var size = (content instanceof Blob) ? content.size : new Blob([content]).size;
+    return SaveFile.save(name, content, {
+      mime: mime, ext: ext,
+      panelTitle: '备份已生成',
+      panelHint: hint,
+      sizeText: humanSize(size)
+    }).then(function (r) {
+      if (r.canceled) { UI.toast('已取消'); return; }
+      if (r.method === 'picker') UI.toast('已保存到本地', 'ok');
+      else if (r.method === 'share') UI.toast('已发起分享', 'ok');
+      // download / copy-fallback：诚实面板已由 SaveFile 弹出
+    }).catch(function (e) {
+      UI.toast('导出失败：' + (e && e.message ? e.message : e), 'err');
+    });
+  }
+
   function exportData(withKeys, encrypted) {
     var text = Store.exportJSON('full', { includeKeys: !!withKeys });   // 完整备份（含日记、图片、设置）
-    var save = function (body, name, ext, mime, hint) {
-      var sizeKB = Math.max(1, Math.round(new Blob([body]).size / 1024));
-      SaveFile.save(name, body, {
-        mime: mime, ext: ext,
-        panelTitle: '备份已生成',
-        panelHint: hint,
-        sizeText: sizeKB + ' KB'
-      }).then(function (r) {
-        if (r.canceled) { UI.toast('已取消'); return; }
-        if (r.method === 'picker') UI.toast('已保存到本地', 'ok');
-        else if (r.method === 'share') UI.toast('已发起分享', 'ok');
-        // download / copy-fallback：诚实面板已由 SaveFile 弹出
-      }).catch(function (e) {
-        UI.toast('导出失败：' + (e && e.message ? e.message : e), 'err');
-      });
-    };
-
+    var stamp = DateUtil.toStr(DateUtil.today());
     var plainHint = '备份文件包含日记正文，请存在自己放心的位置。换设备时在「设置 → 数据管理 → 导入备份」选择该文件即可恢复。';
-    if (!encrypted) {
-      if (Store.markBackupExported) Store.markBackupExported();
-      save(text, '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json', 'json', 'application/json', plainHint);
-      return;
+
+    /** 纯数据导出（旧行为，现在用于「没照片」或「用户选了加密不要照片」） */
+    function exportPlain() {
+      if (!encrypted) {
+        if (Store.markBackupExported) Store.markBackupExported();
+        saveOut('课表备份-' + stamp + '.json', text, 'json', 'application/json', plainHint);
+        return;
+      }
+      if (!global.BackupCrypto || !global.BackupCrypto.supported) {
+        UI.toast('当前环境不支持加密（需要 App 内或 https 打开），已改为普通导出', 'err');
+        if (Store.markBackupExported) Store.markBackupExported();
+        saveOut('课表备份-' + stamp + '.json', text, 'json', 'application/json', plainHint);
+        return;
+      }
+      getBackupPassword('设置备份密码', '备份会用这个密码加密（AES-GCM）。密码丢了就解不开，请记牢。').then(function (pw) {
+        if (!pw) return;
+        global.BackupCrypto.encrypt(text, pw).then(function (enc) {
+          if (Store.markBackupExported) Store.markBackupExported();
+          saveOut(
+            '课表备份-' + stamp + '.cpbak', enc, 'cpbak', 'application/octet-stream',
+            '这是加密备份（.cpbak）。导入时需要同一个密码；密码丢了无法恢复，请自行保管。'
+          );
+          UI.toast('已加密导出', 'ok');
+        }).catch(function (e) {
+          UI.toast('加密失败：' + (e && e.message ? e.message : e), 'err');
+        });
+      });
     }
 
-    if (!global.BackupCrypto || !global.BackupCrypto.supported) {
-      UI.toast('当前环境不支持加密（需要 App 内或 https 打开），已改为普通导出', 'err');
-      if (Store.markBackupExported) Store.markBackupExported();
-      save(text, '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.json', 'json', 'application/json', plainHint);
-      return;
-    }
-    getBackupPassword('设置备份密码', '备份会用这个密码加密（AES-GCM）。密码丢了就解不开，请记牢。').then(function (pw) {
-      if (!pw) return;
-      global.BackupCrypto.encrypt(text, pw).then(function (enc) {
-        if (Store.markBackupExported) Store.markBackupExported();
-        save(
-          enc, '课表备份-' + DateUtil.toStr(DateUtil.today()) + '.cpbak', 'cpbak', 'application/octet-stream',
-          '这是加密备份（.cpbak）。导入时需要同一个密码；密码丢了无法恢复，请自行保管。'
-        );
-        UI.toast('已加密导出', 'ok');
+    // 没有照片，或环境不支持打包 → 走原来的纯数据路径，行为完全不变
+    var canPack = !!(global.Media && global.Media.usage && global.BackupPhotos && global.Zip);
+    if (!canPack) { exportPlain(); return; }
+
+    global.Media.usage().then(function (u) {
+      if (!u || !u.count) { exportPlain(); return; }
+      UI.toast('正在打包 ' + u.count + ' 张照片…');
+      global.BackupPhotos.pack(text).then(function (p) {
+        if (!p.count) { exportPlain(); return; }
+        var hint = '包含 ' + p.count + ' 张照片（' + humanSize(p.photoBytes) +
+          '）与全部数据。解压后 photos/ 里就是照片原图，backup.json 与旧版 JSON 备份一致，可单独取用。';
+        function withPhotos() {
+          if (Store.markBackupExported) Store.markBackupExported();
+          saveOut('课表备份-' + stamp + '.zip', new Blob([p.bytes], { type: 'application/zip' }),
+            'zip', 'application/zip', hint);
+        }
+        if (!encrypted) { withPhotos(); return; }
+        // zip 是二进制，加密容器目前只吃文本。不静默降级，让用户自己选
+        V.confirm({
+          title: '加密 与 照片 只能二选一',
+          message: '加密备份目前只支持纯数据，装不下照片。要带照片就导出未加密的 zip —— 里面是吃饭照片原图，请自己保管好。',
+          okText: '带照片（不加密）',
+          cancelText: '加密（不含照片）'
+        }).then(function (wantPhotos) {
+          if (wantPhotos) withPhotos(); else exportPlain();
+        });
       }).catch(function (e) {
-        UI.toast('加密失败：' + (e && e.message ? e.message : e), 'err');
+        UI.toast('打包失败，已改为纯数据导出：' + (e && e.message ? e.message : e), 'err');
+        exportPlain();
       });
-    });
+    }).catch(function () { exportPlain(); });
   }
 
   function importData() {
     var input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json,.cpbak,application/json,application/octet-stream';
+    input.accept = '.json,.cpbak,.zip,application/json,application/zip,application/octet-stream';
     input.addEventListener('change', function () {
       var file = input.files && input.files[0];
       if (!file) return;
       var reader = new FileReader();
+      // 按字节读：新备份是 zip（二进制），当文本读会损坏
       reader.onload = function () {
-        var text = String(reader.result);
+        var u8 = new Uint8Array(reader.result || new ArrayBuffer(0));
+        if (global.Zip && global.Zip.looksLikeZip(u8)) {
+          UI.toast('正在解包…');
+          global.BackupPhotos.unpack(u8).then(function (pack) {
+            if (!pack.json) {
+              UI.toast('压缩包里没找到 backup.json，不是本 App 的备份', 'err');
+              return;
+            }
+            handleImportText(pack.json, pack.photos);
+          }).catch(function (e) {
+            UI.toast('解包失败：' + (e && e.message ? e.message : e), 'err');
+          });
+          return;
+        }
+        var text = new TextDecoder().decode(u8);
         if (global.BackupCrypto && global.BackupCrypto.isEncrypted(text)) {
           getBackupPassword('输入备份密码', '这是一份加密备份（.cpbak），请输入导出时设置的密码。').then(function (pw) {
             if (!pw) return;
             global.BackupCrypto.decrypt(text, pw)
-              .then(function (plain) { handleImportText(plain); })
+              .then(function (plain) { handleImportText(plain, null); })
               .catch(function () { UI.toast('密码不对，或文件已损坏', 'err'); });
           });
           return;
         }
-        handleImportText(text);
+        handleImportText(text, null);
       };
-      reader.readAsText(file, 'utf-8');
+      reader.readAsArrayBuffer(file);
 
-      function handleImportText(text) {
+      function handleImportText(text, photos) {
         var d;
         try {
           d = Store.diffImport(text);
         } catch (e) {
-          UI.toast(e.message === '没有找到可恢复的数据' ? e.message : '文件不是有效的 JSON', 'err');
+          UI.toast(e.message === '没有找到可恢复的数据' ? e.message : '文件不是有效的备份', 'err');
           return;
         }
         // 覆盖前把「会变成什么样」摆出来，而不只是说「将用 X 门课覆盖」。
@@ -2927,6 +2984,9 @@
               ? '⚠️ 有 ' + d.wipes.length + ' 类数据会被清空（' +
                 d.wipes.map(function (w) { return w.name; }).join('、') + '）。覆盖前会自动备份，可以回滚。'
               : '覆盖前会自动备份当前数据，导入后可以在「备份与恢复」里回滚。');
+        if (photos && photos.length) {
+          msg += '\n\n📷 这份备份还带 ' + photos.length + ' 张吃饭照片，导入后会一并写回本机。';
+        }
         V.confirm({
           title: '导入备份 · 对比',
           message: msg,
@@ -2937,12 +2997,26 @@
           Store.backupNow('导入备份前').then(function () {
             try {
               Store.importJSON(text);
-              UI.toast('导入成功（已自动备份原数据）');
-              App.go('schedule');
             } catch (err) {
               // importJSON 内部失败会整体回滚，原数据原样还在
               UI.toast('导入失败，已保留原数据：' + err.message, 'err');
+              return;
             }
+            if (!photos || !photos.length) {
+              UI.toast('导入成功（已自动备份原数据）');
+              App.go('schedule');
+              return;
+            }
+            global.BackupPhotos.restore(photos).then(function (r) {
+              var m;
+              if (r.unavailable) m = '数据已导入，但当前环境写不进照片库，照片没能恢复';
+              else {
+                m = '导入成功，照片恢复 ' + r.restored + ' 张';
+                if (r.failed) m += '，' + r.failed + ' 张失败';
+              }
+              UI.toast(m, (r.failed || r.unavailable) ? 'err' : 'ok');
+              App.go('schedule');
+            });
           });
         });
       }
