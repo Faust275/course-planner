@@ -286,12 +286,15 @@
     var ms = Store.state.settings.trackMeal ? this.mealSummary(dateStr) : { kcal: 0 };
     var kcalIn = ms.kcal || 0;
     var tdee = this.estimateTDEE();
-    // 动态总消耗：基础 TDEE + 当日额外运动热量补偿
-    var tdeeVal = tdee ? (tdee.tdee + Math.round(workoutKcal * 0.6)) : null;
+    var tdeeAdaptive = this.estimateTDEEAdaptive ? this.estimateTDEEAdaptive() : null;
+    var baseTdee = tdeeAdaptive ? tdeeAdaptive.tdee : (tdee ? tdee.tdee : null);
+    // 实测消耗（体重趋势）已含日常活动，不再叠加当日运动，避免重复计算；公式估算才叠运动补偿
+    var tdeeVal = (baseTdee == null) ? null
+      : (tdeeAdaptive ? baseTdee : baseTdee + Math.round(workoutKcal * 0.6));
     var netKcal = (tdeeVal != null) ? Math.round(kcalIn - tdeeVal) : null;
 
     var dietGoal = Number((Store.state.settings.diet && Store.state.settings.diet.goal) || 0);
-    var dietKcalGoal = dietGoal > 0 ? dietGoal : (tdee ? tdee.tdee : 2000);
+    var dietKcalGoal = dietGoal > 0 ? dietGoal : (baseTdee || 2000);
     var dietBonusKcal = Math.round(activeKcal * 0.8);
     var dynamicDietGoal = dietKcalGoal + dietBonusKcal;
 
@@ -315,6 +318,10 @@
       workouts: dayWorkouts,
       ringsAllMet: stepPct >= 100 && kcalPct >= 100 && workoutPct >= 100,
       kcalIn: kcalIn, tdee: tdeeVal, netKcal: netKcal,
+      tdeeAdaptive: tdeeAdaptive ? tdeeAdaptive.tdee : null,
+      tdeeFormula: tdee ? tdee.tdee : null,
+      tdeeSource: tdeeAdaptive ? 'adaptive' : (tdee ? 'formula' : null),
+      tdeeDetail: tdeeAdaptive || null,
       dietGoal: dietGoal, dietKcalGoal: dietKcalGoal, dietBonusKcal: dietBonusKcal, dynamicDietGoal: dynamicDietGoal,
       weight: weight, sleepMinH: sleepMinH,
       sleepMet: sleepMin >= sleepMinH * 60

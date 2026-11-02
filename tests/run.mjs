@@ -4308,7 +4308,9 @@ console.log('\n四大新特性：睡眠精力推算、智能时间分配、每�
     const distHtml = fsNode.readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
     const androidHtml = fsNode.readFileSync(new URL('../android/app/src/main/assets/public/index.html', import.meta.url), 'utf8');
     const builtBytes = Buffer.byteLength(builtHtml, 'utf8');
-    eq('index.html 构建产物已压缩（体积 < 1.75 MB）', builtBytes > 500000 && builtBytes < 1750000, true);
+    // 阈值 1.75MB → 1.80MB：饮食照片、克数记账、自适应消耗等功能增加了约 4KB 产物；
+    // 仍远低于未压缩的 ~2.9MB，继续守住「已压缩、未失控」这条线。
+    eq('index.html 构建产物已压缩（体积 < 1.80 MB）', builtBytes > 500000 && builtBytes < 1800000, true);
     eq('根 index.html、dist/index.html 与 android assets index.html 逐字节完全一致',
       builtHtml === distHtml && builtHtml === androidHtml, true);
     const debugPath = new URL('../dist/index.debug.html', import.meta.url);

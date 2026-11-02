@@ -198,6 +198,7 @@
       root.appendChild(this.rhythmCard());
       root.appendChild(this.stepsCard());
       root.appendChild(this.kcalCard(h));
+      root.appendChild(this.dietCorrCard());
       root.appendChild(this.weightCard());
       root.appendChild(this.weekCard());
       root.appendChild(this.courseLinkCard());
@@ -639,9 +640,18 @@
                 (h.dynamicDietGoal > 0 ? '（今日动态上限 ' + h.dynamicDietGoal + ' kcal）' : '')
         }));
       }
-      if (h.weight != null) {
+      if (h.tdeeSource === 'adaptive' && h.tdeeDetail) {
+        children.push(el('div', { style: { fontSize: '11px', color: 'var(--green)', marginTop: '8px', fontWeight: '600' },
+          text: '✔ 消耗来自近 ' + h.tdeeDetail.spanDays + ' 天体重趋势实测（平均摄入 ' + h.tdeeDetail.avgIntake +
+                '，体重 ' + (h.tdeeDetail.deltaKg > 0 ? '+' : '') + h.tdeeDetail.deltaKg + ' kg）'
+        }));
+        if (h.tdeeFormula != null) {
+          children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '3px' },
+            text: '公式估算 ' + h.tdeeFormula + ' kcal，实测更贴合你的代谢' }));
+        }
+      } else if (h.weight != null) {
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '8px' },
-          text: '当前体重 ' + h.weight + ' kg（消耗按 Mifflin-St Jeor + 活动系数 + 锻炼消耗估算）' }));
+          text: '当前体重 ' + h.weight + ' kg（消耗按 Mifflin-St Jeor + 活动系数 + 锻炼消耗估算；连续记录体重 2–3 周后会自动改用实测）' }));
       }
       if (h.kcalIn === 0 && h.tdee == null) {
         children.push(el('div', { style: { fontSize: '11px', color: 'var(--text-3)', marginTop: '8px' },
@@ -659,6 +669,52 @@
           }, ['记在账本 ›'])
         ]));
       }
+      return card(children);
+    },
+
+    /* ---------- 3.4) 饮食 × 睡眠 × 体重 ---------- */
+    dietCorrCard: function () {
+      var today = DateUtil.today();
+      var rows = [];
+      var sumSleep = 0, nSleep = 0, sumKcal = 0, nKcal = 0;
+      for (var i = 6; i >= 0; i--) {
+        var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+        var h = Store.dayHealth(ds);
+        var diet = Store.dayDiet(ds);
+        var sleepH = h.sleepMin ? Math.round(h.sleepMin / 6) / 10 : null;
+        if (sleepH != null) { sumSleep += sleepH; nSleep++; }
+        if (diet.kcal > 0) { sumKcal += diet.kcal; nKcal++; }
+        rows.push({ date: ds, sleepH: sleepH, kcal: diet.kcal });
+      }
+      var w7 = Store.weightSeries(7);
+      var deltaKg = w7.length >= 2
+        ? Math.round((w7[w7.length - 1].kg - w7[0].kg) * 10) / 10 : null;
+
+      var summary = '近 7 天平均睡眠 ' + (nSleep ? (sumSleep / nSleep).toFixed(1) : '—') + ' h，平均摄入 ' +
+        (nKcal ? Math.round(sumKcal / nKcal) : '—') + ' kcal' +
+        (deltaKg != null ? ('，体重 ' + (deltaKg > 0 ? '+' : '') + deltaKg + ' kg') : '');
+
+      var children = [
+        sectionTitle(V.icons.food, '饮食 × 睡眠 × 体重'),
+        el('div', { style: { fontSize: '12px', color: 'var(--text-2)', lineHeight: '1.7', marginBottom: '8px' }, text: summary })
+      ];
+
+      if (!nKcal && !nSleep) {
+        children.push(el('div', { style: { fontSize: '11.5px', color: 'var(--text-3)' },
+          text: '记录几天的睡眠和饮食后，这里会把三者放在一起看趋势。' }));
+        return card(children);
+      }
+
+      var tbl = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '3px' } });
+      rows.forEach(function (r) {
+        tbl.appendChild(el('div', {
+          style: { display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-3)' }
+        }, [
+          el('span', { text: r.date.slice(5) }),
+          el('span', { text: (r.sleepH != null ? r.sleepH + ' h' : '睡眠—') + ' · ' + (r.kcal ? Math.round(r.kcal) + ' kcal' : '饮食—') })
+        ]));
+      });
+      children.push(tbl);
       return card(children);
     },
 

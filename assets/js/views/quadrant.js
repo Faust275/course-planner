@@ -1358,7 +1358,12 @@
           resultBox.appendChild(el('button', {
             class: 'food-item', type: 'button',
             onclick: function () {
-              items.push({ n: f.n, q: 1, kcal: f.kcal, p: f.p, f: f.f, c: f.c });
+              // 有克数：存「每克营养」，用户填重量（克）自动算热量；没克数：退回按份
+              if (f.g > 0) {
+                items.push({ n: f.n, q: f.g, u: 'g', kcal: f.kcal / f.g, p: f.p / f.g, f: f.f / f.g, c: f.c / f.g });
+              } else {
+                items.push({ n: f.n, q: 1, u: '', kcal: f.kcal, p: f.p, f: f.f, c: f.c });
+              }
               manual = false;
               drawPicked();
               fSearch.value = '';
@@ -1391,16 +1396,18 @@
         }
         items.forEach(function (it, i) {
           var q = Number(it.q) || 1;
+          var isGram = it.u === 'g';
           pickedBox.appendChild(el('div', { class: 'fp-row' }, [
             el('b', { text: it.n }),
             el('input', {
-              type: 'number', min: '0.5', step: '0.5', value: q, class: 'input fp-q',
+              type: 'number', min: isGram ? '1' : '0.5', step: isGram ? '10' : '0.5', value: q,
+              class: 'input fp-q', title: isGram ? '填克数，热量自动算' : '份数',
               oninput: function () {
-                it.q = parseFloat(this.value) || 1;
+                it.q = parseFloat(this.value) || (isGram ? 1 : 1);
                 drawPicked();
               }
             }),
-            el('span', { class: 'fp-x', text: '份' }),
+            el('span', { class: 'fp-x', text: isGram ? '克' : '份' }),
             el('i', { class: 'fp-k', text: Math.round((Number(it.kcal) || 0) * (Number(it.q) || 1)) + ' 千卡' }),
             el('button', {
               class: 'icon-btn', title: '移除',
@@ -1539,7 +1546,7 @@
             V.field('花费（元）', fCost)
           ]),
           el('div', { class: 'food-box' }, [
-            el('div', { class: 'sub-title', text: '从食物库里选（自动算热量）' }),
+            el('div', { class: 'sub-title', text: '从食物库里选（填克数，热量自动算）' }),
             fSearch,
             resultBox,
             pickedBox,

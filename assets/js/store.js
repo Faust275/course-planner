@@ -1195,6 +1195,7 @@
     return {
       n: n,
       q: Number(it.q) > 0 ? Number(it.q) : 1,
+      u: it.u === 'g' ? 'g' : '',
       kcal: isNaN(kcal) ? 0 : kcal,
       p: isNaN(Number(it.p)) ? 0 : Number(it.p),
       f: isNaN(Number(it.f)) ? 0 : Number(it.f),

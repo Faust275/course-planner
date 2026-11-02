@@ -20,6 +20,12 @@
   var isCheckinLike = ctx.isCheckinLike;
   var normFoodItem = ctx.normFoodItem;
 
+  /** 从份量描述里抠克数："1份 600g"→600，"1杯 500ml"→500，识别不了→0 */
+  function parseUnitGrams(unit) {
+    var m = String(unit || '').match(/(\d+(?:\.\d+)?)\s*(g|克|ml|毫升)/i);
+    return m ? Number(m[1]) : 0;
+  }
+
   /** 规范化一餐的照片列表：[{k: 照片键, n: 这一张是什么}] */
   function normPhotos(list) {
     if (!Array.isArray(list)) return [];
@@ -216,7 +222,7 @@
     var out = [];
     db.forEach(function (f, i) {
       if (String(f[0]).toLowerCase().indexOf(q) >= 0) {
-        out.push({ idx: i, n: f[0], unit: f[1], kcal: f[2], p: f[3], f: f[4], c: f[5], cat: f[6] });
+        out.push({ idx: i, n: f[0], unit: f[1], g: parseUnitGrams(f[1]), kcal: f[2], p: f[3], f: f[4], c: f[5], cat: f[6] });
       }
     });
     out.sort(function (a, b) {
@@ -286,6 +292,62 @@
     if (!(w > 0) || !(h > 0) || !(a > 0)) return null;
     var bmr = 10 * w + 6.25 * h - 5 * a + (pf.sex === 'male' ? 5 : -161);
     return { bmr: Math.round(bmr), tdee: Math.round(bmr * act) };
+  },
+
+  /**
+   * 自适应消耗：用近 N 天的体重趋势 + 实际摄入反推真实 TDEE。
+   * 能量守恒：Δ体重(kg) × 7700 kcal ≈ (摄入 - 消耗) × 天数，
+   * 所以 消耗 ≈ 平均摄入 - Δ体重 × 7700 / 天数。
+   * 体重取窗口首尾各最多 3 条均值，压掉单次称重的水分/宿便噪声。
+   * 数据不足（跨度 < 10 天或摄入记录 < 7 天）返回 null，调用方退回公式。
+   */
+  estimateTDEEAdaptive: function (days) {
+    days = days || 21;
+    var log = (Store.state.weightLog || []).filter(function (w) {
+      return w && w.date && Number(w.kg) > 0;
+    }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    if (log.length < 4) return null;
+
+    var today = DateUtil.today();
+    var from = DateUtil.toStr(DateUtil.addDays(today, -(days - 1)));
+    var win = log.filter(function (w) { return w.date >= from; });
+    if (win.length < 4) return null;
+
+    var totalKcal = 0, intakeDays = 0;
+    for (var i = 0; i < days; i++) {
+      var ds = DateUtil.toStr(DateUtil.addDays(today, -i));
+      var s = this.mealSummary(ds);
+      if (s.kcal > 0) { totalKcal += s.kcal; intakeDays++; }
+    }
+    if (intakeDays < 7) return null;
+    var avgIntake = totalKcal / intakeDays;
+
+    function cluster(arr) {
+      var sumW = 0, sumD = 0;
+      for (var k = 0; k < arr.length; k++) {
+        sumW += Number(arr[k].kg);
+        sumD += DateUtil.parse(arr[k].date).getTime() / 86400000;
+      }
+      return { kg: sumW / arr.length, day: sumD / arr.length };
+    }
+    var n = Math.min(3, win.length);
+    var head = cluster(win.slice(0, n));
+    var tail = cluster(win.slice(-n));
+    var spanDays = tail.day - head.day;
+    if (spanDays < 10) return null;
+
+    var deltaKg = tail.kg - head.kg;
+    var tdee = avgIntake - (deltaKg * 7700 / spanDays);
+    if (!(tdee > 1000 && tdee < 6000)) return null;
+
+    return {
+      tdee: Math.round(tdee),
+      avgIntake: Math.round(avgIntake),
+      deltaKg: Math.round(deltaKg * 100) / 100,
+      spanDays: Math.round(spanDays),
+      intakeDays: intakeDays,
+      weighIns: win.length
+    };
   },
 
   mealsOf: function (dateStr) {
