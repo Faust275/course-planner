@@ -389,6 +389,21 @@
     },
     /** 发起系统授权（会弹出 Health Connect 授权界面） */
     request: function () { return invoke('requestHealthPermissions', {}); },
+    /**
+     * 开启 / 关闭系统级后台同步（安卓原生 WorkManager）。
+     * 非安卓环境（浏览器 / iOS）下插件方法不存在，invoke 直接 reject，这里静默降级为 false。
+     */
+    setBackgroundSync: function (enabled) {
+      return invoke('setBackgroundSync', { enabled: !!enabled })
+        .then(function (r) { return !!(r && r.enabled); })
+        .catch(function () { return false; });
+    },
+    /** 读取系统级后台同步开关状态（安卓原生；非安卓环境返回 true，避免 UI 误显示「已关闭」） */
+    getBackgroundSync: function () {
+      return invoke('getBackgroundSync', {})
+        .then(function (r) { return (r && typeof r.enabled === 'boolean') ? r.enabled : true; })
+        .catch(function () { return true; });
+    },
     /** 读取近 days 天睡眠会话：{ sessions: [...] } */
     read: function (days) { return invoke('readSleep', { days: days || 14 }); },
     /** 读取近 days 天每日活动量汇总：{ days: [{date,steps,calories,distance}] } */

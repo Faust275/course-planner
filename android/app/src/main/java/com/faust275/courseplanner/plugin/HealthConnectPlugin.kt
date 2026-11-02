@@ -322,6 +322,27 @@ class HealthConnectPlugin : Plugin() {
         }
     }
 
+    /**
+     * 设置页「系统级后台同步」开关：开启 / 关闭 WorkManager 周期任务，并持久化到 SharedPreferences。
+     * 返回最终生效的 enabled，供 JS 端回显。
+     */
+    @PluginMethod
+    fun setBackgroundSync(call: PluginCall) {
+        val enabled = call.getBoolean("enabled", true)
+        HealthSyncWorker.setEnabled(context, enabled)
+        val ret = JSObject()
+        ret.put("enabled", enabled)
+        call.resolve(ret)
+    }
+
+    /** 读取「系统级后台同步」开关当前状态（默认开启）。 */
+    @PluginMethod
+    fun getBackgroundSync(call: PluginCall) {
+        val ret = JSObject()
+        ret.put("enabled", HealthSyncWorker.isEnabled(context))
+        call.resolve(ret)
+    }
+
     private suspend fun <T : Record> readAll(
         client: HealthConnectClient,
         type: kotlin.reflect.KClass<T>,

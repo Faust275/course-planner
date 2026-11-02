@@ -717,6 +717,32 @@
         recCard.appendChild(switchRow('饮食记录', '记录每餐内容、消费与热量，并在象限中统计', 'trackMeal'));
         recCard.appendChild(switchRow('睡眠记录', '记录入睡与醒来时间，并统计睡眠时长', 'trackSleep'));
         recCard.appendChild(switchRow('健康联动自动同步', '开启后：启动 App、每 3 小时、打开记录弹窗时自动从 Health Connect 拉取睡眠；关闭则只保留手动「从健康联动导入」', 'healthAutoSync'));
+
+        /* 系统级后台同步开关：仅安卓原生生效，浏览器 / iOS 安全降级为普通开关 */
+        (function () {
+          var bgKey = 'backgroundHealthSync';
+          var bgOn = Store.settings[bgKey] !== false; // 默认开启
+          var bgSw = el('button', {
+            class: 'switch' + (bgOn ? ' on' : ''),
+            onclick: function () {
+              bgOn = !bgOn;
+              bgSw.classList.toggle('cp-on', bgOn);
+              var patch = {};
+              patch[bgKey] = bgOn;
+              Store.updateSettings(patch);
+              if (global.HealthConnect && HealthConnect.setBackgroundSync) {
+                HealthConnect.setBackgroundSync(bgOn);
+              }
+            }
+          }, [el('i')]);
+          recCard.appendChild(el('div', { class: 'switch-row' }, [
+            el('div', { class: 'switch-text' }, [
+              el('b', { text: '系统级后台同步' }),
+              el('span', { text: '允许系统在 App 退出后按约 15 分钟周期拉取健康数据（仅安卓生效；受系统后台限制，国产 ROM 可能不生效）' })
+            ]),
+            bgSw
+          ]));
+        })();
         recCard.appendChild(switchRow('锻炼自动写入象限 24h 时间环', '记录手环锻炼或体育课运动后，自动在当天象限生成运动时间块', 'syncWorkoutToQuadrant'));
         recCard.appendChild(switchRow('锻炼自动打卡运动计划', '完成锻炼后自动为关联的运动类打卡/时长计划记一笔', 'autoPlanWorkout'));
         recCard.appendChild(switchRow('专注自动联动学习计划', '番茄钟专注完成后，自动同步至同标签、同课程或专注类打卡/进度/时长计划', 'autoPlanFocus'));

@@ -77,6 +77,29 @@ class HealthSyncWorker(
 
     companion object {
         private const val UNIQUE_NAME = "health-sync-periodic"
+        private const val PREFS = "cp_sync_prefs"
+        private const val KEY_ENABLED = "background_sync_enabled"
+
+        /**
+         * 是否启用后台同步。默认开启；用户可在设置页关闭。
+         * 用 SharedPreferences 持久化，使开关跨 App 重启依然有效（否则每次启动都重新登记、覆盖用户选择）。
+         */
+        fun isEnabled(context: Context): Boolean {
+            val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            return sp.getBoolean(KEY_ENABLED, true)
+        }
+
+        /**
+         * 持久化开关并登记 / 取消周期任务。这是设置页开关的调用入口：
+         * 开启 → 登记 15 分钟周期任务；关闭 → 取消（进程存活时也停止后台拉取）。
+         */
+        fun setEnabled(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_ENABLED, enabled)
+                .apply()
+            if (enabled) schedule(context) else cancel(context)
+        }
 
         /** 注册 / 刷新 15 分钟周期的后台同步任务（幂等：重复调用只会更新，不会叠加） */
         fun schedule(context: Context) {

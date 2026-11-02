@@ -43,8 +43,11 @@ public class MainActivity extends BridgeActivity {
         }
         applyRoute(getIntent());
 
-        // 注册 15 分钟周期的健康后台同步（WorkManager 跨重启自动保留，幂等）
-        HealthSyncWorker.schedule(this);
+        // 注册 15 分钟周期的健康后台同步（WorkManager 跨重启自动保留，幂等）。
+        // 尊重设置页开关：用户若关闭过，SharedPreferences 里为 false，则不登记。
+        if (HealthSyncWorker.isEnabled(this)) {
+            HealthSyncWorker.schedule(this);
+        }
     }
 
     @Override
