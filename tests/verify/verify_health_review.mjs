@@ -54,12 +54,18 @@ check('开着但本月没记录 → 空数组', Store.healthReviewLines(today).l
   JSON.stringify(Store.healthReviewLines(today)));
 
 /* ---------- 2. 睡眠段 ---------- */
-// 注意：addSleep 的 date 是「入睡日」，跨午夜后醒来日 = date + 1，所以三条都要往前挪一天
-Store.addSleep({ date: DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -1)), start: '23:00', end: '07:00' }); // 8h → 醒于今天
-Store.addSleep({ date: DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -2)), start: '23:00', end: '04:00' }); // 5h → 醒于昨天
-Store.addSleep({ date: DateUtil.toStr(DateUtil.addDays(DateUtil.today(), -3)), start: '23:30', end: '06:30' }); // 7h → 醒于前天
+// healthReviewLines 从 ym-01 统计到「真实今天」，月初时当月还凑不出 3 晚「已发生」的睡眠。
+// 改用「两个月前的固定月份」播种并审查该月，彻底脱离「今天几号」，任何日期跑都稳定。
+const F = DateUtil.toStr(DateUtil.addMonths(DateUtil.today(), -2)).slice(0, 7);
+const fFirst = F + '-01';
+const sd0 = fFirst;                                                       // 入睡 F-01 → 醒 F-02
+const sd1 = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(fFirst), 1));  // 醒 F-03
+const sd2 = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(fFirst), 2));  // 醒 F-04
+Store.addSleep({ date: sd0, start: '23:00', end: '07:00' }); // 8h
+Store.addSleep({ date: sd1, start: '23:00', end: '04:00' }); // 5h
+Store.addSleep({ date: sd2, start: '23:30', end: '06:30' }); // 7h
 
-let lines = Store.healthReviewLines(today);
+let lines = Store.healthReviewLines(F + '-15');
 check('有睡眠 → 出现睡眠行', lines.some((l) => /^· 睡眠：平均/.test(l)), JSON.stringify(lines));
 check('平均时长正确（20h/3 ≈ 6 小时 40 分）',
   lines.some((l) => /6 小时 40 分/.test(l)), lines[0]);
@@ -90,9 +96,11 @@ lines = Store.healthReviewLines(today);
 check('只有一条体重记录不编变化', !lines.some((l) => /体重/.test(l)), JSON.stringify(lines));
 
 /* ---------- 5. 月份边界 ---------- */
-const prevRec = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(prevMonth + '-01'), 3));
+// 在 F 的上个月播种，审查 F 月时该夜落在 ym-01 之前，应被排除。
+const prevOfF = DateUtil.toStr(DateUtil.addMonths(DateUtil.parse(F + '-01'), -1)).slice(0, 7);
+const prevRec = DateUtil.toStr(DateUtil.addDays(DateUtil.parse(prevOfF + '-01'), 3));
 Store.state.sleeps.push({ id: 'old1', date: prevRec, start: '23:00', end: '08:00', deep: null, rem: null, awake: null, efficiency: null, quality: 'normal', note: '', source: 'manual' });
-const thisMonthNights = (Store.healthReviewLines(today).join('|').match(/(\d+) 晚有记录/) || [])[1];
+const thisMonthNights = (Store.healthReviewLines(F + '-15').join('|').match(/(\d+) 晚有记录/) || [])[1];
 check('上月记录不计入本月', thisMonthNights === '3', thisMonthNights);
 
 check('看未来月份 → 空数组', Store.healthReviewLines('2099-01').length === 0);

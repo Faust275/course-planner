@@ -4,6 +4,10 @@ import { startServer } from '../../test-utils.mjs';
 
 const { base, close } = await startServer();
 
+// 用当前年月的固定日（10/15/20 号），避免写死 2026-10 导致非十月时日历没渲染这些格子
+const now = new Date();
+const ym = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+const D10 = ym + '-10', D15 = ym + '-15', D20 = ym + '-20';
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 460, height: 1400 } });
@@ -14,24 +18,24 @@ page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.
 await page.goto(base + '/index.html', { waitUntil: 'load' });
 await page.waitForTimeout(1200);
 await page.waitForFunction(() => window.Store && window.App && window.DragGesture, null, { timeout: 10000 });
-await page.evaluate(() => {
+await page.evaluate((D10) => {
   document.querySelectorAll('.cp-ob-mask, .ob-mask').forEach(n => n.remove());
   // 建一个本月事件
-  var ev = Store.addEvent({ title: '测试日程', date: '2026-10-10', start: '10:00', end: '11:00' });
+  var ev = Store.addEvent({ title: '测试日程', date: D10, start: '10:00', end: '11:00' });
   window.__evId = ev.id;
-});
+}, D10);
 await page.evaluate(() => App.go('calendar'));
 await page.waitForSelector('#view-calendar', { timeout: 5000 });
 await page.waitForTimeout(150);
 // 选中源日（让 dayDetail 列出该事件）
-await page.click('#view-calendar [data-date="2026-10-10"]');
+await page.click('#view-calendar [data-date="' + D10 + '"]');
 await page.waitForTimeout(150);
 const row = page.locator('#view-calendar .cp-cal-line', { hasText: '测试日程' });
 await row.waitFor({ timeout: 5000 });
 const rb = await row.boundingBox();
 // 目标日格
-await page.waitForSelector('#view-calendar [data-date="2026-10-20"]', { timeout: 5000 });
-const tb = await (await page.$('#view-calendar [data-date="2026-10-20"]')).boundingBox();
+await page.waitForSelector('#view-calendar [data-date="' + D20 + '"]', { timeout: 5000 });
+const tb = await (await page.$('#view-calendar [data-date="' + D20 + '"]')).boundingBox();
 
 await page.mouse.move(rb.x + rb.width / 2, rb.y + 12);
 await page.mouse.down();
@@ -48,7 +52,7 @@ const newDate = await page.evaluate(() => {
   return ev ? ev.date : null;
 });
 console.log('事件改期后 date:', newDate);
-const ok = newDate === '2026-10-20';
+const ok = newDate === D20;
 console.log(ok ? 'PASS: 日历事件拖到别的日格改期生效' : 'FAIL: 改期未生效');
 if (errors.length) console.log('页面错误:', errors.slice(0, 5));
 

@@ -227,9 +227,12 @@ async function seed(n, moods) {
   await p.evaluate(({ n, moods }) => {
     const S = window.Store, D = window.DateUtil, t = D.today();
     S.state.diaries = [];
+    // 播种到「本月 1..n 号」：心情统计按 [本月1号, 月末] 过滤，月初也能稳定凑出 n 天，
+    // 不再依赖「今天几号」（原来用 today, today-1... 在月初会跨月只命中 1~2 天）。
+    const ym = D.toStr(t).slice(0, 7);
     for (let i = 0; i < n; i++) {
       S.saveDiary({
-        date: D.toStr(D.addDays(t, -i)),
+        date: ym + '-' + String(i + 1).padStart(2, '0'),
         content: '第 ' + (i + 1) + ' 天',
         mood: moods[i % moods.length]
       });
@@ -245,8 +248,9 @@ async function seed(n, moods) {
 const D0 = await p.evaluate(() => {
   const S = window.Store, D = window.DateUtil, t = D.today();
   S.state.diaries = [];
+  const ym = D.toStr(t).slice(0, 7);
   for (let i = 0; i < 5; i++) {
-    S.saveDiary({ date: D.toStr(D.addDays(t, -i)), content: 'x', mood: 'good' });
+    S.saveDiary({ date: ym + '-' + String(i + 1).padStart(2, '0'), content: 'x', mood: 'good' });
   }
   S.emit();
   App.go('tasks');
@@ -614,10 +618,11 @@ console.log('I. 月历');
 await p.evaluate(() => {
   const S = window.Store, D = window.DateUtil;
   S.state.diaries = [];
-  const mk = '2026-10';
+  // 用当前年月，避免写死 2026-10 导致其它月份月历格数/上色断言失效
+  const mk = D.toStr(D.today()).slice(0, 7);
   [[2, 'great'], [15, 'low'], [15, 'low']].forEach(function (p) {
     // 同一天重复 push，模拟历史脏数据，验证月历只认一篇
-    S.state.diaries.push({ id: 'cd' + p[0] + Math.random(), date: '2026-10-' + ('0' + p[0]).slice(-2), content: 'c' + p[0], mood: p[1] });
+    S.state.diaries.push({ id: 'cd' + p[0] + Math.random(), date: mk + '-' + ('0' + p[0]).slice(-2), content: 'c' + p[0], mood: p[1] });
   });
   S.emit();
   App.go('tasks');
@@ -631,8 +636,10 @@ const I1 = await p.evaluate(() => {
   const painted = [...cal.querySelectorAll('.cp-dc-day')].filter(x => (x.getAttribute('style') || '').indexOf('background') >= 0).length;
   return { dows: dows, days: days, painted: painted };
 });
+const _now = new Date();
+const curDays = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
 check('月历以周一开头', I1.dows[0] === '一', I1.dows);
-check('10 月有 31 格', I1.days === 31, I1.days);
+check('当前月历天数正确（' + curDays + ' 天）', I1.days === curDays, I1.days);
 check('有日记的日子上了色', I1.painted >= 2, I1.painted);
 
 const I2 = await p.evaluate(() => {
